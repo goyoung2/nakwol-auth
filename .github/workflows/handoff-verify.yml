@@ -1,0 +1,81 @@
+name: Verify independent NAKWOL AUTH handoff
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/handoff-verify.yml'
+      - 'src/**'
+      - 'migrations/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'wrangler.jsonc'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle check
+        run: npx wrangler deploy --dry-run --outdir .dry-run
+
+      - name: Cloudflare device authorization
+        run: npx wrangler login --device --browser=false
+
+      - name: Resolve existing NAKWOL AUTH D1
+        run: node scripts/ensure-d1.mjs
+
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply DB --remote
+
+      - name: Verify existing identity data and applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute DB --remote --json --command "SELECT (SELECT COUNT(*) FROM users) AS user_count, (SELECT COUNT(*) FROM applications WHERE client_id='siege-calculator') AS siege_app, (SELECT COUNT(*) FROM applications WHERE client_id='nakwol-auth-selftest') AS selftest_app;" > /tmp/state.json
+          cat /tmp/state.json
+          grep -q 'siege_app' /tmp/state.json
+          grep -q 'selftest_app' /tmp/state.json
+
+      - name: Deploy existing Worker from independent repository
+        run: npx wrangler deploy --keep-vars
+
+      - name: Verify production AUTH and SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://nakwol-auth.sepsd21.workers.dev'
+          for i in {1..18}; do
+            hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
+            ds=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/demo -w '%{http_code}' "$origin/demo" || true)
+            ms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/manifest -w '%{http_code}' "$origin/sdk/manifest.json" || true)
+            ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js" || true)
+            echo "attempt=$i health=$hs demo=$ds manifest=$ms sdk=$ss"
+            if [ "$hs" = '200' ] && [ "$ds" = '200' ] && [ "$ms" = '200' ] && [ "$ss" = '200' ]; then
+              if grep -q '"service":"nakwol-auth"' /tmp/health && \
+                 grep -q '통합 로그인 자가진단' /tmp/demo && \
+                 grep -q '"stable":"0.1.0"' /tmp/manifest && \
+                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk; then
+                echo 'NAKWOL_AUTH_HANDOFF_OK'
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          exit 1
