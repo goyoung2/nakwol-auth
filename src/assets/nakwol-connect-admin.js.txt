@@ -1,0 +1,399 @@
+import { NakwolAuthClient } from '/sdk/v0.1.0/nakwol-auth-web.js';
+
+const CLIENT_ID = 'nakwol-connect-admin';
+const REDIRECT_URI = `${location.origin}/admin/apps`;
+const auth = new NakwolAuthClient({ clientId: CLIENT_ID, redirectUri: REDIRECT_URI, authOrigin: location.origin });
+
+const state = {
+  user: null,
+  session: null,
+  apps: [],
+  selected: null,
+  creating: false,
+};
+
+const $ = (selector) => document.querySelector(selector);
+const ui = {
+  auth: $('#auth-area'),
+  gate: $('#gate-area'),
+  workspace: $('#workspace'),
+  appList: $('#app-list'),
+  appCount: $('#app-count'),
+  newApp: $('#new-app'),
+  form: $('#app-form'),
+  heading: $('#detail-heading'),
+  save: $('#save-app'),
+  reset: $('#reset-app'),
+  guide: $('#guide-area'),
+  diagnostics: $('#diagnostics-area'),
+  events: $('#events-area'),
+  diagButton: $('#run-diagnostics'),
+  refreshEvents: $('#refresh-events'),
+  toast: $('#toast'),
+};
+
+function toast(message, bad = false) {
+  ui.toast.textContent = message;
+  ui.toast.dataset.bad = bad ? 'true' : 'false';
+  ui.toast.hidden = false;
+  setTimeout(() => { ui.toast.hidden = true; }, 3200);
+}
+
+async function api(path, options = {}) {
+  const token = auth.getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const response = await fetch(path, { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || payload?.error || `HTTP ${response.status}`);
+  return payload;
+}
+
+function clear(node) {
+  while (node.firstChild) node.firstChild.remove();
+}
+
+function el(tag, className = '', text = '') {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== '') node.textContent = text;
+  return node;
+}
+
+function slug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/[가-힣]/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 63) || 'nakwol-app';
+}
+
+function firstRedirect(app) {
+  return Array.isArray(app?.redirect_uris) && app.redirect_uris.length ? app.redirect_uris[0] : (app?.homepage_url || '');
+}
+
+function renderAuth() {
+  clear(ui.auth);
+  if (!state.user) {
+    const copy = el('div', 'auth-copy');
+    copy.append(el('strong', '', '로그인이 필요합니다'), el('span', '', 'NAKWOL ID로 운영자 인증 후 앱을 관리합니다.'));
+    const login = el('button', 'primary', '낙월 로그인');
+    login.addEventListener('click', () => auth.login());
+    ui.auth.append(copy, login);
+    return;
+  }
+
+  const copy = el('div', 'auth-copy');
+  copy.append(el('strong', '', state.user.display_name || state.user.id), el('span', '', `${state.user.id} · ${state.user.membership?.role || 'user'}`));
+  const logout = el('button', 'ghost', '로그아웃');
+  logout.addEventListener('click', async () => { await auth.logout(); location.reload(); });
+  ui.auth.append(copy, logout);
+}
+
+function renderGate() {
+  clear(ui.gate);
+  if (!state.user || !state.session) {
+    ui.gate.hidden = true;
+    ui.workspace.hidden = true;
+    return;
+  }
+
+  if (state.session.can_manage) {
+    ui.gate.hidden = true;
+    ui.workspace.hidden = false;
+    return;
+  }
+
+  ui.workspace.hidden = true;
+  ui.gate.hidden = false;
+  const box = el('div', 'gate-card');
+  if (state.session.bootstrap_available && state.user.membership?.is_member) {
+    box.append(
+      el('h2', '', '첫 운영자 등록'),
+      el('p', '', '아직 NAKWOL Connect 운영자가 없습니다. 최초 1명의 낙월 맹원이 owner가 될 수 있습니다.')
+    );
+    const claim = el('button', 'primary', '이 계정을 첫 운영자로 등록');
+    claim.addEventListener('click', async () => {
+      try {
+        await api('/admin/api/bootstrap', { method: 'POST' });
+        await loadSession();
+        await loadApps();
+        toast('첫 운영자 등록 완료');
+      } catch (error) { toast(error.message, true); }
+    });
+    box.appendChild(claim);
+  } else {
+    box.append(
+      el('h2', '', '관리 권한이 없습니다'),
+      el('p', '', 'NAKWOL Connect operator 또는 Discord admin 역할이 필요합니다.')
+    );
+  }
+  ui.gate.appendChild(box);
+}
+
+async function loadSession() {
+  state.session = (await api('/admin/api/session')).data;
+  renderGate();
+}
+
+async function loadApps() {
+  const payload = await api('/admin/api/apps');
+  state.apps = payload.data || [];
+  ui.appCount.textContent = String(state.apps.length);
+  renderAppList();
+  if (state.selected) {
+    const fresh = state.apps.find((app) => app.client_id === state.selected.client_id);
+    if (fresh) selectApp(fresh);
+  } else if (state.apps.length && !state.creating) {
+    selectApp(state.apps[0]);
+  }
+}
+
+function renderAppList() {
+  clear(ui.appList);
+  for (const app of state.apps) {
+    const button = el('button', 'app-item');
+    if (state.selected?.client_id === app.client_id && !state.creating) button.dataset.active = 'true';
+    const title = el('span', 'app-item-title', app.name);
+    const meta = el('span', 'app-item-meta', app.client_id);
+    const badge = el('span', `status status-${app.status}`, app.status);
+    button.append(title, meta, badge);
+    button.addEventListener('click', () => selectApp(app));
+    ui.appList.appendChild(button);
+  }
+}
+
+function setField(name, value) {
+  const node = ui.form.elements.namedItem(name);
+  if (node) node.value = value ?? '';
+}
+
+function getFormData() {
+  const fd = new FormData(ui.form);
+  return {
+    name: String(fd.get('name') || '').trim(),
+    client_id: String(fd.get('client_id') || '').trim(),
+    homepage_url: String(fd.get('homepage_url') || '').trim(),
+    redirect_uris: String(fd.get('redirect_uris') || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
+    framework: String(fd.get('framework') || 'other'),
+    access_policy: String(fd.get('access_policy') || 'member'),
+    status: String(fd.get('status') || 'active'),
+  };
+}
+
+function fillForm(app) {
+  setField('name', app?.name || '');
+  setField('client_id', app?.client_id || '');
+  setField('homepage_url', app?.homepage_url || '');
+  setField('redirect_uris', (app?.redirect_uris || []).join('\n'));
+  setField('framework', app?.framework || 'other');
+  setField('access_policy', app?.access_policy || 'member');
+  setField('status', app?.status || 'active');
+  const clientField = ui.form.elements.namedItem('client_id');
+  clientField.readOnly = Boolean(app && !state.creating);
+}
+
+function selectApp(app) {
+  state.creating = false;
+  state.selected = app;
+  ui.heading.textContent = app.name;
+  fillForm(app);
+  renderAppList();
+  renderGuide(app);
+  renderDiagnostics(null);
+  loadEvents().catch((error) => renderEventsError(error.message));
+}
+
+function startCreate() {
+  state.creating = true;
+  state.selected = null;
+  ui.heading.textContent = '새 앱 등록';
+  fillForm(null);
+  renderAppList();
+  renderGuide(null);
+  renderDiagnostics(null);
+  clear(ui.events);
+  ui.events.appendChild(el('p', 'muted', '앱을 저장하면 인증 이벤트가 표시됩니다.'));
+}
+
+function embedCode(app) {
+  const redirect = firstRedirect(app);
+  return `<script\n  src="${location.origin}/connect/v1.js"\n  data-client-id="${app.client_id}"\n  data-redirect-uri="${redirect}">\n</script>`;
+}
+
+function nextCode(app) {
+  const redirect = firstRedirect(app);
+  return `import Script from 'next/script';\n\n<Script\n  src="${location.origin}/connect/v1.js"\n  data-client-id="${app.client_id}"\n  data-redirect-uri="${redirect}"\n  strategy="afterInteractive"\n/>`;
+}
+
+function guideFor(app) {
+  const framework = app.framework || 'other';
+  const generic = embedCode(app);
+  const guides = {
+    html: ['index.html', '</body> 바로 위', generic],
+    vite: ['프로젝트 루트/index.html', '</body> 바로 위', generic],
+    react: ['프로젝트 루트/index.html', '</body> 바로 위', generic],
+    vue: ['프로젝트 루트/index.html', '</body> 바로 위', generic],
+    cra: ['public/index.html', '</body> 바로 위', generic],
+    sveltekit: ['src/app.html', '</body> 바로 위', generic],
+    next_app: ['app/layout.tsx', '<body> 내부의 마지막 부분', nextCode(app)],
+    next_pages: ['pages/_app.tsx', '컴포넌트 반환 JSX 내부', nextCode(app)],
+    internal: ['-', '-', generic],
+    other: ['사이트의 공통 HTML/레이아웃 파일', '</body> 바로 위', generic],
+  };
+  return guides[framework] || guides.other;
+}
+
+function addCodeBlock(parent, code) {
+  const wrap = el('div', 'code-wrap');
+  const pre = el('pre', 'code');
+  pre.textContent = code;
+  const copy = el('button', 'copy', '복사');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(code);
+    copy.textContent = '복사됨';
+    setTimeout(() => { copy.textContent = '복사'; }, 1200);
+  });
+  wrap.append(pre, copy);
+  parent.appendChild(wrap);
+}
+
+function renderGuide(app) {
+  clear(ui.guide);
+  if (!app) {
+    ui.guide.appendChild(el('p', 'muted', '앱을 먼저 저장하면 설치 가이드가 생성됩니다.'));
+    return;
+  }
+  const [file, position, code] = guideFor(app);
+  const grid = el('div', 'guide-grid');
+  const f1 = el('div', 'guide-step'); f1.append(el('b', '', '1. 파일 열기'), el('span', '', file));
+  const f2 = el('div', 'guide-step'); f2.append(el('b', '', '2. 붙여넣기 위치'), el('span', '', position));
+  const f3 = el('div', 'guide-step'); f3.append(el('b', '', '3. 배포'), el('span', '', '사이트를 평소처럼 다시 배포하면 끝입니다.'));
+  grid.append(f1, f2, f3);
+  ui.guide.appendChild(grid);
+  addCodeBlock(ui.guide, code);
+
+  const eventTitle = el('h4', '', '로그인 정보를 코드에서 사용하려면');
+  ui.guide.appendChild(eventTitle);
+  addCodeBlock(ui.guide, `window.addEventListener('nakwol-ready', (event) => {\n  const user = event.detail;\n  console.log(user?.id, user?.display_name, user?.membership);\n});`);
+}
+
+function statusRow(label, ok, detail = '') {
+  const row = el('div', 'diag-row');
+  row.append(el('span', ok ? 'diag-ok' : 'diag-bad', ok ? '✓' : '×'), el('b', '', label), el('span', 'diag-detail', detail));
+  return row;
+}
+
+function renderDiagnostics(data) {
+  clear(ui.diagnostics);
+  if (!state.selected) {
+    ui.diagnostics.appendChild(el('p', 'muted', '저장된 앱을 선택하세요.'));
+    return;
+  }
+  if (!data) {
+    ui.diagnostics.appendChild(el('p', 'muted', '“연동 상태 확인”을 누르면 실제 서비스 주소를 검사합니다.'));
+    return;
+  }
+  ui.diagnostics.append(
+    statusRow('앱 등록', data.registered, data.status || ''),
+    statusRow('Redirect URI', data.redirect_ok, data.redirect_uri || ''),
+    statusRow('서비스 응답', data.site_reachable, data.http_status ? `HTTP ${data.http_status}` : data.error || ''),
+    statusRow('Connect 스크립트', data.embed_found, data.embed_found ? 'connect/v1.js 발견' : '페이지 HTML에서 찾지 못함'),
+    statusRow('Client ID', data.client_id_found, data.client_id_found ? state.selected.client_id : '페이지 HTML에서 찾지 못함')
+  );
+}
+
+async function runDiagnostics() {
+  if (!state.selected) return;
+  ui.diagButton.disabled = true;
+  ui.diagButton.textContent = '확인 중…';
+  try {
+    const payload = await api(`/admin/api/apps/${encodeURIComponent(state.selected.client_id)}/diagnostics`);
+    renderDiagnostics(payload.data);
+  } catch (error) {
+    renderDiagnostics({ registered: true, redirect_ok: true, site_reachable: false, embed_found: false, client_id_found: false, error: error.message });
+  } finally {
+    ui.diagButton.disabled = false;
+    ui.diagButton.textContent = '연동 상태 확인';
+  }
+}
+
+function renderEvents(events) {
+  clear(ui.events);
+  if (!events.length) {
+    ui.events.appendChild(el('p', 'muted', '아직 기록된 인증 이벤트가 없습니다.'));
+    return;
+  }
+  for (const event of events) {
+    const row = el('div', 'event-row');
+    const top = el('div', 'event-top');
+    top.append(el('b', '', event.event_type), el('time', '', new Date(event.created_at).toLocaleString('ko-KR')));
+    row.append(top, el('code', '', event.user_id || '-'));
+    ui.events.appendChild(row);
+  }
+}
+
+function renderEventsError(message) {
+  clear(ui.events);
+  ui.events.appendChild(el('p', 'error-text', message));
+}
+
+async function loadEvents() {
+  if (!state.selected) return;
+  const payload = await api(`/admin/api/apps/${encodeURIComponent(state.selected.client_id)}/events`);
+  renderEvents(payload.data || []);
+}
+
+ui.form.addEventListener('input', (event) => {
+  if (state.creating && event.target.name === 'name') {
+    const clientField = ui.form.elements.namedItem('client_id');
+    if (!clientField.dataset.touched) clientField.value = slug(event.target.value);
+  }
+  if (event.target.name === 'client_id') event.target.dataset.touched = 'true';
+});
+
+ui.form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = getFormData();
+  ui.save.disabled = true;
+  try {
+    const payload = state.creating
+      ? await api('/admin/api/apps', { method: 'POST', body: JSON.stringify(data) })
+      : await api(`/admin/api/apps/${encodeURIComponent(state.selected.client_id)}`, { method: 'PUT', body: JSON.stringify(data) });
+    state.creating = false;
+    state.selected = payload.data;
+    await loadApps();
+    toast('앱 설정을 저장했습니다.');
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    ui.save.disabled = false;
+  }
+});
+
+ui.newApp.addEventListener('click', startCreate);
+ui.reset.addEventListener('click', () => state.selected ? selectApp(state.selected) : startCreate());
+ui.diagButton.addEventListener('click', runDiagnostics);
+ui.refreshEvents.addEventListener('click', () => loadEvents().catch((error) => renderEventsError(error.message)));
+
+(async () => {
+  try {
+    state.user = await auth.bootstrap();
+    renderAuth();
+    if (!state.user) {
+      renderGate();
+      return;
+    }
+    await loadSession();
+    if (state.session.can_manage) await loadApps();
+  } catch (error) {
+    console.error(error);
+    toast(error.message || String(error), true);
+    renderAuth();
+  }
+})();
