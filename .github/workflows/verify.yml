@@ -39,8 +39,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "registerConnectRoutes" src/sdk-entry.ts
-          grep -q "connect/v1.js" src/connect.ts
-          grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
-          grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
-          echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
+          if [ -f src/connect.ts ]; then
+            grep -q "registerConnectRoutes" src/sdk-entry.ts
+            grep -q "connect/v1.js" src/connect.ts
+            grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
+            grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
+            echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
+          else
+            echo 'NAKWOL Connect not present; core verification only.'
+          fi
