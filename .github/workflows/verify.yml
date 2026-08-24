@@ -1,0 +1,46 @@
+name: Verify NAKWOL AUTH
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'migrations/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'wrangler.jsonc'
+      - '.github/workflows/verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle check
+        run: npx wrangler deploy --dry-run --outdir .dry-run
+
+      - name: Verify NAKWOL Connect assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "registerConnectRoutes" src/sdk-entry.ts
+          grep -q "connect/v1.js" src/connect.ts
+          grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
+          grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
+          echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
