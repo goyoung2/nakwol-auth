@@ -28,6 +28,7 @@ import {
   upsertDiscordUser,
   upsertMembership,
 } from './store';
+import { isApplicationAccessAllowed } from './policy';
 import type { Env, OAuthRequestRow } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -56,8 +57,8 @@ app.get('/', (c) => c.html(`<!doctype html>
 <title>NAKWOL AUTH</title><style>
 body{font-family:system-ui,sans-serif;background:#111827;color:#f9fafb;display:grid;place-items:center;min-height:100vh;margin:0}
 main{width:min(680px,calc(100% - 40px));background:#1f2937;border:1px solid #374151;border-radius:18px;padding:32px}
-small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{color:#a5b4fc}
-</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.1</p><p><code>GET /api/health</code></p><p><a href="/demo">Discord 로그인 자가진단 열기</a></p><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
+small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{color:#a5b4fc}.links{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
+</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.1</p><p><code>GET /api/health</code></p><div class="links"><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
 
 app.get('/api/health', (c) => c.json({
   ok: true,
@@ -99,6 +100,10 @@ app.get('/authorize', async (c) => {
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
   const sessionUserId = await findSessionUser(c.env, sid);
   if (sessionUserId) {
+    if (!await isApplicationAccessAllowed(c.env, sessionUserId, clientId)) {
+      await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId);
+      return c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
+    }
     const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
     await logAuthEvent(c.env, 'authorize.sso', sessionUserId, clientId);
     return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
@@ -151,9 +156,21 @@ app.get('/auth/discord/callback', async (c) => {
     const userId = await upsertDiscordUser(c.env, discordUser, displayName);
     await upsertMembership(c.env, userId, Boolean(member), role);
     const session = await createSession(c.env, userId);
-    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge);
+    const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
 
     await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
+
+    if (!allowed) {
+      await logAuthEvent(c.env, 'discord.login.access_denied', userId, requestRow.client_id, { role });
+      const response = c.redirect(redirectWithParams(requestRow.redirect_uri, {
+        error: 'access_denied',
+        state: requestRow.client_state,
+      }), 302);
+      response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
+      return response;
+    }
+
+    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge);
     await logAuthEvent(c.env, 'discord.login.success', userId, requestRow.client_id, { role });
 
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
@@ -229,6 +246,11 @@ app.get('/me', async (c) => {
   const userId = await authenticateAccessToken(c.env, token, clientId);
   if (!userId) {
     const response = c.json({ ok: false, error: { code: 'INVALID_TOKEN', message: '유효하지 않거나 만료된 token입니다.' } }, 401);
+    return origin ? withCorsHeaders(response, origin) : response;
+  }
+
+  if (!await isApplicationAccessAllowed(c.env, userId, clientId)) {
+    const response = c.json({ ok: false, error: { code: 'ACCESS_DENIED', message: '이 앱을 사용할 권한이 없습니다.' } }, 403);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
