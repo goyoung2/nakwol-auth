@@ -1,6 +1,7 @@
 import type { Env } from './types';
 import { getUserWithMembership } from './store';
 
+export const NAKWOL_CONNECT_POLICY_VERSION = '0.1.0';
 export type ApplicationAccessPolicy = 'public' | 'member' | 'admin';
 
 export async function getApplicationAccessPolicy(env: Env, clientId: string): Promise<ApplicationAccessPolicy> {
