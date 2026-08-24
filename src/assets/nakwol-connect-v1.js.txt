@@ -1,0 +1,91 @@
+(() => {
+  const script = document.currentScript;
+  if (!script) return;
+
+  const clientId = script.dataset.clientId || '';
+  const authOrigin = (script.dataset.authOrigin || new URL(script.src, location.href).origin).replace(/\/$/, '');
+  const redirectUri = script.dataset.redirectUri || `${location.origin}${location.pathname}`;
+  const uiMode = script.dataset.ui || 'widget';
+  const globalLogout = script.dataset.globalLogout === 'true';
+
+  if (!clientId) {
+    console.error('[NAKWOL Connect] data-client-id is required.');
+    return;
+  }
+
+  const guardKey = `__NAKWOL_CONNECT_${clientId}`;
+  if (window[guardKey]) return;
+  window[guardKey] = true;
+
+  const dispatch = (name, detail) => {
+    window.dispatchEvent(new CustomEvent(name, { detail }));
+  };
+
+  const start = async () => {
+    try {
+      const sdk = await import(`${authOrigin}/sdk/v0.1.0/nakwol-auth-web.js`);
+      const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin });
+
+      const api = {
+        version: '1.0.0',
+        clientId,
+        redirectUri,
+        authOrigin,
+        client,
+        user: null,
+        login: () => client.login(),
+        logout: (options = {}) => client.logout(options),
+        getMe: () => client.getMe(),
+        isAuthenticated: () => client.isAuthenticated(),
+        isMember: () => client.isMember(),
+      };
+
+      window.NAKWOL_CONNECT = api;
+      window.NAKWOL_AUTH = client;
+
+      client.addEventListener('user', (event) => {
+        api.user = event.detail || null;
+        window.NAKWOL_AUTH_USER = api.user;
+        dispatch('nakwol-ready', api.user);
+        dispatch('nakwol-auth-ready', api.user);
+      });
+
+      client.addEventListener('logout', () => {
+        api.user = null;
+        delete window.NAKWOL_AUTH_USER;
+        dispatch('nakwol-logout', null);
+        dispatch('nakwol-auth-logout', null);
+      });
+
+      client.addEventListener('error', (event) => {
+        dispatch('nakwol-error', event.detail || null);
+      });
+
+      if (uiMode === 'none' || uiMode === 'headless') {
+        const user = await client.bootstrap();
+        api.user = user || null;
+        if (user) window.NAKWOL_AUTH_USER = user;
+        dispatch('nakwol-ready', api.user);
+        dispatch('nakwol-auth-ready', api.user);
+        return;
+      }
+
+      const widget = sdk.mountNakwolAuthWidget(client, { globalLogout });
+      api.widget = widget;
+      const user = await widget.ready;
+      api.user = user || null;
+      if (user) window.NAKWOL_AUTH_USER = user;
+      dispatch('nakwol-ready', api.user);
+      dispatch('nakwol-auth-ready', api.user);
+    } catch (error) {
+      console.error('[NAKWOL Connect] bootstrap failed', error);
+      dispatch('nakwol-error', error);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+})();
