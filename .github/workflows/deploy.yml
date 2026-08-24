@@ -11,7 +11,6 @@ on:
       - 'package.json'
       - 'tsconfig.json'
       - 'wrangler.jsonc'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +19,9 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +38,21 @@ jobs:
       - name: Bundle check
         run: npx wrangler deploy --dry-run --outdir .dry-run
 
-      - name: Cloudflare device authorization
-        run: npx wrangler login --device --browser=false
+      - name: Validate Cloudflare CI credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo '::error::Missing repository secret CLOUDFLARE_API_TOKEN'
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo '::error::Missing repository secret CLOUDFLARE_ACCOUNT_ID'
+            exit 1
+          fi
+          npx wrangler d1 list --json > /tmp/d1-auth-check.json
+          grep -q 'nakwol-auth' /tmp/d1-auth-check.json
+          echo 'CLOUDFLARE_CI_CREDENTIALS_OK'
 
       - name: Resolve existing NAKWOL AUTH D1
         run: node scripts/ensure-d1.mjs
