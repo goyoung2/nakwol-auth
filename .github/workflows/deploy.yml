@@ -1,0 +1,85 @@
+name: Deploy NAKWOL AUTH
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'migrations/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'wrangler.jsonc'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle check
+        run: npx wrangler deploy --dry-run --outdir .dry-run
+
+      - name: Cloudflare device authorization
+        run: npx wrangler login --device --browser=false
+
+      - name: Resolve existing NAKWOL AUTH D1
+        run: node scripts/ensure-d1.mjs
+
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply DB --remote
+
+      - name: Verify required applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          cat /tmp/apps.json
+          grep -q 'nakwol-auth-selftest' /tmp/apps.json
+          grep -q 'siege-calculator' /tmp/apps.json
+
+      - name: Deploy existing Worker without replacing dashboard variables
+        run: npx wrangler deploy --keep-vars
+
+      - name: Verify production AUTH and Web SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://nakwol-auth.sepsd21.workers.dev'
+          for i in {1..18}; do
+            hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
+            ds=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/demo -w '%{http_code}' "$origin/demo" || true)
+            ms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/manifest -w '%{http_code}' "$origin/sdk/manifest.json" || true)
+            ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js" || true)
+            echo "attempt=$i health=$hs demo=$ds manifest=$ms sdk=$ss"
+            if [ "$hs" = '200' ] && [ "$ds" = '200' ] && [ "$ms" = '200' ] && [ "$ss" = '200' ]; then
+              if grep -q '"service":"nakwol-auth"' /tmp/health && \
+                 grep -q '통합 로그인 자가진단' /tmp/demo && \
+                 grep -q '"stable":"0.1.0"' /tmp/manifest && \
+                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk; then
+                echo 'NAKWOL_AUTH_INDEPENDENT_DEPLOY_OK'
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo 'Independent NAKWOL AUTH verification failed.'
+          echo '--- health ---'; head -c 800 /tmp/health || true; echo
+          echo '--- manifest ---'; head -c 800 /tmp/manifest || true; echo
+          exit 1
