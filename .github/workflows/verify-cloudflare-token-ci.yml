@@ -1,0 +1,72 @@
+name: Verify Cloudflare token CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/verify-cloudflare-token-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-token-ci:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate GitHub secrets and Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          npx wrangler d1 list --json > /tmp/d1.json
+          grep -q 'nakwol-auth' /tmp/d1.json
+          echo 'CLOUDFLARE_TOKEN_AUTH_OK'
+
+      - name: Resolve existing D1
+        run: node scripts/ensure-d1.mjs
+
+      - name: Confirm migrations and existing applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply DB --remote
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          grep -q 'nakwol-auth-selftest' /tmp/apps.json
+          grep -q 'siege-calculator' /tmp/apps.json
+          echo 'NAKWOL_AUTH_D1_OK'
+
+      - name: Deploy existing Worker using API token only
+        run: npx wrangler deploy --keep-vars
+
+      - name: Verify production
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://nakwol-auth.sepsd21.workers.dev'
+          hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health")
+          ms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/manifest -w '%{http_code}' "$origin/sdk/manifest.json")
+          ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js")
+          test "$hs" = '200'
+          test "$ms" = '200'
+          test "$ss" = '200'
+          grep -q '"service":"nakwol-auth"' /tmp/health
+          grep -q '"stable":"0.1.0"' /tmp/manifest
+          grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk
+          echo 'NAKWOL_AUTH_TOKEN_CI_OK'
