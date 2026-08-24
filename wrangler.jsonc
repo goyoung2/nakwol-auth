@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nakwol-auth",
+  "main": "src/sdk-entry.ts",
+  "compatibility_date": "2026-08-24",
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.js.txt"],
+      "fallthrough": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nakwol-auth",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
