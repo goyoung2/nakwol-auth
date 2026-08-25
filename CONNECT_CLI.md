@@ -9,23 +9,18 @@ NAKWOL Connect CLI는 사람이 OAuth 코드를 직접 붙이지 않고, Codex/C
 공식 NAKWOL Connect CLI를 사용하고 설치 후 doctor까지 실행해.
 ```
 
-npm publish 전 현재 명령:
+npm 공개 패키지의 기본 명령:
+
+```bash
+npx nakwol-connect init
+npx nakwol-connect doctor --json
+```
+
+npm registry를 사용할 수 없는 환경에서는 Worker가 제공하는 동일 패키지를 fallback으로 사용할 수 있습니다.
 
 ```bash
 npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect init
-```
-
-설치 확인:
-
-```bash
 npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect doctor --json
-```
-
-npm에 `@nakwol/connect`를 publish한 뒤에는 같은 기능을 다음처럼 실행합니다.
-
-```bash
-npx @nakwol/connect init
-npx @nakwol/connect doctor --json
 ```
 
 ## 최초 인증
@@ -93,6 +88,12 @@ remove               로컬 Connect 코드와 config 제거. 중앙 앱은 보�
 ```
 
 개발자는 `public` 또는 `member` 앱을 만들 수 있습니다. `admin` 접근 정책은 operator만 설정할 수 있습니다.
+
+## npm 릴리스 운영
+
+첫 0.2.0 publish는 npm granular token을 GitHub Secret `NPM_TOKEN`으로 한 번 사용합니다. 첫 publish 후 npm package Settings에서 GitHub Actions Trusted Publisher를 `goyoung2/nakwol-auth` + `publish-npm.yml`로 등록하면 이후 버전은 장기 publish token 없이 OIDC로 배포할 수 있습니다.
+
+릴리스 workflow는 패키지 이름이 이미 다른 저장소에 등록되어 있으면 publish 전에 중단하고, 동일 버전 재실행은 안전하게 skip한 뒤 registry/npx 검증을 수행합니다.
 
 ## LLM 발견 경로
 

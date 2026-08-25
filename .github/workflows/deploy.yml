@@ -96,7 +96,7 @@ jobs:
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
                  grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk && \
                  grep -q 'nakwol-ready' /tmp/connect && \
-                 grep -q '"name":"@nakwol/connect"' /tmp/cli-manifest && \
+                 grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
                  grep -q 'CLI 연결 승인' /tmp/device && \
                  test -s /tmp/cli-package; then
                 echo 'NAKWOL_CONNECT_V02_DEPLOY_OK'
