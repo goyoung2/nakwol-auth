@@ -83,6 +83,11 @@ ON CONFLICT(client_id) DO UPDATE SET
   access_policy = 'public',
   updated_at = excluded.updated_at;
 
+UPDATE applications
+SET redirect_uris = '["https://nakwol-auth.sepsd21.workers.dev/admin/apps","https://nakwol-auth.sepsd21.workers.dev/admin/developers"]',
+    updated_at = unixepoch() * 1000
+WHERE client_id = 'nakwol-connect-admin';
+
 INSERT INTO connect_developers(user_id, role, status, created_at, updated_at, created_by_user_id)
 SELECT user_id, 'operator', 'active', unixepoch() * 1000, unixepoch() * 1000, created_by_user_id
 FROM auth_operators
