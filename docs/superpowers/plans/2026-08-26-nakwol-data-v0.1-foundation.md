@@ -35,11 +35,22 @@ Service `0.1.0`, schema `1`, Worker/D1 `nakwol-data`; no AUTH D1 access; browser
 - [x] Deployment-contract tests written RED.
 - [x] Independent package/config/bootstrap/deploy implemented.
 - [x] Local contract GREEN.
-- [ ] PR CI: npm install/test/typecheck/Wrangler dry-run.
+- [x] PR CI: npm install/test/typecheck/Wrangler dry-run.
 
 ### Task 5 — Documentation/integration
 - [x] DATA/root docs and changelog updated.
 - [x] Local Node 22 integration: 18/18 PASS.
-- [ ] One DATA Verify PR run.
-- [ ] Merge after green.
-- [ ] Explicit production bootstrap after merge.
+- [x] One DATA Verify PR run.
+- [x] Squash merge to `main`.
+- [x] Explicit production bootstrap: exact `nakwol-data` D1 created and schema migration 0001 applied.
+- [x] Normal production deploy verified after bootstrap: existing D1 required, no migration pending, Worker deploy success, `/api/health` and `/api/schema` HTTP 200.
+
+## Production verification notes
+
+During first bootstrap two deployment-only issues were found and hardened with regression coverage:
+
+1. Wrangler 4.126 does not accept `--json` on `d1 create`; bootstrap now uses plain `d1 create` and re-reads the UUID through `d1 list --json`.
+2. The initial compatibility date was one UTC day ahead of Cloudflare at deployment time; it is pinned to `2026-08-25`.
+3. Production smoke no longer assumes instant Workers propagation and retries health/schema for up to one minute.
+
+Final normal deploy marker: `NAKWOL_DATA_DEPLOY_OK`.
