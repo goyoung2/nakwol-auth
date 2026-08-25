@@ -165,7 +165,8 @@ export async function exchangeDeviceGrant(env: Env, rawDeviceCode: string): Prom
     await env.DB.prepare(`UPDATE connect_device_requests SET status = 'expired' WHERE device_code_hash = ? AND status = 'pending'`).bind(deviceCodeHash).run();
     return { status: 'expired' };
   }
-  if (state !== 'approved' || !row.approved_user_id) return { status: state };
+  if (state !== 'approved') return { status: state };
+  if (!row.approved_user_id) return { status: 'invalid' };
 
   const accessToken = randomToken(32);
   const tokenHash = await sha256Base64Url(accessToken);
