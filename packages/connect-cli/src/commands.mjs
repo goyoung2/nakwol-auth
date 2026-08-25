@@ -51,8 +51,9 @@ export async function initProject(options = {}) {
   if (existingConfig?.clientId) {
     try {
       app = (await api.getApp(existingConfig.clientId)).data;
-    } catch {
-      app = null;
+    } catch (error) {
+      if (error?.status === 404) app = null;
+      else throw error;
     }
   }
 
