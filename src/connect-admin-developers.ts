@@ -43,7 +43,31 @@ async function requireOperator(c: Context<{ Bindings: Env }>): Promise<{ userId:
   return { userId };
 }
 
+function developerPage(): string {
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAKWOL Connect · 개발자 관리</title><style>
+:root{font-family:Inter,Pretendard,system-ui,-apple-system,"Segoe UI",sans-serif;color:#e5e7eb;background:#080c14;--panel:#111827;--line:#263244;--muted:#94a3b8;--accent:#6366f1}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#080c14}header{height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line)}a{color:#c7d2fe;text-decoration:none}main{max-width:1050px;margin:0 auto;padding:24px}.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}.head{display:flex;justify-content:space-between;align-items:center;gap:12px}.muted{color:var(--muted)}button,input,select{font:inherit}button{border:0;border-radius:9px;padding:8px 12px;font-weight:750;cursor:pointer}.primary{background:var(--accent);color:white}.ghost{background:#273349;color:#e5e7eb}.row{display:grid;grid-template-columns:minmax(180px,1fr) 160px 120px 120px auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #1f2937}.row small{display:block;color:var(--muted);margin-top:3px}.form{display:grid;grid-template-columns:1fr 170px auto;gap:10px}.form input,.form select{background:#0b1220;color:#f8fafc;border:1px solid #334155;border-radius:9px;padding:10px}.bad{color:#fecaca}.ok{color:#86efac}@media(max-width:720px){.row,.form{grid-template-columns:1fr}.row{padding:14px 0}}
+</style></head><body>
+<header><div><b>落月 · NAKWOL Connect</b><div class="muted">개발자 권한 · 앱 소유권</div></div><div><a href="/admin/apps">← 앱 관리</a> <button id="login" class="primary" type="button">로그인</button></div></header>
+<main><section class="card"><div class="head"><div><h2>개발자 권한</h2><p class="muted">개발자는 CLI로 자기 앱을 생성·관리할 수 있습니다. operator는 전체 앱을 관리합니다.</p></div><button id="refresh" class="ghost" type="button">새로고침</button></div><div class="form"><input id="user-id" placeholder="NAKWOL ID (usr_...)"><select id="role"><option value="developer">developer</option><option value="operator">operator</option></select><button id="grant" class="primary" type="button">권한 부여</button></div><div id="status" class="muted" style="margin-top:12px"></div></section>
+<section class="card"><div id="list"></div></section></main>
+<script type="module">
+import { NakwolAuthClient } from '/sdk/v0.1.0/nakwol-auth-web.js';
+const auth = new NakwolAuthClient({ clientId:'nakwol-connect-admin', redirectUri: location.origin + '/admin/developers', authOrigin: location.origin });
+const $=(s)=>document.querySelector(s); const status=$('#status'), list=$('#list');
+const api=async(path,options={})=>{const h=new Headers(options.headers||{});const t=auth.getAccessToken();if(t)h.set('Authorization','Bearer '+t);if(options.body)h.set('Content-Type','application/json');const r=await fetch(path,{...options,headers:h});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p?.error?.message||p?.error?.code||('HTTP '+r.status));return p;};
+const esc=(v)=>String(v??'');
+async function load(){list.textContent='불러오는 중…';try{const p=await api('/admin/api/developers');list.textContent='';for(const d of p.data||[]){const row=document.createElement('div');row.className='row';const who=document.createElement('div');const b=document.createElement('b');b.textContent=d.display_name||d.user_id;const sm=document.createElement('small');sm.textContent=d.user_id;who.append(b,sm);const role=document.createElement('span');role.textContent=d.developer_role||'member';const st=document.createElement('span');st.textContent=d.developer_status||'-';const count=document.createElement('span');count.textContent=(d.owned_app_count||0)+' apps';const actions=document.createElement('div');if(d.developer_role){const btn=document.createElement('button');btn.className='ghost';btn.textContent=d.developer_status==='disabled'?'활성화':'비활성화';btn.onclick=async()=>{try{await api('/admin/api/developers/'+encodeURIComponent(d.user_id),{method:'PATCH',body:JSON.stringify({role:d.developer_role,status:d.developer_status==='disabled'?'active':'disabled'})});await load();}catch(e){status.textContent=e.message;status.className='bad';}};actions.append(btn);}row.append(who,role,st,count,actions);list.append(row);}status.textContent='';}catch(e){list.textContent='';status.textContent=e.message;status.className='bad';}}
+$('#login').onclick=()=>auth.login();$('#refresh').onclick=load;$('#grant').onclick=async()=>{try{await api('/admin/api/developers',{method:'POST',body:JSON.stringify({user_id:$('#user-id').value.trim(),role:$('#role').value})});status.textContent='권한을 반영했습니다.';status.className='ok';await load();}catch(e){status.textContent=e.message;status.className='bad';}};
+try{const user=await auth.bootstrap();if(user){$('#login').textContent=user.display_name||'로그인됨';await load();}}catch(e){status.textContent=e.message;status.className='bad';}
+</script></body></html>`;
+}
+
 export function registerConnectDeveloperAdminRoutes(app: Hono<{ Bindings: Env }>): void {
+  app.get('/admin/developers', (c) => c.html(developerPage()));
+
   app.get('/admin/api/developers', async (c) => {
     const identity = await requireOperator(c);
     if (identity instanceof Response) return identity;
