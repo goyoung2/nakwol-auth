@@ -1,0 +1,108 @@
+import { NakwolAuthClient } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.1.0/nakwol-auth-web.js';
+
+const auth = new NakwolAuthClient({
+  clientId: 'nakwol-connect-admin',
+  redirectUri: `${location.origin}/admin/developers`,
+});
+
+const sessionEl = document.querySelector('#session');
+const managerEl = document.querySelector('#manager');
+const queryEl = document.querySelector('#query');
+const peopleEl = document.querySelector('#people');
+const searchButton = document.querySelector('#search');
+
+async function api(path, options = {}) {
+  const token = auth.getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const response = await fetch(path, { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error?.message || payload?.error?.code || `HTTP ${response.status}`);
+  return payload.data;
+}
+
+function button(text, className, onClick) {
+  const el = document.createElement('button');
+  el.textContent = text;
+  if (className) el.className = className;
+  el.addEventListener('click', onClick);
+  return el;
+}
+
+async function loadPeople() {
+  peopleEl.textContent = '검색 중…';
+  try {
+    const rows = await api(`/admin/api/developers?q=${encodeURIComponent(queryEl.value.trim())}`);
+    peopleEl.replaceChildren();
+    if (!rows.length) {
+      peopleEl.textContent = '검색 결과가 없습니다.';
+      return;
+    }
+    for (const row of rows) {
+      const wrap = document.createElement('div');
+      wrap.className = 'person';
+      const copy = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = row.display_name || row.id;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `${row.id} · 맹원 ${row.membership_role || 'user'} · Connect ${row.connect_role || '없음'}`;
+      copy.append(name, meta);
+      const actions = document.createElement('div');
+      if (row.connect_role === 'developer') {
+        actions.appendChild(button('developer 해제', 'danger', async () => {
+          try { await api(`/admin/api/developers/${encodeURIComponent(row.id)}`, { method: 'DELETE' }); await loadPeople(); }
+          catch (error) { alert(error.message); }
+        }));
+      } else if (!['owner', 'operator'].includes(row.connect_role) && ['member', 'admin'].includes(row.membership_role) && row.membership_status === 'active') {
+        actions.appendChild(button('developer 부여', '', async () => {
+          try { await api(`/admin/api/developers/${encodeURIComponent(row.id)}`, { method: 'PUT', body: '{}' }); await loadPeople(); }
+          catch (error) { alert(error.message); }
+        }));
+      } else {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = row.connect_role || '권한 부여 불가';
+        actions.appendChild(badge);
+      }
+      wrap.append(copy, actions);
+      peopleEl.appendChild(wrap);
+    }
+  } catch (error) {
+    peopleEl.innerHTML = '';
+    const bad = document.createElement('div');
+    bad.className = 'bad';
+    bad.textContent = error.message;
+    peopleEl.appendChild(bad);
+  }
+}
+
+searchButton.addEventListener('click', loadPeople);
+queryEl.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadPeople(); });
+
+(async () => {
+  try {
+    const user = await auth.bootstrap();
+    if (!user) {
+      sessionEl.replaceChildren(button('낙월 로그인', '', () => auth.login()));
+      return;
+    }
+    const session = await api('/admin/api/session');
+    const copy = document.createElement('div');
+    copy.textContent = `${user.display_name || user.id} · Connect ${session.operator_role || '권한 없음'}`;
+    sessionEl.replaceChildren(copy);
+    if (!session.can_manage) {
+      const msg = document.createElement('p');
+      msg.className = 'bad';
+      msg.textContent = 'owner/operator/Discord admin만 developer 권한을 관리할 수 있습니다.';
+      sessionEl.appendChild(msg);
+      return;
+    }
+    managerEl.hidden = false;
+    await loadPeople();
+  } catch (error) {
+    sessionEl.textContent = `초기화 실패: ${error.message}`;
+    sessionEl.className = 'bad';
+  }
+})();
