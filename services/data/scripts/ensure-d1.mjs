@@ -45,7 +45,7 @@ let matches = listExact();
 if (matches.length > 1) throw new Error('DATA_D1_DUPLICATE_NAME');
 
 if (matches.length === 0 && createIfMissing) {
-  try { wrangler(['d1', 'create', DB_NAME, '--json']); } catch {}
+  wrangler(['d1', 'create', DB_NAME]);
   matches = listExact();
 }
 
