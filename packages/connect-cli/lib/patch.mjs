@@ -6,12 +6,43 @@ export function embedHtml({ clientId, redirectUri, origin }) {
   return `<script\n  src="${attr(origin)}/connect/v1.js"\n  data-client-id="${attr(clientId)}"\n  data-redirect-uri="${attr(redirectUri)}">\n</script>`;
 }
 
-function alreadyInstalled(source, clientId) {
-  return source.includes('/connect/v1.js') && source.includes(`data-client-id="${clientId}"`);
+function attributeValue(tag, name) {
+  const match = tag.match(new RegExp(`${name}\\s*=\\s*(["'])(.*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+function updateInstalled(source, options) {
+  const tagPattern = /<(?:script|Script)\b[^>]*>/gi;
+  let match;
+  while ((match = tagPattern.exec(source)) !== null) {
+    const tag = match[0];
+    const src = attributeValue(tag, 'src') || '';
+    const clientId = attributeValue(tag, 'data-client-id');
+    if (!src.includes('/connect/v1.js') || clientId !== options.clientId) continue;
+
+    const currentRedirect = attributeValue(tag, 'data-redirect-uri');
+    if (currentRedirect === options.redirectUri) return { found: true, changed: false, content: source };
+
+    const escapedRedirect = attr(options.redirectUri);
+    let nextTag;
+    if (currentRedirect != null) {
+      nextTag = tag.replace(/data-redirect-uri\s*=\s*(["'])(.*?)\1/i, `data-redirect-uri="${escapedRedirect}"`);
+    } else {
+      nextTag = tag.replace(/\s*\/>$/, ` data-redirect-uri="${escapedRedirect}" />`)
+        .replace(/>$/, ` data-redirect-uri="${escapedRedirect}">`);
+    }
+    return {
+      found: true,
+      changed: true,
+      content: source.slice(0, match.index) + nextTag + source.slice(match.index + tag.length),
+    };
+  }
+  return { found: false, changed: false, content: source };
 }
 
 export function patchHtmlDocument(source, options) {
-  if (alreadyInstalled(source, options.clientId)) return { ok: true, changed: false, content: source };
+  const installed = updateInstalled(source, options);
+  if (installed.found) return { ok: true, changed: installed.changed, content: installed.content };
   const match = source.match(/<\/body\s*>/i);
   if (!match || match.index == null) return { ok: false, code: 'PATCH_UNSAFE', reason: 'closing </body> not found' };
   const insertion = `\n${embedHtml(options)}\n`;
@@ -27,7 +58,8 @@ function nextScript(options) {
 }
 
 export function patchNextSource(source, options) {
-  if (alreadyInstalled(source, options.clientId)) return { ok: true, changed: false, content: source };
+  const installed = updateInstalled(source, options);
+  if (installed.found) return { ok: true, changed: installed.changed, content: installed.content };
   const match = source.match(/<\/body\s*>/i);
   if (!match || match.index == null) return { ok: false, code: 'PATCH_UNSAFE', reason: 'closing </body> JSX tag not found' };
 
