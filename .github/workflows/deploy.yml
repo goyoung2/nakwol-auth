@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'tests/**'
+      - 'packages/**'
       - 'migrations/**'
       - 'scripts/**'
       - 'package.json'
@@ -31,6 +33,15 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Build Connect CLI package
+        run: npm run cli:pack
+
+      - name: Verify generated CLI package is current
+        run: git diff --exit-code -- src/assets/nakwol-connect-cli.tgz.b64.js.txt
+
+      - name: Unit tests
+        run: npm test
 
       - name: Typecheck
         run: npm run typecheck
@@ -64,37 +75,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
           cat /tmp/apps.json
           grep -q 'nakwol-auth-selftest' /tmp/apps.json
+          grep -q 'nakwol-connect-admin' /tmp/apps.json
+          grep -q 'nakwol-connect-cli' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
 
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
 
-      - name: Verify production AUTH and Web SDK
+      - name: Verify production AUTH, SDK, and Connect CLI distribution
         shell: bash
         run: |
           set -euo pipefail
           origin='https://nakwol-auth.sepsd21.workers.dev'
           for i in {1..18}; do
             hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
-            ds=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/demo -w '%{http_code}' "$origin/demo" || true)
-            ms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/manifest -w '%{http_code}' "$origin/sdk/manifest.json" || true)
             ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js" || true)
-            echo "attempt=$i health=$hs demo=$ds manifest=$ms sdk=$ss"
-            if [ "$hs" = '200' ] && [ "$ds" = '200' ] && [ "$ms" = '200' ] && [ "$ss" = '200' ]; then
+            cs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect -w '%{http_code}' "$origin/connect/v1.js" || true)
+            cm=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-manifest -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
+            cp=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-package -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
+            dv=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
+            echo "attempt=$i health=$hs sdk=$ss connect=$cs cli_manifest=$cm cli_package=$cp device=$dv"
+            if [ "$hs" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ] && [ "$cm" = '200' ] && [ "$cp" = '200' ] && [ "$dv" = '200' ]; then
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
-                 grep -q '통합 로그인 자가진단' /tmp/demo && \
-                 grep -q '"stable":"0.1.0"' /tmp/manifest && \
-                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk; then
-                echo 'NAKWOL_AUTH_INDEPENDENT_DEPLOY_OK'
+                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk && \
+                 grep -q 'nakwol-ready' /tmp/connect && \
+                 grep -q '"name":"@nakwol/connect"' /tmp/cli-manifest && \
+                 grep -q 'CLI 연결 승인' /tmp/device && \
+                 test -s /tmp/cli-package; then
+                echo 'NAKWOL_CONNECT_V02_DEPLOY_OK'
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo 'Independent NAKWOL AUTH verification failed.'
-          echo '--- health ---'; head -c 800 /tmp/health || true; echo
-          echo '--- manifest ---'; head -c 800 /tmp/manifest || true; echo
+          echo 'NAKWOL Connect v0.2 deployment verification failed.'
           exit 1
