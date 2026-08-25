@@ -11,10 +11,14 @@ test('Worker distribution exposes npm CLI package, manifest, and llms discovery'
   assert.match(routes, /npx --yes nakwol-connect init/);
 });
 
-test('npm package metadata is public, executable, and points at the owning repository', async () => {
+test('npm package metadata is public, executable, version-aligned, and points at the owning repository', async () => {
   const pkg = JSON.parse(await readFile(new URL('../../packages/connect-cli/package.json', import.meta.url), 'utf8'));
+  const routes = await readFile(new URL('../../src/connect-cli-distribution.ts', import.meta.url), 'utf8');
+  const workerVersion = routes.match(/CONNECT_CLI_VERSION = '([^']+)'/)?.[1];
+
   assert.equal(pkg.name, 'nakwol-connect');
-  assert.equal(pkg.version, '0.2.0');
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(workerVersion, pkg.version);
   assert.equal(pkg.license, 'MIT');
   assert.equal(pkg.private, false);
   assert.equal(pkg.bin?.['nakwol-connect'], 'bin/nakwol-connect.mjs');
