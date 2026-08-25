@@ -1,0 +1,91 @@
+(() => {
+  const codeKey = 'nakwol.connect.cli.user_code';
+  const codeFromUrl = new URLSearchParams(location.search).get('user_code');
+  if (codeFromUrl) sessionStorage.setItem(codeKey, codeFromUrl.toUpperCase());
+
+  const userCode = sessionStorage.getItem(codeKey) || '';
+  const status = document.querySelector('#device-status');
+  const actions = document.querySelector('#device-actions');
+  const login = document.querySelector('#device-login');
+  const approve = document.querySelector('#device-approve');
+  const deny = document.querySelector('#device-deny');
+  const codeNode = document.querySelector('#device-code');
+  if (codeNode) codeNode.textContent = userCode || '-';
+
+  const setStatus = (message, bad = false) => {
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.bad = bad ? 'true' : 'false';
+  };
+
+  const run = async () => {
+    if (!userCode) {
+      setStatus('승인 코드가 없습니다. CLI에서 표시된 링크를 다시 여세요.', true);
+      return;
+    }
+
+    const sdk = await import('/sdk/v0.1.0/nakwol-auth-web.js');
+    const client = new sdk.NakwolAuthClient({
+      clientId: 'nakwol-connect-cli',
+      redirectUri: `${location.origin}/connect/cli/device/verify`,
+      authOrigin: location.origin,
+    });
+    window.NAKWOL_CONNECT_DEVICE_AUTH = client;
+
+    let user = null;
+    try {
+      user = await client.bootstrap();
+    } catch (error) {
+      setStatus(`로그인 확인 실패: ${error?.code || error?.message || 'unknown'}`, true);
+      return;
+    }
+
+    if (!user) {
+      setStatus('NAKWOL ID로 로그인한 뒤 CLI 연결을 승인하세요.');
+      if (login) {
+        login.hidden = false;
+        login.addEventListener('click', () => {
+          sessionStorage.setItem(codeKey, userCode);
+          client.login();
+        }, { once: true });
+      }
+      return;
+    }
+
+    setStatus(`${user.display_name || user.id} 계정으로 연결 요청을 승인할 수 있습니다.`);
+    if (actions) actions.hidden = false;
+
+    const submit = async (path) => {
+      const token = client.getAccessToken();
+      if (!token) {
+        setStatus('로그인 토큰이 없습니다. 다시 로그인하세요.', true);
+        return;
+      }
+      approve && (approve.disabled = true);
+      deny && (deny.disabled = true);
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_code: userCode }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        setStatus(payload?.error?.message || payload?.error?.code || '요청을 처리하지 못했습니다.', true);
+        approve && (approve.disabled = false);
+        deny && (deny.disabled = false);
+        return;
+      }
+      sessionStorage.removeItem(codeKey);
+      setStatus(path.endsWith('/approve') ? '승인했습니다. CLI로 돌아가면 자동으로 계속 진행됩니다.' : '연결 요청을 거절했습니다.');
+      if (actions) actions.hidden = true;
+    };
+
+    approve?.addEventListener('click', () => submit('/connect/cli/device/approve'));
+    deny?.addEventListener('click', () => submit('/connect/cli/device/deny'));
+  };
+
+  run().catch((error) => setStatus(error?.message || String(error), true));
+})();
