@@ -37,6 +37,16 @@ jobs:
       - name: Verify generated CLI package is current
         run: git diff --exit-code -- src/assets/nakwol-connect-cli.tgz.b64.js.txt
 
+      - name: Print generated CLI package for refresh
+        if: always()
+        shell: bash
+        run: |
+          if [ -s src/assets/nakwol-connect-cli.tgz.b64.js.txt ]; then
+            echo 'CONNECT_CLI_BASE64_BEGIN'
+            cat src/assets/nakwol-connect-cli.tgz.b64.js.txt
+            echo 'CONNECT_CLI_BASE64_END'
+          fi
+
       - name: Unit tests
         run: npm test
 
