@@ -91,6 +91,7 @@ WHERE client_id = 'nakwol-connect-admin';
 INSERT INTO connect_developers(user_id, role, status, created_at, updated_at, created_by_user_id)
 SELECT user_id, 'operator', 'active', unixepoch() * 1000, unixepoch() * 1000, created_by_user_id
 FROM auth_operators
+WHERE 1 = 1
 ON CONFLICT(user_id) DO UPDATE SET
   role = 'operator',
   status = 'active',

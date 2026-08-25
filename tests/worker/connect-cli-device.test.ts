@@ -22,4 +22,6 @@ test('migration creates CLI authorization tables and internal app', async () => 
   }
   assert.match(sql, /'nakwol-connect-cli'/);
   assert.match(sql, /https:\/\/nakwol-auth\.sepsd21\.workers\.dev\/connect\/cli\/device\/verify/);
+  assert.doesNotMatch(sql, /FROM auth_operators\s+ON CONFLICT/);
+  assert.match(sql, /FROM auth_operators\s+WHERE 1 = 1\s+ON CONFLICT\(user_id\) DO UPDATE/);
 });
