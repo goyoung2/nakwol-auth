@@ -6,8 +6,13 @@ import {
   canUseCli,
 } from '../src/connect-permissions';
 
-test('developer can authenticate the Connect CLI', () => {
+test('developer can authenticate the Connect CLI while still a member', () => {
   assert.equal(canUseCli('developer', 'member'), true);
+});
+
+test('developer access stops when membership is no longer member/admin', () => {
+  assert.equal(canUseCli('developer', 'user'), false);
+  assert.equal(canManageApplication('developer', 'user', 'usr_dev', 'usr_dev'), false);
 });
 
 test('ordinary member cannot authenticate the Connect CLI', () => {
