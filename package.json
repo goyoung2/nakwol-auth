@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "wrangler dev --port 8787",
     "deploy": "wrangler deploy",
-    "test": "npm run test:worker",
+    "test": "npm run test:worker && npm run test:cli",
     "test:worker": "tsx --test tests/*.test.ts",
+    "test:cli": "node --test packages/connect-cli/test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply nakwol-auth --local",
     "db:seed:local": "wrangler d1 execute nakwol-auth --local --file=./scripts/dev-seed.sql",
