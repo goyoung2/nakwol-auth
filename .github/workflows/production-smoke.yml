@@ -63,11 +63,11 @@ jobs:
             if [ "$admin" = '200' ] && [ "$devs" = '200' ] && [ "$manifest" = '200' ] && [ "$package" = '200' ] && [ "$device" = '200' ] && [ "$verify" = '200' ] && [ "$llms" = '200' ] && [ "$health" = '200' ]; then
               grep -q 'NAKWOL Connect' /tmp/admin.html
               grep -q '개발자 권한' /tmp/developers.html
-              grep -q '"name":"@nakwol/connect"' /tmp/cli-manifest.json
+              grep -q '"name":"nakwol-connect"' /tmp/cli-manifest.json
               grep -q '"device_code"' /tmp/device.json
               grep -q '"user_code"' /tmp/device.json
               grep -q 'CLI 연결 승인' /tmp/device.html
-              grep -q 'nakwol-connect init' /tmp/llms.txt
+              grep -q 'npx --yes nakwol-connect init' /tmp/llms.txt
               grep -q '"service":"nakwol-auth"' /tmp/health.json
               test -s /tmp/connect-cli.tgz
               echo 'NAKWOL_CONNECT_V02_ROUTES_OK'
