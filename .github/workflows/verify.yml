@@ -31,8 +31,22 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Build Connect CLI package
+        run: node scripts/build-connect-cli.mjs
+
       - name: Unit tests
         run: npm test
+
+      - name: Execute packed Connect CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/connect-cli/bin/nakwol-connect.mjs --version | grep -q '^0.2.0$'
+          tarball=$(find dist/connect-cli -maxdepth 1 -name '*.tgz' | head -n 1)
+          test -n "$tarball"
+          npm exec --yes --package="./$tarball" -- nakwol-connect --version | grep -q '^0.2.0$'
+          npm exec --yes --package="./$tarball" -- nakwol-connect --help | grep -q 'NAKWOL Connect CLI v0.2.0'
+          echo 'NAKWOL_CONNECT_CLI_EXEC_OK'
 
       - name: Typecheck
         run: npm run typecheck
@@ -44,12 +58,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f src/connect.ts ]; then
-            grep -q "registerConnectRoutes" src/sdk-entry.ts
-            grep -q "connect/v1.js" src/connect.ts
-            grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
-            grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
-            echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
-          else
-            echo 'NAKWOL Connect not present; core verification only.'
-          fi
+          grep -q "registerConnectRoutes" src/sdk-entry.ts
+          grep -q "registerConnectDeviceRoutes" src/sdk-entry.ts
+          grep -q "registerConnectCliApiRoutes" src/sdk-entry.ts
+          grep -q "connect/v1.js" src/connect.ts
+          grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
+          grep -q "connect_cli_tokens" migrations/0004_connect_agent_cli.sql
+          grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
+          test -s src/assets/nakwol-connect-cli.tgz.b64.txt
+          echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
