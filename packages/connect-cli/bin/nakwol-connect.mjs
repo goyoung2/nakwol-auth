@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+import {
+  DEFAULT_AUTH_ORIGIN,
+  initProject,
+  doctorProject,
+  statusProject,
+  addUrlProject,
+  syncProject,
+  removeProject,
+} from '../src/commands.mjs';
+
+function parse(argv) {
+  const args = [...argv];
+  const command = args.shift() || 'init';
+  const options = {};
+  const positionals = [];
+  while (args.length) {
+    const value = args.shift();
+    if (!value.startsWith('--')) { positionals.push(value); continue; }
+    const key = value.slice(2);
+    if (['json', 'no-open'].includes(key)) { options[key === 'no-open' ? 'noOpen' : key] = true; continue; }
+    const next = args.shift();
+    if (next == null) throw new Error(`--${key} 값이 필요합니다.`);
+    const map = { 'auth-origin': 'authOrigin', 'client-id': 'clientId', 'access-policy': 'accessPolicy' };
+    options[map[key] || key] = next;
+  }
+  return { command, options, positionals };
+}
+
+function human(result) {
+  if (result?.checks) {
+    for (const check of result.checks) console.log(`${check.ok ? '✓' : '×'} ${check.name}: ${check.detail || ''}`);
+    return;
+  }
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function main() {
+  const { command, options, positionals } = parse(process.argv.slice(2));
+  options.authOrigin ||= process.env.NAKWOL_AUTH_ORIGIN || DEFAULT_AUTH_ORIGIN;
+  options.output = options.json ? () => {} : console.log;
+  let result;
+  if (command === 'init') result = await initProject(options);
+  else if (command === 'doctor') result = await doctorProject(options);
+  else if (command === 'status') result = await statusProject(options);
+  else if (command === 'add-url') {
+    if (!positionals[0]) throw new Error('사용법: nakwol-connect add-url <URL>');
+    result = await addUrlProject(positionals[0], options);
+  } else if (command === 'sync') result = await syncProject(options);
+  else if (command === 'remove') result = await removeProject(options);
+  else if (command === 'help' || command === '--help' || command === '-h') {
+    console.log(`NAKWOL Connect CLI v0.2\n\nCommands:\n  init       프로젝트 감지 → 앱 등록 → Connect 설치\n  doctor     로컬/중앙 연결 상태 검사\n  status     현재 프로젝트 연결 상태 출력\n  add-url    Redirect URI 추가\n  sync       중앙 설정과 로컬 설치 동기화\n  remove     로컬 Connect 설치 제거\n\nOptions:\n  --json\n  --url <URL>\n  --name <NAME>\n  --client-id <ID>\n  --access-policy <public|member|admin>\n  --no-open\n  --auth-origin <URL>`);
+    return;
+  } else throw new Error(`알 수 없는 명령: ${command}`);
+
+  if (options.json) console.log(JSON.stringify(result, null, 2));
+  else human(result);
+  if (result?.ok === false) process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(error?.message || String(error));
+  process.exitCode = 1;
+});
