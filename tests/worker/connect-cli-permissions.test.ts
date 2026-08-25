@@ -4,6 +4,8 @@ import {
   canRequestAccessPolicy,
   canManageOwnedApplication,
   nextAvailableClientId,
+  resolveAppStatus,
+  hasConnectAppScope,
 } from '../../src/connect-admin-developers';
 
 test('developers may request public/member but not admin policy', () => {
@@ -21,4 +23,16 @@ test('developers manage only owned apps while operators bypass ownership', () =>
 
 test('client id collision uses deterministic numeric suffix', () => {
   assert.equal(nextAvailableClientId('battle-map', new Set(['battle-map', 'battle-map-2'])), 'battle-map-3');
+});
+
+test('omitted app status preserves the current status', () => {
+  assert.equal(resolveAppStatus('disabled', undefined), 'disabled');
+  assert.equal(resolveAppStatus('active', undefined), 'active');
+  assert.equal(resolveAppStatus('disabled', 'active'), 'active');
+});
+
+test('CLI app APIs require connect:apps scope', () => {
+  assert.equal(hasConnectAppScope(['connect:apps']), true);
+  assert.equal(hasConnectAppScope([]), false);
+  assert.equal(hasConnectAppScope(['other']), false);
 });
