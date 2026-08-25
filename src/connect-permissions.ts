@@ -5,8 +5,12 @@ function hasGlobalConnectControl(connectRole: ConnectRole, membershipRole: Nakwo
   return membershipRole === 'admin' || connectRole === 'owner' || connectRole === 'operator';
 }
 
+function isActiveMember(membershipRole: NakwolMembershipRole): boolean {
+  return membershipRole === 'member' || membershipRole === 'admin';
+}
+
 export function canUseCli(connectRole: ConnectRole, membershipRole: NakwolMembershipRole): boolean {
-  return hasGlobalConnectControl(connectRole, membershipRole) || connectRole === 'developer';
+  return hasGlobalConnectControl(connectRole, membershipRole) || (connectRole === 'developer' && isActiveMember(membershipRole));
 }
 
 export function canManageApplication(
@@ -16,7 +20,7 @@ export function canManageApplication(
   ownerUserId: string | null | undefined,
 ): boolean {
   if (hasGlobalConnectControl(connectRole, membershipRole)) return true;
-  return connectRole === 'developer' && Boolean(ownerUserId) && ownerUserId === userId;
+  return connectRole === 'developer' && isActiveMember(membershipRole) && Boolean(ownerUserId) && ownerUserId === userId;
 }
 
 export function canManageDeveloperRoles(connectRole: ConnectRole, membershipRole: NakwolMembershipRole): boolean {
