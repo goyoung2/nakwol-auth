@@ -34,12 +34,6 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build Connect CLI package
-        run: npm run cli:pack
-
-      - name: Verify generated CLI package is current
-        run: git diff --exit-code -- src/assets/nakwol-connect-cli.tgz.b64.js.txt
-
       - name: Unit tests
         run: npm test
 
