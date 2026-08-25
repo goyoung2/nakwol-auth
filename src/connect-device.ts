@@ -73,7 +73,7 @@ export function registerConnectDeviceRoutes(app: Hono<{ Bindings: Env }>): void 
       try {
         await c.env.DB.prepare(
           `INSERT INTO connect_device_requests(device_code_hash,user_code,status,requested_action,project_name,framework,homepage_url,approved_user_id,expires_at,created_at,approved_at,consumed_at)
-           VALUES (?,?,'pending','cli_login',?,?,?,?,?,?,NULL,NULL,NULL)`
+           VALUES (?,?,'pending','cli_login',?,?,?,?,?,?,NULL,NULL)`
         ).bind(
           deviceHash,
           userCode,
