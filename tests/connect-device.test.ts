@@ -4,7 +4,7 @@ import {
   createUserCode,
   deviceEffectiveStatus,
   isDeviceRequestConsumable,
-} from '../src/connect-device';
+} from '../src/connect-device-core';
 
 test('user code is eight readable characters grouped 4-4', () => {
   const code = createUserCode(() => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]));
