@@ -1,7 +1,13 @@
 import type { Context, Hono } from 'hono';
 import { authenticateCliToken, type ConnectPrincipal } from './connect-cli-store';
 import { normalizeClientId, validateConnectRedirectUri } from './connect-cli-domain';
-import { canManageOwnedApplication, canRequestAccessPolicy, nextAvailableClientId } from './connect-admin-developers';
+import {
+  canManageOwnedApplication,
+  canRequestAccessPolicy,
+  hasConnectAppScope,
+  nextAvailableClientId,
+  resolveAppStatus,
+} from './connect-admin-developers';
 import { logAuthEvent } from './store';
 import type { Env } from './types';
 
@@ -17,6 +23,9 @@ async function requirePrincipal(c: Context<{ Bindings: Env }>): Promise<ConnectP
   if (!raw) return c.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'CLI token이 필요합니다.' } }, 401);
   const principal = await authenticateCliToken(c.env, raw);
   if (!principal) return c.json({ ok: false, error: { code: 'INVALID_CLI_TOKEN', message: 'CLI token이 만료되었거나 취소되었습니다.' } }, 401);
+  if (!hasConnectAppScope(principal.scopes)) {
+    return c.json({ ok: false, error: { code: 'CLI_SCOPE_REQUIRED', message: 'connect:apps 권한이 필요합니다.' } }, 403);
+  }
   return principal;
 }
 
@@ -146,7 +155,7 @@ export function registerConnectCliAppRoutes(app: Hono<{ Bindings: Env }>): void 
     if (!name || name.length > 100) return c.json({ ok: false, error: { code: 'INVALID_APP_NAME', message: '앱 이름은 1~100자여야 합니다.' } }, 400);
     if (!canRequestAccessPolicy(principal.isOperator, policy)) return c.json({ ok: false, error: { code: 'ACCESS_POLICY_DENIED', message: '이 접근 정책을 사용할 권한이 없습니다.' } }, 403);
     const framework = body.framework == null ? current.framework : validFramework(String(body.framework));
-    const status = body.status === 'disabled' ? 'disabled' : 'active';
+    const status = resolveAppStatus(current.status, body.status);
     const homepage = body.homepage_url === undefined ? current.homepage_url : body.homepage_url == null ? null : String(body.homepage_url).trim() || null;
     if (homepage) {
       const check = validateConnectRedirectUri(homepage);
