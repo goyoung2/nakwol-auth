@@ -2,43 +2,18 @@ import type { Hono } from 'hono';
 import { randomToken, sha256Base64Url } from './crypto';
 import { authenticateAccessToken, getUserWithMembership, logAuthEvent } from './store';
 import { canUseCli, type ConnectRole } from './connect-permissions';
+import {
+  createUserCode,
+  deviceEffectiveStatus,
+  isDeviceRequestConsumable,
+  type DeviceStateRow,
+} from './connect-device-core';
 import type { Env } from './types';
 import devicePageSource from './assets/nakwol-connect-device.js.txt';
 
 const ADMIN_CLIENT_ID = 'nakwol-connect-admin';
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const CLI_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-export type DeviceStateRow = {
-  status: string;
-  expires_at: number;
-  consumed_at: number | null;
-};
-
-function randomBytes(length: number): Uint8Array {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return bytes;
-}
-
-export function createUserCode(source: (length: number) => Uint8Array = randomBytes): string {
-  const bytes = source(8);
-  let raw = '';
-  for (let i = 0; i < 8; i += 1) raw += USER_CODE_ALPHABET[bytes[i] % USER_CODE_ALPHABET.length];
-  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
-}
-
-export function deviceEffectiveStatus(row: DeviceStateRow, now = Date.now()): string {
-  if (row.consumed_at != null || row.status === 'consumed') return 'consumed';
-  if (row.status === 'denied') return 'denied';
-  if (row.expires_at <= now) return 'expired';
-  return row.status;
-}
-
-export function isDeviceRequestConsumable(row: DeviceStateRow, now = Date.now()): boolean {
-  return deviceEffectiveStatus(row, now) === 'approved';
-}
 
 function bearerToken(header: string | undefined): string | null {
   const match = (header || '').match(/^Bearer\s+(.+)$/i);
@@ -75,7 +50,7 @@ export function registerConnectDeviceRoutes(app: Hono<{ Bindings: Env }>): void 
   app.get('/connect/device', (c) => c.html(`<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NAKWOL Connect CLI 승인</title><style>
-:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#e5e7eb;background:#080c14}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#182038,#080c14 42%)}main{width:min(620px,calc(100% - 28px));background:#111827;border:1px solid #293548;border-radius:18px;padding:28px;box-sizing:border-box}h1{margin:0 0 8px}p{color:#aab5c5;line-height:1.6}.code{font:700 28px ui-monospace,Consolas,monospace;letter-spacing:.08em;background:#050912;border:1px solid #334155;border-radius:12px;padding:16px;text-align:center;margin:18px 0}.row{display:flex;gap:10px;flex-wrap:wrap}button{border:0;border-radius:10px;padding:11px 15px;font-weight:750;cursor:pointer}.primary{background:#6366f1;color:#fff}.danger{background:#3f1d28;color:#fecdd3}.ghost{background:#263246;color:#e5e7eb}.muted{font-size:12px;color:#8b9aaf}.ok{color:#86efac}.bad{color:#fca5a5}</style></head>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#e5e7eb;background:#080c14}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#182038,#080c14 42%)}main{width:min(620px,calc(100% - 28px));background:#111827;border:1px solid #293548;border-radius:18px;padding:28px;box-sizing:border-box}h1{margin:0 0 8px}p{color:#aab5c5;line-height:1.6}.code{font:700 28px ui-monospace,Consolas,monospace;letter-spacing:.08em;background:#050912;border:1px solid #334155;border-radius:12px;padding:16px;text-align:center;margin:18px 0}.row{display:flex;gap:10px;flex-wrap:wrap}button{border:0;border-radius:10px;padding:11px 15px;font-weight:750;cursor:pointer}.primary{background:#6366f1;color:#fff}.danger{background:#3f1d28;color:#fecdd3}.muted{font-size:12px;color:#8b9aaf}.ok{color:#86efac}.bad{color:#fca5a5}</style></head>
 <body><main><div class="muted">落月 · NAKWOL Connect</div><h1>CLI 접근 승인</h1><p>로컬 코딩 에이전트가 NAKWOL Connect 앱을 등록·관리하려고 합니다. 이 페이지는 Cloudflare 키나 Discord 비밀키를 CLI에 전달하지 않습니다.</p><div id="user-code" class="code">----</div><div id="status">로그인 상태 확인 중…</div><div class="row" style="margin-top:18px"><button id="login" class="primary" hidden>낙월 로그인</button><button id="approve" class="primary" hidden>이 CLI 허용</button><button id="deny" class="danger" hidden>거부</button></div></main><script type="module" src="/connect/device/app.js"></script></body></html>`));
 
   app.get('/connect/device/app.js', () => new Response(devicePageSource, {
@@ -141,15 +116,15 @@ export function registerConnectDeviceRoutes(app: Hono<{ Bindings: Env }>): void 
     if (status === 'consumed') return jsonError(c, 410, 'DEVICE_CONSUMED', '이미 사용된 device 요청입니다.');
     if (!row.approved_user_id || !isDeviceRequestConsumable(row)) return jsonError(c, 409, 'DEVICE_NOT_APPROVED', '승인 상태를 확인할 수 없습니다.');
 
+    const now = Date.now();
     const consumed = await c.env.DB.prepare(
       `UPDATE connect_device_requests SET status='consumed', consumed_at=?
         WHERE device_code_hash=? AND status='approved' AND consumed_at IS NULL AND expires_at > ?`
-    ).bind(Date.now(), hash, Date.now()).run();
+    ).bind(now, hash, now).run();
     if (Number(consumed.meta?.changes ?? 0) !== 1) return jsonError(c, 409, 'DEVICE_CONSUMED', '다른 요청에서 이미 device 승인을 사용했습니다.');
 
     const rawToken = randomToken(32);
     const tokenHash = await sha256Base64Url(rawToken);
-    const now = Date.now();
     const expiresAt = now + CLI_TOKEN_TTL_MS;
     await c.env.DB.prepare(
       `INSERT INTO connect_cli_tokens(token_hash,user_id,expires_at,revoked_at,created_at,last_used_at,label)
