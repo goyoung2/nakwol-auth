@@ -5,6 +5,7 @@ import type { Env } from './types';
 
 export const CONNECT_DEVICE_TTL_MS = 10 * 60 * 1000;
 export const CONNECT_DEVICE_POLL_INTERVAL_SECONDS = 3;
+export const CONNECT_MAX_PENDING_DEVICE_REQUESTS = 200;
 export const CONNECT_CLI_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -71,9 +72,23 @@ export async function getConnectPrincipal(env: Env, userId: string, scopes: stri
 
 export async function createDeviceGrant(env: Env, scopesInput?: unknown) {
   const scopes = normalizeScopes(scopesInput);
+  const now = Date.now();
+
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM connect_device_requests WHERE expires_at <= ?`).bind(now),
+    env.DB.prepare(`DELETE FROM connect_cli_tokens WHERE expires_at <= ? OR revoked_at IS NOT NULL`).bind(now),
+  ]);
+
+  const active = await env.DB.prepare(
+    `SELECT COUNT(*) AS count FROM connect_device_requests
+      WHERE status IN ('pending','approved') AND expires_at > ?`
+  ).bind(now).first<{ count: number }>();
+  if (Number(active?.count ?? 0) >= CONNECT_MAX_PENDING_DEVICE_REQUESTS) {
+    throw new Error('DEVICE_REQUEST_CAPACITY_REACHED');
+  }
+
   const deviceCode = randomToken(32);
   const deviceCodeHash = await sha256Base64Url(deviceCode);
-  const now = Date.now();
   const expiresAt = now + CONNECT_DEVICE_TTL_MS;
 
   let userCode = '';
