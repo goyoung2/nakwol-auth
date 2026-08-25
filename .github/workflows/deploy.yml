@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'tests/**'
+      - 'packages/**'
       - 'migrations/**'
       - 'scripts/**'
       - 'package.json'
@@ -31,6 +33,20 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Build Connect CLI package
+        run: node scripts/build-connect-cli.mjs
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Execute packed Connect CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball=$(find dist/connect-cli -maxdepth 1 -name '*.tgz' | head -n 1)
+          npm exec --yes --package="./$tarball" -- nakwol-connect --version | grep -q '^0.2.0$'
+          echo 'NAKWOL_CONNECT_CLI_EXEC_OK'
 
       - name: Typecheck
         run: npm run typecheck
@@ -64,15 +80,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','siege-calculator','nakwol-connect-admin') ORDER BY client_id;" > /tmp/apps.json
           cat /tmp/apps.json
           grep -q 'nakwol-auth-selftest' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
+          grep -q 'nakwol-connect-admin' /tmp/apps.json
 
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
 
-      - name: Verify production AUTH and Web SDK
+      - name: Verify production AUTH, SDK and Connect
         shell: bash
         run: |
           set -euo pipefail
@@ -82,12 +99,14 @@ jobs:
             ds=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/demo -w '%{http_code}' "$origin/demo" || true)
             ms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/manifest -w '%{http_code}' "$origin/sdk/manifest.json" || true)
             ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js" || true)
-            echo "attempt=$i health=$hs demo=$ds manifest=$ms sdk=$ss"
-            if [ "$hs" = '200' ] && [ "$ds" = '200' ] && [ "$ms" = '200' ] && [ "$ss" = '200' ]; then
+            cs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-manifest -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
+            echo "attempt=$i health=$hs demo=$ds sdkManifest=$ms sdk=$ss connectCli=$cs"
+            if [ "$hs" = '200' ] && [ "$ds" = '200' ] && [ "$ms" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ]; then
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
                  grep -q '통합 로그인 자가진단' /tmp/demo && \
                  grep -q '"stable":"0.1.0"' /tmp/manifest && \
-                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk; then
+                 grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk && \
+                 grep -q '"version":"0.2.0"' /tmp/connect-manifest; then
                 echo 'NAKWOL_AUTH_INDEPENDENT_DEPLOY_OK'
                 exit 0
               fi
@@ -95,6 +114,4 @@ jobs:
             sleep 5
           done
           echo 'Independent NAKWOL AUTH verification failed.'
-          echo '--- health ---'; head -c 800 /tmp/health || true; echo
-          echo '--- manifest ---'; head -c 800 /tmp/manifest || true; echo
           exit 1
