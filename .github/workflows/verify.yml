@@ -34,6 +34,9 @@ jobs:
       - name: Build Connect CLI package
         run: npm run cli:pack
 
+      - name: Verify generated CLI package is current
+        run: git diff --exit-code -- src/assets/nakwol-connect-cli.tgz.b64.js.txt
+
       - name: Unit tests
         run: npm test
 
@@ -56,13 +59,3 @@ jobs:
           grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
           test -s src/assets/nakwol-connect-cli.tgz.b64.js.txt
           echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
-
-      - name: Print generated CLI package asset for bootstrap
-        if: always()
-        shell: bash
-        run: |
-          if [ -s src/assets/nakwol-connect-cli.tgz.b64.js.txt ]; then
-            echo 'CONNECT_CLI_BASE64_BEGIN'
-            cat src/assets/nakwol-connect-cli.tgz.b64.js.txt
-            echo 'CONNECT_CLI_BASE64_END'
-          fi
