@@ -1,34 +1,86 @@
-# NAKWOL Connect v0.1
+# NAKWOL Connect v0.2
 
-NAKWOL AUTH를 다른 개발자가 쉽게 붙일 수 있게 하는 앱 등록/설치 도구입니다.
+NAKWOL AUTH를 낙월 웹도구에 연결하는 통합 계층입니다.
 
-현재 v0.1의 목표는 **운영자는 화면에서 앱을 등록하고, 개발자는 생성된 안내를 그대로 복사해 붙이는 것**입니다.
+v0.2의 기본 경로는 **사람이 코드를 복사해 넣는 것**이 아니라 **코딩 LLM이 공식 CLI를 실행해 프로젝트 분석 → 앱 등록 → 코드 수정 → 검증까지 수행하는 것**입니다.
 
-## 운영자
+## LLM에게 맡기기
 
-배포 후 다음 주소를 사용합니다.
+새 프로젝트에서 다음 요청만 전달하면 됩니다.
+
+```text
+이 프로젝트에 NAKWOL Connect를 붙여줘.
+다음 명령을 실행하고 프로젝트 분석, 앱 등록, 코드 수정, doctor 검증까지 끝까지 수행해.
+파일 위치를 나에게 묻지 말고 프로젝트 구조를 직접 분석해.
+
+npx --yes https://nakwol-auth.sepsd21.workers.dev/connect/cli/v0.2.0/nakwol-connect.tgz init
+```
+
+첫 CLI 사용 시에는 브라우저 승인 URL이 열립니다. 사람은 **NAKWOL 로그인 → 이 CLI 허용**만 누릅니다. Cloudflare API Token, Discord Client Secret, 별도 관리자 비밀번호는 LLM에 주지 않습니다.
+
+자세한 CLI 문서: `CLI.md`
+
+## 중앙 관리
+
+Worker `nakwol-auth`가 NAKWOL Connect Control Plane입니다.
+
+```text
+LLM / CLI
+   ↓ HTTPS
+nakwol-auth Worker
+   ↓
+D1 applications / application_settings / CLI auth state
+```
+
+앱 등록/Client ID 발급/Redirect URI/접근 정책/소유권은 Worker API가 D1에 저장합니다.
+
+### 앱 관리
 
 ```text
 https://nakwol-auth.sepsd21.workers.dev/admin/apps
 ```
 
-최초 1회에는 낙월 맹원 한 명이 `첫 운영자로 등록`을 눌러 owner가 됩니다. 그 뒤에는 등록된 operator 또는 Discord admin 역할만 앱을 관리할 수 있습니다.
+### CLI 개발자 권한 관리
 
-관리 화면에서 입력하는 값:
+```text
+https://nakwol-auth.sepsd21.workers.dev/admin/developers
+```
 
-- 앱 이름
-- Client ID
-- 서비스 주소
-- Redirect URI 1~10개
-- 개발 환경
-- 접근 정책(public / member / admin)
-- active / disabled 상태
+권한:
 
-앱을 저장하면 프레임워크별 설치 위치와 복사 가능한 코드가 자동 생성됩니다.
+- owner / operator / Discord admin: 전체 Connect 관리
+- developer: 현재 낙월 맹원인 동안 CLI 사용 + 자신이 만든 앱만 관리
+- 일반 member: 앱 사용만 가능
 
-## 가장 쉬운 연동
+## Machine contracts
 
-일반 HTML, Vite, React, Vue 등은 공통 HTML의 `</body>` 바로 위에 다음 스크립트를 넣습니다.
+새 프로젝트:
+
+```text
+https://nakwol-auth.sepsd21.workers.dev/connect/agent
+```
+
+등록된 앱:
+
+```text
+https://nakwol-auth.sepsd21.workers.dev/connect/agent/{client_id}
+```
+
+LLM discovery:
+
+```text
+https://nakwol-auth.sepsd21.workers.dev/llms.txt
+```
+
+CLI manifest:
+
+```text
+https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json
+```
+
+## 사람이 직접 붙이는 fallback
+
+v0.1 Universal Embed는 계속 유지됩니다.
 
 ```html
 <script
@@ -38,60 +90,30 @@ https://nakwol-auth.sepsd21.workers.dev/admin/apps
 </script>
 ```
 
-스크립트가 자동으로 NAKWOL AUTH Web SDK v0.1.0을 로드하고 로그인 위젯, PKCE callback, `/me`, logout을 처리합니다.
-
-로그인 사용자 정보가 필요하면:
+로그인 결과:
 
 ```js
 window.addEventListener('nakwol-ready', (event) => {
-  const user = event.detail;
-  console.log(user?.id, user?.display_name, user?.membership);
+  console.log(event.detail);
 });
 ```
 
-UI 없이 인증만 사용할 경우:
-
-```html
-<script
-  src="https://nakwol-auth.sepsd21.workers.dev/connect/v1.js"
-  data-client-id="my-app"
-  data-redirect-uri="https://my-app.pages.dev/"
-  data-ui="none">
-</script>
-```
-
-이 경우 `window.NAKWOL_CONNECT.login()`, `logout()`, `getMe()`를 사용할 수 있습니다.
-
-## Next.js
-
-관리 화면이 `app/layout.tsx` 또는 `pages/_app.tsx`용 `next/script` 예제를 자동 생성합니다.
-
 ## 접근 정책
 
-- `public`: Discord 로그인만 되면 사용 가능
-- `member`: 현재 낙월 맹원(`membership.is_member`)만 authorization code 발급 가능
-- `admin`: 현재 `membership.role === 'admin'`만 사용 가능
+- `public`: Discord 로그인 사용자
+- `member`: 현재 낙월 맹원
+- `admin`: Discord 기준 admin
 
 정책은 UI 표시용이 아니라 `/authorize`와 `/me`에서 서버가 강제합니다.
 
-기존 `siege-calculator`는 호환성 유지를 위해 `public`으로 migration에 명시되어 있습니다.
-
-## 연동 진단
-
-관리 화면의 `연동 상태 확인`은 다음을 검사합니다.
-
-- 앱 등록 상태
-- Redirect URI 유효성
-- 서비스 URL HTTP 응답
-- HTML에서 `/connect/v1.js` 발견 여부
-- HTML에서 해당 Client ID 발견 여부
-
-Next.js 등 런타임 주입 방식에서는 정적 HTML 검사 결과가 제한적일 수 있습니다.
+기존 `siege-calculator`는 호환성을 위해 `public`으로 유지합니다.
 
 ## 보안
 
-- 브라우저 앱에는 Discord Client Secret을 넣지 않습니다.
-- Universal Embed도 Authorization Code + PKCE(S256)를 사용합니다.
-- 운영 API는 `nakwol-connect-admin` access token + operator/admin 권한을 요구합니다.
-- operator가 0명일 때만 최초 맹원 bootstrap이 가능합니다.
-- Client ID와 Redirect URI는 서버의 `applications` 테이블에 저장되며 exact-match 검증을 사용합니다.
+- Discord Client Secret은 중앙 Worker에만 존재
+- Cloudflare CI Token은 GitHub Actions에만 존재
+- device code/CLI token은 D1에 hash만 저장
+- CLI session token은 project 밖 사용자 홈 디렉터리에 저장
+- `.nakwol-connect.json`에는 비밀값 없음
+- developer 해제 시 CLI token revoke
+- production URL은 CLI가 추측하지 않음
