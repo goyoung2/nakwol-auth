@@ -23,6 +23,15 @@ export function nextAvailableClientId(base: string, existing: Set<string>): stri
   return `${base}-${suffix}`;
 }
 
+export function resolveAppStatus(current: string, requested?: string): 'active' | 'disabled' {
+  if (requested === undefined) return current === 'disabled' ? 'disabled' : 'active';
+  return requested === 'disabled' ? 'disabled' : 'active';
+}
+
+export function hasConnectAppScope(scopes: string[]): boolean {
+  return scopes.includes('connect:apps');
+}
+
 function bearer(c: Context<{ Bindings: Env }>): string | null {
   const header = c.req.header('Authorization') || '';
   return header.match(/^Bearer\s+(.+)$/i)?.[1] || null;
@@ -58,7 +67,6 @@ import { NakwolAuthClient } from '/sdk/v0.1.0/nakwol-auth-web.js';
 const auth = new NakwolAuthClient({ clientId:'nakwol-connect-admin', redirectUri: location.origin + '/admin/developers', authOrigin: location.origin });
 const $=(s)=>document.querySelector(s); const status=$('#status'), list=$('#list');
 const api=async(path,options={})=>{const h=new Headers(options.headers||{});const t=auth.getAccessToken();if(t)h.set('Authorization','Bearer '+t);if(options.body)h.set('Content-Type','application/json');const r=await fetch(path,{...options,headers:h});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p?.error?.message||p?.error?.code||('HTTP '+r.status));return p;};
-const esc=(v)=>String(v??'');
 async function load(){list.textContent='불러오는 중…';try{const p=await api('/admin/api/developers');list.textContent='';for(const d of p.data||[]){const row=document.createElement('div');row.className='row';const who=document.createElement('div');const b=document.createElement('b');b.textContent=d.display_name||d.user_id;const sm=document.createElement('small');sm.textContent=d.user_id;who.append(b,sm);const role=document.createElement('span');role.textContent=d.developer_role||'member';const st=document.createElement('span');st.textContent=d.developer_status||'-';const count=document.createElement('span');count.textContent=(d.owned_app_count||0)+' apps';const actions=document.createElement('div');if(d.developer_role){const btn=document.createElement('button');btn.className='ghost';btn.textContent=d.developer_status==='disabled'?'활성화':'비활성화';btn.onclick=async()=>{try{await api('/admin/api/developers/'+encodeURIComponent(d.user_id),{method:'PATCH',body:JSON.stringify({role:d.developer_role,status:d.developer_status==='disabled'?'active':'disabled'})});await load();}catch(e){status.textContent=e.message;status.className='bad';}};actions.append(btn);}row.append(who,role,st,count,actions);list.append(row);}status.textContent='';}catch(e){list.textContent='';status.textContent=e.message;status.className='bad';}}
 $('#login').onclick=()=>auth.login();$('#refresh').onclick=load;$('#grant').onclick=async()=>{try{await api('/admin/api/developers',{method:'POST',body:JSON.stringify({user_id:$('#user-id').value.trim(),role:$('#role').value})});status.textContent='권한을 반영했습니다.';status.className='ok';await load();}catch(e){status.textContent=e.message;status.className='bad';}};
 try{const user=await auth.bootstrap();if(user){$('#login').textContent=user.display_name||'로그인됨';await load();}}catch(e){status.textContent=e.message;status.className='bad';}
