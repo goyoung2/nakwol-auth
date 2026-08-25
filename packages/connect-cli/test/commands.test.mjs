@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureSession } from '../src/session.mjs';
@@ -79,6 +79,42 @@ test('init registers centrally before local installation and writes config', asy
     assert.match(html, /NAKWOL-CONNECT:START/);
     const config = JSON.parse(await readFile(join(root, '.nakwol-connect.json'), 'utf8'));
     assert.equal(config.clientId, 'battle-map');
+  } finally {
+    server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('init does not create a duplicate when configured app is owned by someone else', async () => {
+  let created = false;
+  const { server, origin } = await listen(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/connect/cli/me') {
+      res.end(JSON.stringify({ ok: true, data: { user: { id: 'usr_2' }, connect: { developer_role: 'developer' } } }));
+      return;
+    }
+    if (req.url === '/connect/cli/apps/battle-map') {
+      res.statusCode = 403;
+      res.end(JSON.stringify({ ok: false, error: { code: 'APP_OWNERSHIP_REQUIRED', message: 'not owner' } }));
+      return;
+    }
+    if (req.url === '/connect/cli/apps' && req.method === 'POST') {
+      created = true;
+      res.statusCode = 201;
+      res.end(JSON.stringify({ ok: true, data: { client_id: 'battle-map-2' } }));
+      return;
+    }
+    res.statusCode = 404; res.end('{}');
+  });
+  const root = await mkdtemp(join(tmpdir(), 'nakwol-owned-'));
+  const sessionPath = join(root, '.session.json');
+  try {
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'battle-map', dependencies: { vite: '^7' } }));
+    await writeFile(join(root, 'index.html'), '<html><body></body></html>');
+    await writeFile(join(root, '.nakwol-connect.json'), JSON.stringify({ version: 1, clientId: 'battle-map', framework: 'vite', redirectUris: ['http://localhost:5173/'], integration: 'universal-embed' }));
+    await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', expiresAt: Date.now() + 60_000, authOrigin: origin }));
+    await assert.rejects(() => initProject({ root, authOrigin: origin, sessionPath, noOpen: true, output: () => {} }), /not owner/);
+    assert.equal(created, false);
   } finally {
     server.close();
     await rm(root, { recursive: true, force: true });
