@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nakwol-data",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-26",
+  "vars": {
+    "AUTH_ORIGIN": "https://nakwol-auth.sepsd21.workers.dev"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nakwol-data",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
