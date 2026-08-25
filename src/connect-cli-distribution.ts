@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import cliPackageBase64 from './assets/nakwol-connect-cli.tgz.b64.js.txt';
 import type { Env } from './types';
 
-export const CONNECT_CLI_VERSION = '0.2.0';
+export const CONNECT_CLI_VERSION = '0.2.1';
 export const CONNECT_CLI_PACKAGE_NAME = 'nakwol-connect';
 
 function decodeBase64(value: string): Uint8Array {
