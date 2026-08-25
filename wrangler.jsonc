@@ -6,7 +6,7 @@
   "rules": [
     {
       "type": "Text",
-      "globs": ["**/*.js.txt"],
+      "globs": ["**/*.js.txt", "**/*.tgz.b64.txt"],
       "fallthrough": true
     }
   ],
