@@ -35,7 +35,15 @@ CREATE INDEX IF NOT EXISTS idx_connect_cli_tokens_user
 CREATE INDEX IF NOT EXISTS idx_connect_cli_tokens_expires
   ON connect_cli_tokens(expires_at);
 
+CREATE TABLE IF NOT EXISTS connect_developers (
+  user_id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  created_by_user_id TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 UPDATE applications
-SET redirect_uris = '["https://nakwol-auth.sepsd21.workers.dev/admin/apps","https://nakwol-auth.sepsd21.workers.dev/connect/device"]',
+SET redirect_uris = '["https://nakwol-auth.sepsd21.workers.dev/admin/apps","https://nakwol-auth.sepsd21.workers.dev/connect/device","https://nakwol-auth.sepsd21.workers.dev/admin/developers"]',
     updated_at = unixepoch() * 1000
 WHERE client_id = 'nakwol-connect-admin';
