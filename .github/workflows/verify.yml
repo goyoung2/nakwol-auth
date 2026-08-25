@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'tests/**'
+      - 'packages/**'
       - 'migrations/**'
       - 'scripts/**'
       - 'package.json'
@@ -29,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Unit tests
+        run: npm test
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -39,12 +44,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f src/connect.ts ]; then
-            grep -q "registerConnectRoutes" src/sdk-entry.ts
-            grep -q "connect/v1.js" src/connect.ts
-            grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
-            grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
-            echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
-          else
-            echo 'NAKWOL Connect not present; core verification only.'
-          fi
+          grep -q "registerConnectRoutes" src/sdk-entry.ts
+          grep -q "registerConnectCliRoutes" src/sdk-entry.ts
+          grep -q "registerConnectCliDistributionRoutes" src/sdk-entry.ts
+          grep -q "connect/v1.js" src/connect.ts
+          grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
+          grep -q "connect_cli_tokens" migrations/0004_nakwol_connect_cli.sql
+          grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
+          test -s src/assets/nakwol-connect-cli.tgz.b64.js.txt
+          echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'

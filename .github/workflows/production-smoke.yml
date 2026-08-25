@@ -29,45 +29,59 @@ jobs:
       - name: Resolve production D1
         run: node scripts/ensure-d1.mjs
 
-      - name: Verify NAKWOL Connect schema and registrations
+      - name: Verify NAKWOL Connect v0.2 schema and registrations
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_operators','application_settings') ORDER BY name;" > /tmp/schema.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_operators','application_settings','connect_developers','application_owners','connect_device_requests','connect_cli_tokens') ORDER BY name;" > /tmp/schema.json
           cat /tmp/schema.json
-          grep -q 'auth_operators' /tmp/schema.json
-          grep -q 'application_settings' /tmp/schema.json
+          for table in auth_operators application_settings connect_developers application_owners connect_device_requests connect_cli_tokens; do grep -q "$table" /tmp/schema.json; done
 
-          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id='nakwol-connect-admin'; SELECT client_id,framework,access_policy FROM application_settings WHERE client_id IN ('nakwol-connect-admin','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id; SELECT client_id,framework,access_policy FROM application_settings WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
           cat /tmp/apps.json
           grep -q 'nakwol-connect-admin' /tmp/apps.json
+          grep -q 'nakwol-connect-cli' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
           grep -q 'public' /tmp/apps.json
-          echo 'NAKWOL_CONNECT_D1_OK'
+          echo 'NAKWOL_CONNECT_V02_D1_OK'
 
-      - name: Verify production routes
+      - name: Verify production routes and device start
         shell: bash
         run: |
           set -euo pipefail
           origin='https://nakwol-auth.sepsd21.workers.dev'
           for i in {1..18}; do
             admin=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/admin.html -w '%{http_code}' "$origin/admin/apps" || true)
-            manifest=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-manifest.json -w '%{http_code}' "$origin/connect/manifest.json" || true)
-            embed=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect.js -w '%{http_code}' "$origin/connect/v1.js" || true)
+            devs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/developers.html -w '%{http_code}' "$origin/admin/developers" || true)
+            manifest=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-manifest.json -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
+            package=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-cli.tgz -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
+            device=$(curl -sS -H 'Content-Type: application/json' -d '{}' -o /tmp/device.json -w '%{http_code}' "$origin/connect/cli/device/start" || true)
+            verify=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device.html -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
+            llms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/llms.txt -w '%{http_code}' "$origin/llms.txt" || true)
             health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health.json -w '%{http_code}' "$origin/api/health" || true)
-            echo "attempt=$i admin=$admin manifest=$manifest embed=$embed health=$health"
-            if [ "$admin" = '200' ] && [ "$manifest" = '200' ] && [ "$embed" = '200' ] && [ "$health" = '200' ]; then
-              if grep -q 'NAKWOL Connect' /tmp/admin.html && \
-                 grep -q '"name":"nakwol-connect"' /tmp/connect-manifest.json && \
-                 grep -q 'data-client-id is required' /tmp/connect.js && \
-                 grep -q '"service":"nakwol-auth"' /tmp/health.json; then
-                echo 'NAKWOL_CONNECT_PRODUCTION_OK'
-                exit 0
-              fi
+            echo "attempt=$i admin=$admin devs=$devs manifest=$manifest package=$package device=$device verify=$verify llms=$llms health=$health"
+            if [ "$admin" = '200' ] && [ "$devs" = '200' ] && [ "$manifest" = '200' ] && [ "$package" = '200' ] && [ "$device" = '200' ] && [ "$verify" = '200' ] && [ "$llms" = '200' ] && [ "$health" = '200' ]; then
+              grep -q 'NAKWOL Connect' /tmp/admin.html
+              grep -q '개발자 권한' /tmp/developers.html
+              grep -q '"name":"@nakwol/connect"' /tmp/cli-manifest.json
+              grep -q '"device_code"' /tmp/device.json
+              grep -q '"user_code"' /tmp/device.json
+              grep -q 'CLI 연결 승인' /tmp/device.html
+              grep -q 'nakwol-connect init' /tmp/llms.txt
+              grep -q '"service":"nakwol-auth"' /tmp/health.json
+              test -s /tmp/connect-cli.tgz
+              echo 'NAKWOL_CONNECT_V02_ROUTES_OK'
+              break
             fi
             sleep 5
           done
-          echo 'Production smoke failed.'
-          echo '--- admin ---'; head -c 1200 /tmp/admin.html || true; echo
-          echo '--- manifest ---'; cat /tmp/connect-manifest.json || true; echo
-          exit 1
+          grep -q 'NAKWOL Connect' /tmp/admin.html
+
+      - name: Execute production CLI package
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect help | tee /tmp/cli-help.txt
+          grep -q 'NAKWOL Connect CLI v0.2' /tmp/cli-help.txt
+          grep -q 'doctor' /tmp/cli-help.txt
+          echo 'NAKWOL_CONNECT_V02_PACKAGE_OK'

@@ -4,3 +4,4 @@ node_modules/
 .dev.vars
 .env
 .env.*
+src/assets/nakwol-connect-cli.tgz.b64.js.txt
