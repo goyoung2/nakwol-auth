@@ -41,6 +41,20 @@ jobs:
         run: |
           set -euo pipefail
           origin='https://nakwol-data.sepsd21.workers.dev'
-          curl -fsS "$origin/api/health" | tee /tmp/data-health.json
-          grep -q '"service":"nakwol-data"' /tmp/data-health.json
-          echo 'NAKWOL_DATA_DEPLOY_OK'
+          for i in {1..12}; do
+            health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-health.json -w '%{http_code}' "$origin/api/health" || true)
+            schema=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-schema.json -w '%{http_code}' "$origin/api/schema" || true)
+            echo "attempt=$i health=$health schema=$schema"
+            if [ "$health" = '200' ] && [ "$schema" = '200' ] && \
+               grep -q '"service":"nakwol-data"' /tmp/data-health.json && \
+               grep -q '"version":"0.1.0"' /tmp/data-health.json && \
+               grep -q '"schema_version":1' /tmp/data-schema.json; then
+              echo 'NAKWOL_DATA_DEPLOY_OK'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'NAKWOL DATA production verification failed.'
+          cat /tmp/data-health.json || true
+          cat /tmp/data-schema.json || true
+          exit 1
