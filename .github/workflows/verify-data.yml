@@ -1,0 +1,34 @@
+name: Verify NAKWOL DATA
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/data/**'
+      - '.github/workflows/verify-data.yml'
+      - '.github/workflows/bootstrap-data.yml'
+      - '.github/workflows/deploy-data.yml'
+      - 'DATA.md'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install DATA dependencies
+        run: npm install --legacy-peer-deps
+      - name: DATA tests
+        run: npm test
+      - name: DATA typecheck
+        run: npm run typecheck
+      - name: DATA Worker bundle
+        run: npm run bundle

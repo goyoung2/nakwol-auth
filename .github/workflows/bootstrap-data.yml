@@ -1,0 +1,49 @@
+name: Bootstrap NAKWOL DATA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['ops/data-bootstrap.flag']
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: services/data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install DATA dependencies
+        run: npm install --legacy-peer-deps
+      - name: Verify DATA foundation
+        run: |
+          npm test
+          npm run typecheck
+          npm run bundle
+      - name: Resolve or create exact DATA D1
+        run: node scripts/ensure-d1.mjs --create-if-missing
+      - name: Apply DATA migrations
+        run: npx wrangler d1 migrations apply DB --remote
+      - name: Deploy DATA Worker
+        run: npx wrangler deploy --keep-vars
+      - name: Verify production DATA foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://nakwol-data.sepsd21.workers.dev'
+          curl -fsS "$origin/api/health" | tee /tmp/data-health.json
+          curl -fsS "$origin/api/schema" | tee /tmp/data-schema.json
+          grep -q '"service":"nakwol-data"' /tmp/data-health.json
+          grep -q '"version":"0.1.0"' /tmp/data-health.json
+          grep -q '"schema_version":1' /tmp/data-schema.json
+          echo 'NAKWOL_DATA_BOOTSTRAP_OK'

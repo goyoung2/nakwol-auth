@@ -1,0 +1,17 @@
+import { Hono } from 'hono';
+import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
+import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
+import { handleRegistryList } from './routes/registry';
+import type { DataEnv } from './types';
+const app=new Hono<{Bindings:DataEnv}>();
+app.options('*',(c)=>preflightResponse(c.req.raw));
+app.get('/api/health',()=>publicHealthResponse());
+app.get('/api/schema',()=>publicSchemaResponse());
+app.get('/v1/me',(c)=>handleMe(c.req.raw,c.env));
+app.get('/v1/game-accounts',(c)=>handleListGameAccounts(c.req.raw,c.env));
+app.post('/v1/game-accounts',(c)=>handleCreateGameAccount(c.req.raw,c.env));
+app.get('/v1/registry/generals',(c)=>handleRegistryList('generals',c.req.raw,c.env));
+app.get('/v1/registry/tactics',(c)=>handleRegistryList('tactics',c.req.raw,c.env));
+app.get('/v1/registry/equipment',(c)=>handleRegistryList('equipment',c.req.raw,c.env));
+app.notFound(()=>Response.json({ok:false,error:{code:'NOT_FOUND',message:'요청한 DATA 경로가 없습니다.'}},{status:404}));
+export default app;
