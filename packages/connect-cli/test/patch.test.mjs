@@ -12,6 +12,11 @@ const options = {
   origin: 'https://nakwol-auth.sepsd21.workers.dev',
 };
 
+const productionOptions = {
+  ...options,
+  redirectUri: 'https://battle-map.pages.dev/',
+};
+
 test('HTML embed is inserted immediately before closing body', () => {
   const source = '<!doctype html><html><body><main>app</main></body></html>';
   const result = patchHtmlDocument(source, options);
@@ -21,12 +26,22 @@ test('HTML embed is inserted immediately before closing body', () => {
   assert.ok(result.content.indexOf('/connect/v1.js') < result.content.indexOf('</body>'));
 });
 
-test('HTML patch is idempotent', () => {
+test('HTML patch is idempotent when redirect URI is unchanged', () => {
   const once = patchHtmlDocument('<html><body></body></html>', options);
   const twice = patchHtmlDocument(once.content, options);
   assert.equal(twice.ok, true);
   assert.equal(twice.changed, false);
   assert.equal((twice.content.match(/connect\/v1\.js/g) || []).length, 1);
+});
+
+test('HTML patch updates redirect URI in place for the same client', () => {
+  const local = patchHtmlDocument('<html><body></body></html>', options);
+  const production = patchHtmlDocument(local.content, productionOptions);
+  assert.equal(production.ok, true);
+  assert.equal(production.changed, true);
+  assert.match(production.content, /data-redirect-uri="https:\/\/battle-map\.pages\.dev\/"/);
+  assert.doesNotMatch(production.content, /data-redirect-uri="http:\/\/localhost:5173\/"/);
+  assert.equal((production.content.match(/connect\/v1\.js/g) || []).length, 1);
 });
 
 test('HTML patch rejects a document without closing body', () => {
@@ -48,12 +63,26 @@ test('Next layout patch adds next/script import and Script inside body', () => {
   assert.ok(result.content.indexOf('<Script') < result.content.indexOf('</body>'));
 });
 
-test('Next patch is idempotent and refuses ambiguous files without body', () => {
+test('Next patch is idempotent when redirect URI is unchanged', () => {
   const source = `export default function RootLayout({ children }) { return <html><body>{children}</body></html>; }`;
   const once = patchNextSource(source, options);
   const twice = patchNextSource(once.content, options);
   assert.equal(twice.ok, true);
   assert.equal(twice.changed, false);
+});
+
+test('Next patch updates redirect URI in place for the same client', () => {
+  const source = `export default function RootLayout({ children }) { return <html><body>{children}</body></html>; }`;
+  const local = patchNextSource(source, options);
+  const production = patchNextSource(local.content, productionOptions);
+  assert.equal(production.ok, true);
+  assert.equal(production.changed, true);
+  assert.match(production.content, /data-redirect-uri="https:\/\/battle-map\.pages\.dev\/"/);
+  assert.doesNotMatch(production.content, /data-redirect-uri="http:\/\/localhost:5173\/"/);
+  assert.equal((production.content.match(/connect\/v1\.js/g) || []).length, 1);
+});
+
+test('Next patch refuses ambiguous files without body', () => {
   const unsafe = patchNextSource('export default function App(){ return <main /> }', options);
   assert.equal(unsafe.ok, false);
   assert.equal(unsafe.code, 'PATCH_UNSAFE');
