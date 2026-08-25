@@ -5,11 +5,13 @@ import {
   CONNECT_DEVICE_TTL_MS,
   CONNECT_DEVICE_POLL_INTERVAL_SECONDS,
   CONNECT_CLI_TOKEN_TTL_MS,
+  CONNECT_MAX_PENDING_DEVICE_REQUESTS,
 } from '../../src/connect-cli-store';
 
-test('uses short-lived device grants and 30-day CLI sessions', () => {
+test('uses short-lived device grants, bounded pending queue, and 30-day CLI sessions', () => {
   assert.equal(CONNECT_DEVICE_TTL_MS, 10 * 60 * 1000);
   assert.equal(CONNECT_DEVICE_POLL_INTERVAL_SECONDS, 3);
+  assert.equal(CONNECT_MAX_PENDING_DEVICE_REQUESTS, 200);
   assert.equal(CONNECT_CLI_TOKEN_TTL_MS, 30 * 24 * 60 * 60 * 1000);
 });
 
