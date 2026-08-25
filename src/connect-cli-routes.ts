@@ -64,16 +64,23 @@ export function registerConnectCliRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post('/connect/cli/device/start', async (c) => {
     let body: { scopes?: unknown } = {};
     try { body = await c.req.json(); } catch { body = {}; }
-    const grant = await createDeviceGrant(c.env, body.scopes);
-    return c.json({
-      ok: true,
-      device_code: grant.deviceCode,
-      user_code: grant.userCode,
-      verification_uri: grant.verificationUri,
-      verification_uri_complete: grant.verificationUriComplete,
-      expires_in: grant.expiresIn,
-      interval: grant.interval,
-    });
+    try {
+      const grant = await createDeviceGrant(c.env, body.scopes);
+      return c.json({
+        ok: true,
+        device_code: grant.deviceCode,
+        user_code: grant.userCode,
+        verification_uri: grant.verificationUri,
+        verification_uri_complete: grant.verificationUriComplete,
+        expires_in: grant.expiresIn,
+        interval: grant.interval,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'DEVICE_REQUEST_CAPACITY_REACHED') {
+        return c.json({ ok: false, error: { code: 'DEVICE_RATE_LIMITED', message: '현재 CLI 승인 요청이 많습니다. 잠시 후 다시 시도하세요.' } }, 429);
+      }
+      throw error;
+    }
   });
 
   app.get('/connect/cli/device/verify', (c) => c.html(deviceVerificationPage()));
