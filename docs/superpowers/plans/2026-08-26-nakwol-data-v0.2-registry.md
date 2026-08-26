@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Import the confirmed catalogs from `nslg-s-season-raw-research-kit-v1` into NAKWOL DATA as reproducible registry seeds and expose the confirmed registry through DATA APIs without inventing missing game rules.
+**Goal:** Import the confirmed catalogs from `nslg-s-season-raw-research-kit-v1` into NAKWOL DATA as reproducible Registry seeds and expose the confirmed Registry through DATA APIs without inventing missing game rules.
 
-**Architecture:** Keep the source research ZIP outside runtime. Convert only confirmed catalog fields into repository-owned normalized seed JSON. Apply an idempotent registry seed command against D1. Preserve all source provenance and visibility flags so playable filtering can evolve without deleting source rows. User roster/equipment/deck mutations remain out of scope for this release.
+**Architecture:** The source research ZIP stays outside runtime. Confirmed catalog fields are normalized, gzip-compressed, Base64-split into repository-owned seed parts, then applied to D1 with idempotent UPSERTs. Provenance and source visibility are retained so later game-knowledge corrections do not require destructive rewrites. User roster/equipment/deck mutation APIs remain outside this release.
 
 **Tech Stack:** Cloudflare Workers, D1/SQLite, Hono, TypeScript, Node.js scripts/tests, Wrangler 4.
 
@@ -12,51 +12,48 @@
 
 ## Global Constraints
 
-- DATA service version becomes `0.2.0`; schema version remains `1` because registry rows fit existing tables.
+- DATA service version `0.2.0`; schema version `2`.
 - Imported source domains: heroes, skills, equipment, horses, attributes, formations, warbooks.
-- Do not create promotion item or equipment trait rows from missing evidence.
-- Preserve native ID, source locator/hash, evidence level and source visibility/status in metadata.
-- General IDs use `general:<native_id>` and tactic IDs use `tactic:<native_id>`; equipment templates use `weapon:<native_id>` / `mount:<native_id>`.
-- `game_generals.enabled` means user-facing candidate. Initial rule: source `is_show == 1`; hidden rows stay in DB with `enabled=0`.
-- All imported skills remain in Registry with `enabled=1`; do not claim every skill is user-ownable. Store source classification flags in metadata for later filtering.
-- Registry seeding must be idempotent and must never delete user data.
+- Do not create promotion-item or equipment-trait rows without source evidence.
+- Preserve native ID and domain-level source hash/locator/evidence metadata.
+- Stable Registry IDs: `g:<native_id>`, `t:<native_id>`, `w:<native_id>`, `m:<native_id>`, `s:<native_id>`, `f:<native_id>`, `b:<native_id>`.
+- `game_generals.enabled=1` means source `is_show=1`; hidden rows stay preserved with `enabled=0`.
+- All source skills remain Registry rows but use `ownership_status=unclassified`; v0.2 does not claim all 1,077 skills are user-ownable tactics.
+- Hidden heroes whose source unique skill is absent from the supplied skill catalog keep the native skill ID in metadata and have `unique_tactic_id=NULL`.
+- Registry seeding uses UPSERT only and never deletes user data.
+- D1 import SQL contains no explicit `BEGIN`/`COMMIT` because `wrangler d1 execute --file` manages import transactions.
 
 ---
 
 ### Task 1: Normalize Research Catalogs
 
 **Files:**
-- Create: `services/data/seeds/registry-v0.2.json`
+- Create: `services/data/seeds/registry-v0.2.parts/part-*.b64`
+- Create: `services/data/scripts/registry-seed-file.mjs`
 - Create: `services/data/scripts/build-registry-seed.mjs`
-- Create: `services/data/tests/registry-seed.test.ts`
+- Create: `services/data/tests/registry-seed-file.test.mjs`
+- Create: `services/data/tests/registry-seed.test.mjs`
 
-**Interfaces:**
-- Consumes: extracted research catalog JSON files supplied by the operator.
-- Produces: deterministic normalized seed JSON with `generals`, `tactics`, `equipment`, `stat_types`, `formations`, `warbooks`, and provenance summary.
+- [x] Write a failing test asserting source counts and known joins such as 조조 `1000 -> 100001`.
+- [x] Verify RED because normalized seed does not exist.
+- [x] Implement deterministic normalization from research catalogs.
+- [x] Generate committed compressed/Base64-split seed parts.
+- [x] Verify 209 generals / 140 visible / 1,077 skills / 97 weapons / 37 mounts / 281 attributes / 8 formations / 442 warbooks and provenance hashes.
 
-- [ ] Write a failing test asserting exact source counts and known joins such as 조조 `1000 -> 100001`.
-- [ ] Verify RED because normalized seed does not exist.
-- [ ] Implement deterministic normalization from research catalogs.
-- [ ] Generate committed `registry-v0.2.json`.
-- [ ] Verify counts, IDs, Korean names, provenance and hidden-general policy.
-
-### Task 2: Idempotent D1 Registry Seeder
+### Task 2: Idempotent D1 Registry Seeder + Schema 2
 
 **Files:**
+- Create: `services/data/migrations/0002_registry_v02.sql`
 - Create: `services/data/scripts/seed-registry.mjs`
 - Modify: `services/data/package.json`
-- Create: `services/data/tests/registry-import.test.ts`
+- Create: `services/data/tests/registry-import.test.mjs`
 
-**Interfaces:**
-- Consumes: `registry-v0.2.json`.
-- Produces: UPSERT writes into existing `game_tactics`, `game_generals`, `game_equipment_templates`, and `game_stat_types`; formation/warbook source rows remain preserved inside seed metadata for later schema expansion.
-
-- [ ] Write a failing real-SQLite test for two consecutive imports producing identical counts.
-- [ ] Verify RED because the seeder is absent.
-- [ ] Implement UPSERT-based seed application without DELETE/TRUNCATE.
-- [ ] Verify tactic rows are written before generals to satisfy FK relationships.
-- [ ] Add `registry:seed:local` and `registry:seed:remote` scripts.
-- [ ] Verify GREEN on empty and pre-seeded databases.
+- [x] Write a failing real-SQLite test for two consecutive imports producing identical counts.
+- [x] Verify RED because the seeder is absent.
+- [x] Add `data_registry_meta`, `game_formations`, `game_warbooks` and schema version 2 migration.
+- [x] Implement tactic-first UPSERT seeding without DELETE/TRUNCATE or explicit transaction statements.
+- [x] Verify user `user_generals` rows survive a repeat Registry seed.
+- [x] Add local/remote seed commands.
 
 ### Task 3: Registry API v0.2
 
@@ -66,30 +63,26 @@
 - Modify: `services/data/src/routes/registry.ts`
 - Modify: `services/data/src/index.ts`
 - Modify: `services/data/tests/http.test.ts`
+- Create: `services/data/tests/registry-api.test.mjs`
 
-**Interfaces:**
-- Produces authenticated list endpoints for generals, tactics, equipment and registry summary.
-
-- [ ] Write failing tests for `include_hidden=1`, native IDs, unique tactic metadata, weapon/mount type and registry summary.
-- [ ] Verify RED.
-- [ ] Add `/v1/registry/summary`, `/generals`, `/tactics`, `/equipment`; default generals exclude hidden rows, `include_hidden=1` returns preserved hidden rows under the same read scope.
-- [ ] Return provenance/metadata without exposing raw source file contents.
-- [ ] Verify GREEN.
+- [x] Write failing tests for hidden generals, native IDs, unique tactic metadata and Registry summary.
+- [x] Verify RED.
+- [x] Add Registry summary and generals/tactics/equipment/stats/formations/warbooks storage/API contracts.
+- [x] Default generals to 140 visible rows; `include_hidden=1` exposes preserved 209-row static Registry under `roster:read`.
+- [x] Verify local SQLite API/storage contracts GREEN.
 
 ### Task 4: Deployment/Documentation
 
 **Files:**
 - Modify: `.github/workflows/deploy-data.yml`
 - Modify: `.github/workflows/bootstrap-data.yml`
-- Modify: `services/data/package.json`
+- Modify: `services/data/tests/deployment.test.ts`
 - Modify: `services/data/CHANGELOG.md`
 - Modify: `DATA.md`
 
-**Interfaces:**
-- Deployment runs migrations, then idempotent remote Registry seed, then Worker deploy/smoke.
-
-- [ ] Write deployment contract assertions that remote deploy contains `registry:seed:remote` after migrations and before Worker verification.
-- [ ] Update service version to `0.2.0` while schema remains `1`.
-- [ ] Document imported vs unresolved domains and exact row counts.
-- [ ] Run full DATA test/typecheck/bundle verification.
-- [ ] Open one PR and use one DATA Verify workflow before merge.
+- [x] Put remote Registry seeding after migrations and before Worker deploy.
+- [x] Add production D1 count verification for all imported domains.
+- [x] Update service version 0.2.0 / schema 2 and document unresolved domains.
+- [ ] Run one DATA Verify PR workflow with npm/tsx/TypeScript/Wrangler.
+- [ ] Squash merge after green.
+- [ ] Run one normal DATA deploy and verify migration, seed counts and production health/schema.

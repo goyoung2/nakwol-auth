@@ -1,15 +1,18 @@
 {
   "name": "@nakwol/data-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test tests/*.test.ts tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "bundle": "wrangler deploy --dry-run --outdir .dry-run",
     "dev": "wrangler dev --port 8788",
     "migrate:local": "wrangler d1 migrations apply DB --local",
-    "migrate:remote": "wrangler d1 migrations apply DB --remote"
+    "migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "registry:build": "node scripts/build-registry-seed.mjs",
+    "registry:seed:local": "node scripts/seed-registry.mjs --local",
+    "registry:seed:remote": "node scripts/seed-registry.mjs --remote"
   },
   "dependencies": { "hono": "^4.0.0" },
   "devDependencies": {
