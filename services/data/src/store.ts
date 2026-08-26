@@ -27,18 +27,57 @@ export async function createGameAccount(env: Pick<DataEnv, 'DB'>, userId: string
   return { id:input.id, nickname:input.nickname, server_code:input.serverCode, is_primary:input.isPrimary, created_at:now, updated_at:now };
 }
 
-type RegistryKind = 'generals' | 'tactics' | 'equipment';
-export async function listRegistry(env: Pick<DataEnv, 'DB'>, kind: RegistryKind) {
-  const sql = kind === 'generals'
-    ? `SELECT id, name, unique_tactic_id, rarity, metadata_json FROM game_generals WHERE enabled = 1 ORDER BY name, id`
-    : kind === 'tactics'
-      ? `SELECT id, name, category, rarity, metadata_json FROM game_tactics WHERE enabled = 1 ORDER BY name, id`
-      : `SELECT id, name, type, metadata_json FROM game_equipment_templates WHERE enabled = 1 ORDER BY type, name, id`;
-  const result = await env.DB.prepare(sql).all<Record<string, unknown>>();
-  return result.results.map((row) => {
+export type RegistryKind = 'generals' | 'tactics' | 'equipment' | 'stats' | 'formations' | 'warbooks';
+export interface RegistryListOptions { includeHidden?: boolean; }
+
+type RegistryResultRow = Record<string, unknown> & { metadata_json?: string };
+function parseRegistryRows(rows: RegistryResultRow[]) {
+  return rows.map((row) => {
     const { metadata_json, ...rest } = row;
-    let metadata: unknown = {};
-    try { metadata = JSON.parse(String(metadata_json ?? '{}')); } catch { metadata = {}; }
-    return { ...rest, metadata };
+    let metadata: Record<string, unknown> = {};
+    try { metadata = JSON.parse(String(metadata_json ?? '{}')) as Record<string, unknown>; } catch { metadata = {}; }
+    return { ...rest, native_id: metadata.native_id ?? null, metadata };
   });
+}
+
+export async function listRegistry(env: Pick<DataEnv, 'DB'>, kind: RegistryKind, options: RegistryListOptions = {}) {
+  let sql: string;
+  if (kind === 'generals') sql = `SELECT id, name, unique_tactic_id, rarity, enabled, metadata_json FROM game_generals ${options.includeHidden ? '' : 'WHERE enabled = 1'} ORDER BY name, id`;
+  else if (kind === 'tactics') sql = `SELECT id, name, category, rarity, enabled, metadata_json FROM game_tactics WHERE enabled = 1 ORDER BY name, id`;
+  else if (kind === 'equipment') sql = `SELECT id, name, type, enabled, metadata_json FROM game_equipment_templates WHERE enabled = 1 ORDER BY type, name, id`;
+  else if (kind === 'stats') sql = `SELECT id, name, enabled, metadata_json FROM game_stat_types WHERE enabled = 1 ORDER BY name, id`;
+  else if (kind === 'formations') sql = `SELECT id, name, description, enabled, metadata_json FROM game_formations WHERE enabled = 1 ORDER BY id`;
+  else sql = `SELECT id, name, quality, type, related_tactic_id, description, enabled, metadata_json FROM game_warbooks WHERE enabled = 1 ORDER BY id`;
+  const result = await env.DB.prepare(sql).all<RegistryResultRow>();
+  return parseRegistryRows(result.results);
+}
+
+async function scalar(env: Pick<DataEnv, 'DB'>, sql: string): Promise<number> {
+  const row = await env.DB.prepare(sql).first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+export async function getRegistrySummary(env: Pick<DataEnv, 'DB'>) {
+  const metaRows = await env.DB.prepare(`SELECT key, value FROM data_registry_meta WHERE key IN ('seed_version','source_json','source_counts_json')`).all<{ key:string; value:string }>();
+  const meta = Object.fromEntries(metaRows.results.map((row) => [row.key, row.value])) as Record<string, string | undefined>;
+  const schema = await env.DB.prepare(`SELECT value FROM data_schema_meta WHERE key = 'schema_version'`).first<{ value:string }>();
+  let source: unknown = {};
+  let declaredCounts: unknown = {};
+  try { source = JSON.parse(meta.source_json ?? '{}'); } catch { source = {}; }
+  try { declaredCounts = JSON.parse(meta.source_counts_json ?? '{}'); } catch { declaredCounts = {}; }
+  return {
+    seed_version: meta.seed_version ?? null,
+    schema_version: Number(schema?.value ?? 0),
+    source,
+    declared_counts: declaredCounts,
+    counts: {
+      generals: await scalar(env, `SELECT COUNT(*) AS n FROM game_generals`),
+      generals_enabled: await scalar(env, `SELECT COUNT(*) AS n FROM game_generals WHERE enabled = 1`),
+      tactics: await scalar(env, `SELECT COUNT(*) AS n FROM game_tactics`),
+      equipment: await scalar(env, `SELECT COUNT(*) AS n FROM game_equipment_templates`),
+      stat_types: await scalar(env, `SELECT COUNT(*) AS n FROM game_stat_types`),
+      formations: await scalar(env, `SELECT COUNT(*) AS n FROM game_formations`),
+      warbooks: await scalar(env, `SELECT COUNT(*) AS n FROM game_warbooks`),
+    },
+  };
 }
