@@ -1,51 +1,73 @@
 # nakwol-connect
 
-Official agent-first CLI for connecting web projects to NAKWOL AUTH.
+Official agent-first CLI for connecting web projects to NAKWOL AUTH and NAKWOL DATA.
 
-The intended usage is simple enough for a coding agent/LLM to run without asking a human which file to edit:
+## Fast path
+
+AUTH only:
 
 ```bash
-npx nakwol-connect init
-npx nakwol-connect doctor --json
+npx --yes nakwol-connect init
 ```
 
-`init` detects the project framework, authenticates through NAKWOL Connect device authorization when needed, creates or reuses the central application, installs the integration idempotently, writes `.nakwol-connect.json`, and validates the result.
+AUTH + shared NAKWOL DATA:
+
+```bash
+npx --yes nakwol-connect init --scopes roster:read,decks:read
+npx --yes nakwol-connect doctor --json
+```
+
+The first machine authorization opens a short-lived browser approval once. After that the CLI automatically creates/reuses the AUTH app, configures exact DATA scopes, installs or updates the project marker, writes `.nakwol-connect.json`, and verifies local + AUTH + DATA state.
+
+No Discord secret, Cloudflare credential, permanent admin key, or CLI token is written into the project.
+
+## DATA commands
+
+```text
+nakwol-connect data status
+nakwol-connect data set roster:read,decks:read
+nakwol-connect data add equipment:read
+nakwol-connect data remove decks:read
+```
+
+Available DATA scopes:
+
+```text
+profile:read profile:write
+roster:read roster:write
+equipment:read equipment:write
+decks:read decks:write
+```
+
+## Browser runtime
+
+The installed `connect/v1.js` exposes authentication and DATA automatically:
+
+```js
+const { data } = window.NAKWOL_CONNECT;
+const generals = await data.registry.generals();
+const tactics = await data.registry.tactics();
+```
+
+Bearer tokens and `X-NAKWOL-CLIENT-ID` are injected by the runtime. The embedded scope list is informational; the DATA Worker remains authoritative.
 
 ## Commands
 
 ```text
-init                 detect project → register/reuse app → install → verify
-doctor               validate local and central integration; non-zero on failure
-status               show current project connection state
-add-url <URL>        add an exact Redirect URI
-sync                 reconcile central settings and local integration
-remove               remove local integration/config; central app is preserved
+init                 detect → AUTH app → DATA scopes → install → verify
+doctor               validate local, AUTH and DATA desired state
+status               show local/AUTH/DATA state
+add-url <URL>        add Redirect URI
+sync                 re-apply desired AUTH/DATA/local state
+data ...             manage DATA scopes
+remove               remove local integration/config; central state preserved
 ```
 
-## First authentication
-
-If the machine has no reusable CLI session, the CLI prints and opens a short-lived NAKWOL Connect approval URL. An authorized `developer` or `operator` approves it once in the browser. The resulting CLI token is stored in the user's home directory, never inside the project repository.
-
-## Project state
-
-The CLI writes `.nakwol-connect.json`. It contains no secret and may be committed to source control.
-
-## Agent discovery
-
-Machine-readable/current integration guidance is published at:
+## Discovery
 
 ```text
 https://nakwol-auth.sepsd21.workers.dev/llms.txt
 https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json
 ```
 
-Do not implement Discord OAuth independently when integrating a NAKWOL service; use this CLI or the official NAKWOL AUTH SDK.
-
-## Requirements
-
-- Node.js 20 or newer
-- Network access to `https://nakwol-auth.sepsd21.workers.dev`
-
-## License
-
-MIT
+Requirements: Node.js 20+, network access to NAKWOL AUTH and DATA. License: MIT.
