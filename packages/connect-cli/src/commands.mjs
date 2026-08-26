@@ -1,172 +1,66 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { detectProject } from './project.mjs';
-import { installIntegration, removeIntegration } from './integration.mjs';
+import { installIntegration, inspectIntegration, removeIntegration } from './integration.mjs';
 import { readProjectConfig, writeProjectConfig, removeProjectConfig } from './config.mjs';
 import { ensureSession, readSession, defaultSessionPath } from './session.mjs';
 import { ConnectApi } from './api.mjs';
+import { ConnectDataApi } from './data-api.mjs';
+import { DEFAULT_DATA_ORIGIN, parseDataScopes, sameScopes } from './scopes.mjs';
 
 export const DEFAULT_AUTH_ORIGIN = 'https://nakwol-auth.sepsd21.workers.dev';
+export { DEFAULT_DATA_ORIGIN };
 
-async function markerPresent(root, project) {
-  if (!project?.targetFile) return false;
-  try {
-    const source = await readFile(join(root, project.targetFile), 'utf8');
-    return source.includes('NAKWOL-CONNECT:START');
-  } catch {
-    return false;
-  }
+async function authenticatedApis(options = {}) {
+  const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
+  const dataOrigin = String(options.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/, '');
+  const session = await ensureSession({ authOrigin, sessionPath: options.sessionPath || defaultSessionPath(), noOpen:Boolean(options.noOpen), output:options.output || console.log, fetchImpl:options.fetchImpl || globalThis.fetch, sleep:options.sleep });
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  return { session, authApi:new ConnectApi({authOrigin,accessToken:session.accessToken,fetchImpl}), dataApi:new ConnectDataApi({dataOrigin,accessToken:session.accessToken,fetchImpl}), dataOrigin };
 }
-
-async function authenticatedApi(options) {
-  const session = await ensureSession({
-    authOrigin: options.authOrigin || DEFAULT_AUTH_ORIGIN,
-    sessionPath: options.sessionPath || defaultSessionPath(),
-    noOpen: Boolean(options.noOpen),
-    output: options.output || console.log,
-    fetchImpl: options.fetchImpl || globalThis.fetch,
-    sleep: options.sleep,
-  });
-  return {
-    session,
-    api: new ConnectApi({
-      authOrigin: options.authOrigin || DEFAULT_AUTH_ORIGIN,
-      accessToken: session.accessToken,
-      fetchImpl: options.fetchImpl || globalThis.fetch,
-    }),
-  };
+function desiredData(existingConfig, options = {}) {
+  return { dataOrigin:String(options.dataOrigin || existingConfig?.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/,''), dataScopes:options.scopes !== undefined ? parseDataScopes(options.scopes) : parseDataScopes(existingConfig?.dataScopes || []) };
+}
+async function resolveApp(project, existingConfig, api, options) {
+  let app;
+  if(existingConfig?.clientId){try{app=(await api.getApp(existingConfig.clientId)).data;}catch(error){if(error?.status===404)app=null;else throw error;}}
+  if(!app){const redirectUris=[...new Set([...(existingConfig?.redirectUris||[]),...(options.url?[options.url]:[]),...(project.defaultRedirectUri?[project.defaultRedirectUri]:[])])];app=(await api.createApp({name:options.name||project.projectName,client_id:options.clientId||existingConfig?.clientId||project.projectName,homepage_url:options.url||null,framework:project.framework,access_policy:options.accessPolicy||'member',redirect_uris:redirectUris})).data;}
+  else if(options.url&&!app.redirect_uris.includes(options.url)) app=(await api.addRedirect(app.client_id,options.url)).data;
+  return app;
 }
 
 export async function initProject(options = {}) {
-  const root = options.root || process.cwd();
-  const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
-  const output = options.output || console.log;
-  const project = await detectProject(root);
-  if (!project.targetFile || project.framework === 'unknown') throw new Error('지원되는 웹 프로젝트를 찾지 못했습니다.');
-
-  const existingConfig = await readProjectConfig(root);
-  const { api } = await authenticatedApi({ ...options, root, authOrigin, output });
-  let app;
-
-  if (existingConfig?.clientId) {
-    try {
-      app = (await api.getApp(existingConfig.clientId)).data;
-    } catch (error) {
-      if (error?.status === 404) app = null;
-      else throw error;
-    }
-  }
-
-  if (!app) {
-    const redirectUris = [...new Set([
-      ...(existingConfig?.redirectUris || []),
-      ...(options.url ? [options.url] : []),
-      ...(project.defaultRedirectUri ? [project.defaultRedirectUri] : []),
-    ])];
-    const payload = await api.createApp({
-      name: options.name || project.projectName,
-      client_id: options.clientId || existingConfig?.clientId || project.projectName,
-      homepage_url: options.url || null,
-      framework: project.framework,
-      access_policy: options.accessPolicy || 'member',
-      redirect_uris: redirectUris,
-    });
-    app = payload.data;
-  } else if (options.url && !app.redirect_uris.includes(options.url)) {
-    app = (await api.addRedirect(app.client_id, options.url)).data;
-  }
-
-  const install = await installIntegration(root, project, app.client_id);
-  const config = await writeProjectConfig(root, {
-    clientId: app.client_id,
-    framework: project.framework,
-    redirectUris: app.redirect_uris,
-    integration: install.integration,
-  });
-  const doctor = await doctorProject({ root, offline: true });
-  if (!doctor.ok) throw new Error(`로컬 Connect 설치 검증 실패: ${doctor.checks.filter((c) => !c.ok).map((c) => c.name).join(', ')}`);
-  output(`NAKWOL Connect 연결 완료: ${app.client_id}`);
-  return { clientId: app.client_id, project, config, app, doctor };
+  const root=options.root||process.cwd(); const authOrigin=options.authOrigin||DEFAULT_AUTH_ORIGIN; const output=options.output||console.log; const project=await detectProject(root);
+  if(!project.targetFile||project.framework==='unknown') throw new Error('지원되는 웹 프로젝트를 찾지 못했습니다.');
+  const existingConfig=await readProjectConfig(root); const desired=desiredData(existingConfig,options); const {authApi,dataApi}=await authenticatedApis({...options,authOrigin,dataOrigin:desired.dataOrigin,output}); const app=await resolveApp(project,existingConfig,authApi,options);
+  const dataState=(await dataApi.setScopes(app.client_id,desired.dataScopes)).data;
+  const install=await installIntegration(root,project,app.client_id,desired);
+  const config=await writeProjectConfig(root,{clientId:app.client_id,framework:project.framework,redirectUris:app.redirect_uris,integration:install.integration,...desired});
+  const doctor=await doctorProject({...options,root,authOrigin,dataOrigin:desired.dataOrigin,offline:false});
+  if(!doctor.ok) throw new Error(`Connect 설치 검증 실패: ${doctor.checks.filter((c)=>!c.ok).map((c)=>c.name).join(', ')}`);
+  output(`NAKWOL Connect + DATA 연결 완료: ${app.client_id}`); return {clientId:app.client_id,project,config,app,data:dataState,doctor};
 }
 
 export async function doctorProject(options = {}) {
-  const root = options.root || process.cwd();
-  const config = await readProjectConfig(root);
-  const project = await detectProject(root);
-  const checks = [
-    { name: 'config', ok: Boolean(config?.clientId), detail: config?.clientId || '.nakwol-connect.json missing' },
-    { name: 'framework', ok: Boolean(project.targetFile && project.framework !== 'unknown'), detail: project.framework },
-    { name: 'marker', ok: await markerPresent(root, project), detail: project.targetFile || 'target missing' },
-  ];
-
-  if (!options.offline && config?.clientId) {
-    const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
-    const sessionPath = options.sessionPath || defaultSessionPath();
-    const session = await readSession(sessionPath);
-    if (session?.accessToken) {
-      try {
-        const api = new ConnectApi({ authOrigin, accessToken: session.accessToken, fetchImpl: options.fetchImpl || globalThis.fetch });
-        const app = (await api.getApp(config.clientId)).data;
-        checks.push({ name: 'central_app', ok: Boolean(app?.client_id), detail: app?.status || 'not found' });
-        checks.push({ name: 'redirects', ok: (config.redirectUris || []).every((uri) => app.redirect_uris.includes(uri)), detail: `${app.redirect_uris.length} registered` });
-      } catch (error) {
-        checks.push({ name: 'central_app', ok: false, detail: error.message });
-      }
-    } else {
-      checks.push({ name: 'central_app', ok: false, detail: 'CLI session missing; run init' });
-    }
-  }
-  return { ok: checks.every((item) => item.ok), checks, config, project };
+  const root=options.root||process.cwd(); const config=await readProjectConfig(root); const project=await detectProject(root); const marker=await inspectIntegration(root,project);
+  const checks=[{name:'config',ok:Boolean(config?.clientId),detail:config?.clientId||'.nakwol-connect.json missing'},{name:'framework',ok:Boolean(project.targetFile&&project.framework!=='unknown'),detail:project.framework},{name:'marker',ok:marker.present,detail:project.targetFile||'target missing'}];
+  if(config?.clientId&&marker.present){checks.push({name:'marker_client_id',ok:marker.clientId===config.clientId,detail:marker.clientId||'missing'});if(config.version===2){checks.push({name:'marker_data_origin',ok:marker.dataOrigin===config.dataOrigin,detail:marker.dataOrigin||'missing'});checks.push({name:'marker_data_scopes',ok:sameScopes(marker.dataScopes,config.dataScopes),detail:marker.dataScopes.join(',')});}}
+  if(!options.offline&&config?.clientId){const session=await readSession(options.sessionPath||defaultSessionPath());if(!session?.accessToken)checks.push({name:'central_app',ok:false,detail:'CLI session missing; run init'});else{const fetchImpl=options.fetchImpl||globalThis.fetch;try{const app=(await new ConnectApi({authOrigin:options.authOrigin||DEFAULT_AUTH_ORIGIN,accessToken:session.accessToken,fetchImpl}).getApp(config.clientId)).data;checks.push({name:'central_app',ok:Boolean(app?.client_id),detail:app?.status||'not found'});checks.push({name:'redirects',ok:(config.redirectUris||[]).every((uri)=>app.redirect_uris.includes(uri)),detail:`${app.redirect_uris.length} registered`});}catch(error){checks.push({name:'central_app',ok:false,detail:error.message});}
+    if(config.version===2){try{const state=(await new ConnectDataApi({dataOrigin:config.dataOrigin,accessToken:session.accessToken,fetchImpl}).getScopes(config.clientId)).data;checks.push({name:'data_registered',ok:state?.registered===true,detail:state?.status||'not registered'});checks.push({name:'data_scopes',ok:sameScopes(state?.scopes||[],config.dataScopes),detail:(state?.scopes||[]).join(',')});const available=state?.available_scopes||[];checks.push({name:'data_available_scopes',ok:config.dataScopes.every((scope)=>available.includes(scope)),detail:`${available.length} available`});}catch(error){checks.push({name:'data_registered',ok:false,detail:error.message});}}
+  }}
+  return {ok:checks.every((item)=>item.ok),checks,config,project,marker};
 }
 
 export async function statusProject(options = {}) {
-  const root = options.root || process.cwd();
-  const config = await readProjectConfig(root);
-  const project = await detectProject(root);
-  const local = { configured: Boolean(config), config, project, marker: await markerPresent(root, project) };
-  if (!config?.clientId) return { ok: false, local, central: null };
-  const session = await readSession(options.sessionPath || defaultSessionPath());
-  if (!session?.accessToken) return { ok: true, local, central: null, note: 'CLI session missing' };
-  try {
-    const api = new ConnectApi({ authOrigin: options.authOrigin || DEFAULT_AUTH_ORIGIN, accessToken: session.accessToken, fetchImpl: options.fetchImpl || globalThis.fetch });
-    return { ok: true, local, central: (await api.getApp(config.clientId)).data };
-  } catch (error) {
-    return { ok: false, local, central: null, error: error.message };
-  }
+  const root=options.root||process.cwd(); const config=await readProjectConfig(root); const project=await detectProject(root); const marker=await inspectIntegration(root,project); const local={configured:Boolean(config),config,project,marker:marker.present,integration:marker};
+  if(!config?.clientId) return {ok:false,local,central:null,data:null}; const session=await readSession(options.sessionPath||defaultSessionPath()); if(!session?.accessToken) return {ok:true,local,central:null,data:null,note:'CLI session missing'}; const fetchImpl=options.fetchImpl||globalThis.fetch;
+  try{const central=(await new ConnectApi({authOrigin:options.authOrigin||DEFAULT_AUTH_ORIGIN,accessToken:session.accessToken,fetchImpl}).getApp(config.clientId)).data;let data=null;if(config.version===2)data=(await new ConnectDataApi({dataOrigin:config.dataOrigin,accessToken:session.accessToken,fetchImpl}).getScopes(config.clientId)).data;return {ok:true,local,central,data};}catch(error){return {ok:false,local,central:null,data:null,error:error.message};}
 }
 
-export async function addUrlProject(url, options = {}) {
-  const root = options.root || process.cwd();
-  const config = await readProjectConfig(root);
-  if (!config?.clientId) throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');
-  const { api } = await authenticatedApi(options);
-  const app = (await api.addRedirect(config.clientId, url)).data;
-  const updated = await writeProjectConfig(root, { ...config, redirectUris: app.redirect_uris });
-  return { ok: true, clientId: config.clientId, redirectUris: updated.redirectUris };
-}
+export async function addUrlProject(url, options = {}) { const root=options.root||process.cwd(); const config=await readProjectConfig(root); if(!config?.clientId) throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.'); const {authApi}=await authenticatedApis({...options,dataOrigin:config.dataOrigin}); const app=(await authApi.addRedirect(config.clientId,url)).data; const updated=await writeProjectConfig(root,{...config,redirectUris:app.redirect_uris}); return {ok:true,clientId:config.clientId,redirectUris:updated.redirectUris}; }
+export async function syncProject(options = {}) { const root=options.root||process.cwd(); const config=await readProjectConfig(root); if(!config?.clientId) return initProject(options); const project=await detectProject(root); const desired=desiredData(config,options); const {authApi,dataApi}=await authenticatedApis({...options,dataOrigin:desired.dataOrigin}); const app=(await authApi.getApp(config.clientId)).data; const dataState=(await dataApi.setScopes(config.clientId,desired.dataScopes)).data; const install=await installIntegration(root,project,config.clientId,desired); const updated=await writeProjectConfig(root,{...config,framework:project.framework,redirectUris:app.redirect_uris,integration:install.integration,...desired}); const doctor=await doctorProject({...options,root,dataOrigin:desired.dataOrigin,offline:false}); return {ok:doctor.ok,clientId:config.clientId,config:updated,data:dataState,changedFiles:install.changedFiles,doctor}; }
 
-export async function syncProject(options = {}) {
-  const root = options.root || process.cwd();
-  const config = await readProjectConfig(root);
-  if (!config?.clientId) return initProject(options);
-  const project = await detectProject(root);
-  const { api } = await authenticatedApi(options);
-  const app = (await api.getApp(config.clientId)).data;
-  const install = await installIntegration(root, project, config.clientId);
-  const updated = await writeProjectConfig(root, {
-    ...config,
-    framework: project.framework,
-    redirectUris: app.redirect_uris,
-    integration: install.integration,
-  });
-  return { ok: true, clientId: config.clientId, config: updated, changedFiles: install.changedFiles };
-}
-
-export async function removeProject(options = {}) {
-  const root = options.root || process.cwd();
-  const project = await detectProject(root);
-  const config = await readProjectConfig(root);
-  const removed = await removeIntegration(root, project);
-  await removeProjectConfig(root);
-  return { ok: true, clientId: config?.clientId || null, changedFiles: removed.changedFiles, centralAppPreserved: true };
-}
+async function requireDataProject(options={}){const root=options.root||process.cwd();const config=await readProjectConfig(root);if(!config?.clientId)throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');const project=await detectProject(root);const{dataApi}=await authenticatedApis({...options,dataOrigin:options.dataOrigin||config.dataOrigin});return{root,config,project,dataApi};}
+export async function dataStatusProject(options={}){const{config,dataApi}=await requireDataProject(options);return{ok:true,clientId:config.clientId,localScopes:config.dataScopes,central:(await dataApi.getScopes(config.clientId)).data};}
+export async function dataSetProject(scopes,options={}){const ctx=await requireDataProject(options);const desired={dataOrigin:String(options.dataOrigin||ctx.config.dataOrigin||DEFAULT_DATA_ORIGIN).replace(/\/$/,''),dataScopes:parseDataScopes(scopes)};const dataState=(await ctx.dataApi.setScopes(ctx.config.clientId,desired.dataScopes)).data;const install=await installIntegration(ctx.root,ctx.project,ctx.config.clientId,desired);const config=await writeProjectConfig(ctx.root,{...ctx.config,integration:install.integration,...desired});return{ok:true,clientId:ctx.config.clientId,config,data:dataState,changedFiles:install.changedFiles};}
+export async function dataAddProject(scopes,options={}){const config=await readProjectConfig(options.root||process.cwd());if(!config)throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');return dataSetProject([...config.dataScopes,...parseDataScopes(scopes)],options);}
+export async function dataRemoveProject(scopes,options={}){const config=await readProjectConfig(options.root||process.cwd());if(!config)throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');const remove=new Set(parseDataScopes(scopes));return dataSetProject(config.dataScopes.filter((scope)=>!remove.has(scope)),options);}
+export async function removeProject(options={}){const root=options.root||process.cwd();const project=await detectProject(root);const config=await readProjectConfig(root);const removed=await removeIntegration(root,project);await removeProjectConfig(root);return{ok:true,clientId:config?.clientId||null,changedFiles:removed.changedFiles,centralAppPreserved:true,centralDataPreserved:true};}
