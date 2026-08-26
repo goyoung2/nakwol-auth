@@ -1,0 +1,2 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {readFile} from 'node:fs/promises';
+test('DATA control plane delegates ownership proof to AUTH and introduces no secret binding',async()=>{const src=await readFile(new URL('../src/connect-cli.ts',import.meta.url),'utf8');const types=await readFile(new URL('../src/types.ts',import.meta.url),'utf8');assert.match(src,/AUTH_ORIGIN/);assert.match(src,/\/connect\/cli\/apps\//);assert.match(src,/Authorization/);assert.doesNotMatch(types,/CLI_SECRET|DATA_ADMIN_SECRET|CLOUDFLARE_API_TOKEN/);});

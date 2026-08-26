@@ -1,105 +1,71 @@
-# NAKWOL Connect CLI v0.2
+# NAKWOL Connect CLI v0.3
 
-NAKWOL Connect CLI는 사람이 OAuth 코드를 직접 붙이지 않고, Codex/Claude Code/Gemini CLI 같은 코딩 에이전트가 프로젝트를 분석해서 NAKWOL AUTH를 설치하도록 만든 공식 도구입니다.
+NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 한 번에 프로젝트에 연결하는 공식 도구입니다.
 
 ## LLM에게 시키는 말
 
 ```text
 이 프로젝트에 NAKWOL Connect 붙여줘.
-공식 NAKWOL Connect CLI를 사용하고 설치 후 doctor까지 실행해.
+장수/전법 데이터가 필요하니 roster:read도 사용해.
+공식 CLI로 설치하고 doctor --json까지 통과시켜.
 ```
 
-npm 공개 패키지의 기본 명령:
+에이전트가 실행할 명령:
 
 ```bash
-npx nakwol-connect init
-npx nakwol-connect doctor --json
+npx --yes nakwol-connect init --scopes roster:read
+npx --yes nakwol-connect doctor --json
 ```
 
-npm registry를 사용할 수 없는 환경에서는 Worker가 제공하는 동일 패키지를 fallback으로 사용할 수 있습니다.
+최초 한 번은 브라우저에서 짧은 device authorization 승인이 필요할 수 있습니다. 그 이후에는 AUTH 앱 등록/재사용, DATA scope 등록, 프로젝트 코드 설치, `.nakwol-connect.json` 작성, 검증이 자동입니다.
 
-```bash
-npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect init
-npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect doctor --json
-```
-
-## 최초 인증
-
-로컬 CLI session이 없으면 CLI가 자동으로 device authorization을 시작합니다.
-
-1. CLI가 짧은 승인 코드와 NAKWOL Connect 승인 URL을 출력합니다.
-2. 브라우저가 열리면 NAKWOL ID로 로그인합니다.
-3. operator 또는 developer 권한을 확인한 뒤 `이 CLI 연결 허용`을 누릅니다.
-4. CLI가 자동으로 계속 진행합니다.
-
-CLI token은 사용자 홈의 `~/.nakwol/connect-cli-session.json`에만 저장되며 프로젝트에는 들어가지 않습니다.
-
-## 개발자 권한 관리
-
-운영자 화면:
+## DATA scope
 
 ```text
-https://nakwol-auth.sepsd21.workers.dev/admin/developers
+profile:read profile:write
+roster:read roster:write
+equipment:read equipment:write
+decks:read decks:write
 ```
 
-- `operator`: 모든 Connect 앱/개발자를 관리
-- `developer`: 자기 소유 앱만 생성/수정
-- 일반 member: 앱 사용만 가능
+```bash
+nakwol-connect data status
+nakwol-connect data set roster:read,decks:read
+nakwol-connect data add equipment:read
+nakwol-connect data remove decks:read
+```
 
-## 프로젝트에 남는 정보
+## 프로젝트 상태
 
-CLI는 프로젝트 루트에 `.nakwol-connect.json`을 만듭니다.
+v0.3은 비밀값이 없는 config version 2를 씁니다.
 
 ```json
 {
-  "version": 1,
-  "clientId": "battle-map",
-  "framework": "react",
-  "redirectUris": ["http://localhost:5173/"],
-  "integration": "universal-embed"
+  "version": 2,
+  "clientId": "deck-lab",
+  "framework": "vite",
+  "redirectUris": ["https://deck-lab.pages.dev/"],
+  "integration": "universal-embed",
+  "dataOrigin": "https://nakwol-data.sepsd21.workers.dev",
+  "dataScopes": ["decks:read", "roster:read"]
 }
 ```
 
-비밀값은 없습니다. 저장소에 commit해도 됩니다.
+version 1 config도 읽을 수 있으며 다음 `init`/`sync`/`data set` 때 v2로 업그레이드됩니다.
 
-CLI가 삽입하는 코드는 `NAKWOL-CONNECT:START` / `NAKWOL-CONNECT:END` marker로 감싸져 있어서 `sync`와 `remove`가 자기 코드만 안전하게 관리합니다.
+## 브라우저 코드
 
-## 명령
-
-```text
-init                 프레임워크 감지 → 중앙 앱 등록/재사용 → 프로젝트 설치 → 검증
-doctor               로컬/중앙 연결 검사. 실패 시 non-zero exit
-status               현재 프로젝트의 로컬/중앙 상태
-add-url <URL>        정확한 Redirect URI 추가
-sync                 중앙 앱 설정과 로컬 marker/config 동기화
-remove               로컬 Connect 코드와 config 제거. 중앙 앱은 보존
+```js
+const generals = await window.NAKWOL_CONNECT.data.registry.generals();
+const tactics = await window.NAKWOL_CONNECT.data.registry.tactics();
 ```
 
-공통 옵션:
+DATA client가 현재 앱 access token과 client ID를 자동으로 붙입니다. CLI token, Discord secret, Cloudflare token은 브라우저나 프로젝트에 들어가지 않습니다.
 
-```text
---json
---url <URL>
---name <NAME>
---client-id <ID>
---access-policy <public|member|admin>
---no-open
---auth-origin <URL>
-```
+## doctor
 
-개발자는 `public` 또는 `member` 앱을 만들 수 있습니다. `admin` 접근 정책은 operator만 설정할 수 있습니다.
+`doctor --json`은 로컬 marker/config, AUTH 앱/redirect, DATA 앱 등록/scope를 비교합니다. 셋 중 하나라도 desired state와 다르면 `ok:false`와 non-zero exit로 종료합니다.
 
-## npm 릴리스 운영
+## 배포
 
-첫 0.2.0 publish는 npm granular token을 GitHub Secret `NPM_TOKEN`으로 한 번 사용합니다. 첫 publish 후 npm package Settings에서 GitHub Actions Trusted Publisher를 `goyoung2/nakwol-auth` + `publish-npm.yml`로 등록하면 이후 버전은 장기 publish token 없이 OIDC로 배포할 수 있습니다.
-
-릴리스 workflow는 패키지 이름이 이미 다른 저장소에 등록되어 있으면 publish 전에 중단하고, 동일 버전 재실행은 안전하게 skip한 뒤 registry/npx 검증을 수행합니다.
-
-## LLM 발견 경로
-
-```text
-https://nakwol-auth.sepsd21.workers.dev/llms.txt
-https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json
-```
-
-코딩 에이전트는 가능하면 수동 OAuth 구현 대신 공식 CLI를 사용해야 합니다.
+npm 패키지는 Trusted Publishing OIDC로 배포합니다. 공개 패키지와 Worker fallback 배포는 항상 같은 버전을 유지합니다.

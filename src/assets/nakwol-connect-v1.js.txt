@@ -4,88 +4,75 @@
 
   const clientId = script.dataset.clientId || '';
   const authOrigin = (script.dataset.authOrigin || new URL(script.src, location.href).origin).replace(/\/$/, '');
+  const dataOrigin = (script.dataset.dataOrigin || 'https://nakwol-data.sepsd21.workers.dev').replace(/\/$/, '');
+  const dataScopes = [...new Set((script.dataset.dataScopes || '').split(',').map((value) => value.trim()).filter(Boolean))].sort();
   const redirectUri = script.dataset.redirectUri || `${location.origin}${location.pathname}`;
   const uiMode = script.dataset.ui || 'widget';
   const globalLogout = script.dataset.globalLogout === 'true';
 
-  if (!clientId) {
-    console.error('[NAKWOL Connect] data-client-id is required.');
-    return;
-  }
-
+  if (!clientId) { console.error('[NAKWOL Connect] data-client-id is required.'); return; }
   const guardKey = `__NAKWOL_CONNECT_${clientId}`;
   if (window[guardKey]) return;
   window[guardKey] = true;
-
-  const dispatch = (name, detail) => {
-    window.dispatchEvent(new CustomEvent(name, { detail }));
-  };
+  const dispatch = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
 
   const start = async () => {
     try {
       const sdk = await import(`${authOrigin}/sdk/v0.1.0/nakwol-auth-web.js`);
       const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin });
 
-      const api = {
-        version: '1.0.0',
-        clientId,
-        redirectUri,
-        authOrigin,
-        client,
-        user: null,
-        login: () => client.login(),
-        logout: (options = {}) => client.logout(options),
-        getMe: () => client.getMe(),
-        isAuthenticated: () => client.isAuthenticated(),
-        isMember: () => client.isMember(),
+      class NakwolDataError extends Error {
+        constructor(code, message, status = 0, payload = null) { super(message || code); this.name = 'NakwolDataError'; this.code = code; this.status = status; this.payload = payload; }
+      }
+      const dataFetch = async (path, options = {}) => {
+        if (typeof path !== 'string' || !path.startsWith('/')) throw new NakwolDataError('NAKWOL_DATA_INVALID_PATH', 'DATA path는 / 로 시작해야 합니다.');
+        const token = client.getAccessToken();
+        if (!token) throw new NakwolDataError('NAKWOL_DATA_UNAUTHENTICATED', 'NAKWOL 로그인이 필요합니다.', 401);
+        const headers = new Headers(options.headers || {});
+        headers.set('Authorization', `Bearer ${token}`);
+        headers.set('X-NAKWOL-CLIENT-ID', clientId);
+        return fetch(`${dataOrigin}${path}`, { ...options, headers });
       };
-
+      const dataRequest = async (path, options = {}) => {
+        const response = await dataFetch(path, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = payload?.error || {};
+          throw new NakwolDataError(error.code || 'NAKWOL_DATA_ERROR', error.message || `DATA HTTP ${response.status}`, response.status, payload);
+        }
+        return payload;
+      };
+      const data = {
+        version: '0.3.0', origin: dataOrigin, scopes: dataScopes,
+        hasScope: (scope) => dataScopes.includes(scope),
+        fetch: dataFetch, request: dataRequest,
+        registry: {
+          summary: () => dataRequest('/v1/registry/summary'),
+          generals: (options = {}) => dataRequest(`/v1/registry/generals${options.includeHidden ? '?include_hidden=1' : ''}`),
+          tactics: () => dataRequest('/v1/registry/tactics'),
+          equipment: () => dataRequest('/v1/registry/equipment'),
+          stats: () => dataRequest('/v1/registry/stats'),
+          formations: () => dataRequest('/v1/registry/formations'),
+          warbooks: () => dataRequest('/v1/registry/warbooks'),
+        },
+      };
+      const api = {
+        version: '1.1.0', clientId, redirectUri, authOrigin, client, data, user: null,
+        login: () => client.login(), logout: (options = {}) => client.logout(options), getMe: () => client.getMe(),
+        isAuthenticated: () => client.isAuthenticated(), isMember: () => client.isMember(),
+      };
       window.NAKWOL_CONNECT = api;
       window.NAKWOL_AUTH = client;
-
-      client.addEventListener('user', (event) => {
-        api.user = event.detail || null;
-        window.NAKWOL_AUTH_USER = api.user;
-        dispatch('nakwol-ready', api.user);
-        dispatch('nakwol-auth-ready', api.user);
-      });
-
-      client.addEventListener('logout', () => {
-        api.user = null;
-        delete window.NAKWOL_AUTH_USER;
-        dispatch('nakwol-logout', null);
-        dispatch('nakwol-auth-logout', null);
-      });
-
-      client.addEventListener('error', (event) => {
-        dispatch('nakwol-error', event.detail || null);
-      });
-
+      window.NAKWOL_DATA = data;
+      client.addEventListener('user', (event) => { api.user = event.detail || null; window.NAKWOL_AUTH_USER = api.user; dispatch('nakwol-ready', api.user); dispatch('nakwol-auth-ready', api.user); });
+      client.addEventListener('logout', () => { api.user = null; delete window.NAKWOL_AUTH_USER; dispatch('nakwol-logout', null); dispatch('nakwol-auth-logout', null); });
+      client.addEventListener('error', (event) => dispatch('nakwol-error', event.detail || null));
       if (uiMode === 'none' || uiMode === 'headless') {
-        const user = await client.bootstrap();
-        api.user = user || null;
-        if (user) window.NAKWOL_AUTH_USER = user;
-        dispatch('nakwol-ready', api.user);
-        dispatch('nakwol-auth-ready', api.user);
-        return;
+        const user = await client.bootstrap(); api.user = user || null; if (user) window.NAKWOL_AUTH_USER = user; dispatch('nakwol-ready', api.user); dispatch('nakwol-auth-ready', api.user); return;
       }
-
-      const widget = sdk.mountNakwolAuthWidget(client, { globalLogout });
-      api.widget = widget;
-      const user = await widget.ready;
-      api.user = user || null;
-      if (user) window.NAKWOL_AUTH_USER = user;
-      dispatch('nakwol-ready', api.user);
-      dispatch('nakwol-auth-ready', api.user);
-    } catch (error) {
-      console.error('[NAKWOL Connect] bootstrap failed', error);
-      dispatch('nakwol-error', error);
-    }
+      const widget = sdk.mountNakwolAuthWidget(client, { globalLogout }); api.widget = widget;
+      const user = await widget.ready; api.user = user || null; if (user) window.NAKWOL_AUTH_USER = user; dispatch('nakwol-ready', api.user); dispatch('nakwol-auth-ready', api.user);
+    } catch (error) { console.error('[NAKWOL Connect] bootstrap failed', error); dispatch('nakwol-error', error); }
   };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start, { once: true });
-  } else {
-    start();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 })();

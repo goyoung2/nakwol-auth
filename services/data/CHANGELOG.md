@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 - 2026-08-27
+
+- Add Connect CLI control endpoints for exact DATA scope get/replace.
+- Reuse existing Connect CLI device token and AUTH app ownership/operator checks; no new permanent secret.
+- Keep DATA schema at version 2.
+- Support automated `nakwol-connect init --scopes ...` and online doctor reconciliation.
+- Expose browser DATA client through the existing Connect v1 embed.
+
 ## 0.2.0 - 2026-08-26
 
 - Import the authoritative S-season research-kit Registry as a reproducible compressed seed.

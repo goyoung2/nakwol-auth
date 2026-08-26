@@ -23,24 +23,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-
       - name: Unit tests
         run: npm test
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Bundle check
         run: npx wrangler deploy --dry-run --outdir .dry-run
-
-      - name: Verify NAKWOL Connect assets
+      - name: Verify NAKWOL Connect v0.3 assets
         shell: bash
         run: |
           set -euo pipefail
@@ -48,8 +42,10 @@ jobs:
           grep -q "registerConnectCliRoutes" src/sdk-entry.ts
           grep -q "registerConnectCliDistributionRoutes" src/sdk-entry.ts
           grep -q "connect/v1.js" src/connect.ts
-          grep -q "nakwol-connect-admin" migrations/0003_nakwol_connect.sql
           grep -q "connect_cli_tokens" migrations/0004_nakwol_connect_cli.sql
-          grep -q "nakwol-ready" src/assets/nakwol-connect-v1.js.txt
+          grep -q "window.NAKWOL_DATA" src/assets/nakwol-connect-v1.js.txt
+          grep -q "X-NAKWOL-CLIENT-ID" src/assets/nakwol-connect-v1.js.txt
+          grep -q "CONNECT_CLI_VERSION = '0.3.0'" src/connect-cli-distribution.ts
+          grep -q "init --scopes roster:read,decks:read" src/connect-cli-distribution.ts
           test -s src/assets/nakwol-connect-cli.tgz.b64.js.txt
-          echo 'NAKWOL_CONNECT_STATIC_CHECK_OK'
+          echo 'NAKWOL_CONNECT_V03_STATIC_CHECK_OK'

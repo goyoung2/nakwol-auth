@@ -1,97 +1,62 @@
-# NAKWOL Connect v0.1
+# NAKWOL Connect v0.3
 
-NAKWOL AUTH를 다른 개발자가 쉽게 붙일 수 있게 하는 앱 등록/설치 도구입니다.
+NAKWOL Connect는 낙월 서비스가 AUTH와 DATA를 공통 방식으로 연결하도록 하는 공식 integration layer입니다.
 
-현재 v0.1의 목표는 **운영자는 화면에서 앱을 등록하고, 개발자는 생성된 안내를 그대로 복사해 붙이는 것**입니다.
+## 가장 쉬운 방법
 
-## 운영자
+코딩 에이전트나 개발자는 OAuth나 DATA 헤더를 직접 구현하지 않습니다.
 
-배포 후 다음 주소를 사용합니다.
+```bash
+# AUTH만
+npx --yes nakwol-connect init
 
-```text
-https://nakwol-auth.sepsd21.workers.dev/admin/apps
+# AUTH + DATA
+npx --yes nakwol-connect init --scopes roster:read,decks:read
+
+# 항상 검증
+npx --yes nakwol-connect doctor --json
 ```
 
-최초 1회에는 낙월 맹원 한 명이 `첫 운영자로 등록`을 눌러 owner가 됩니다. 그 뒤에는 등록된 operator 또는 Discord admin 역할만 앱을 관리할 수 있습니다.
+최초 한 번은 브라우저에서 짧은 device approval이 필요할 수 있습니다. 이후 AUTH 앱 등록/재사용, DATA scope 등록, 프레임워크별 코드 삽입, config 작성, doctor가 자동입니다.
 
-관리 화면에서 입력하는 값:
+## Universal Embed
 
-- 앱 이름
-- Client ID
-- 서비스 주소
-- Redirect URI 1~10개
-- 개발 환경
-- 접근 정책(public / member / admin)
-- active / disabled 상태
-
-앱을 저장하면 프레임워크별 설치 위치와 복사 가능한 코드가 자동 생성됩니다.
-
-## 가장 쉬운 연동
-
-일반 HTML, Vite, React, Vue 등은 공통 HTML의 `</body>` 바로 위에 다음 스크립트를 넣습니다.
+CLI가 다음 형식을 자동 관리합니다.
 
 ```html
 <script
   src="https://nakwol-auth.sepsd21.workers.dev/connect/v1.js"
-  data-client-id="my-app"
-  data-redirect-uri="https://my-app.pages.dev/">
+  data-client-id="deck-lab"
+  data-data-origin="https://nakwol-data.sepsd21.workers.dev"
+  data-data-scopes="decks:read,roster:read">
 </script>
 ```
 
-스크립트가 자동으로 NAKWOL AUTH Web SDK v0.1.0을 로드하고 로그인 위젯, PKCE callback, `/me`, logout을 처리합니다.
-
-로그인 사용자 정보가 필요하면:
+인증:
 
 ```js
-window.addEventListener('nakwol-ready', (event) => {
-  const user = event.detail;
-  console.log(user?.id, user?.display_name, user?.membership);
-});
+window.NAKWOL_CONNECT.user
+window.NAKWOL_CONNECT.login()
 ```
 
-UI 없이 인증만 사용할 경우:
+DATA:
 
-```html
-<script
-  src="https://nakwol-auth.sepsd21.workers.dev/connect/v1.js"
-  data-client-id="my-app"
-  data-redirect-uri="https://my-app.pages.dev/"
-  data-ui="none">
-</script>
+```js
+await window.NAKWOL_CONNECT.data.registry.generals();
+await window.NAKWOL_CONNECT.data.registry.tactics();
 ```
 
-이 경우 `window.NAKWOL_CONNECT.login()`, `logout()`, `getMe()`를 사용할 수 있습니다.
+DATA client가 사용자 access token과 client ID를 자동으로 붙입니다.
 
-## Next.js
+## 보안 경계
 
-관리 화면이 `app/layout.tsx` 또는 `pages/_app.tsx`용 `next/script` 예제를 자동 생성합니다.
+- Discord Client Secret은 AUTH Worker에만 존재합니다.
+- Connect CLI token은 사용자 홈 session에만 있고 브라우저/프로젝트에 들어가지 않습니다.
+- DATA scope 관리 시 DATA Worker가 매 요청 AUTH에 앱 owner/operator 권한을 확인합니다.
+- AUTH D1과 DATA D1은 서로 직접 접근하지 않습니다.
+- runtime DATA 요청은 별도로 AUTH `/me`를 통해 사용자 app token을 검증합니다.
 
-## 접근 정책
+## 관리 UI
 
-- `public`: Discord 로그인만 되면 사용 가능
-- `member`: 현재 낙월 맹원(`membership.is_member`)만 authorization code 발급 가능
-- `admin`: 현재 `membership.role === 'admin'`만 사용 가능
-
-정책은 UI 표시용이 아니라 `/authorize`와 `/me`에서 서버가 강제합니다.
-
-기존 `siege-calculator`는 호환성 유지를 위해 `public`으로 migration에 명시되어 있습니다.
-
-## 연동 진단
-
-관리 화면의 `연동 상태 확인`은 다음을 검사합니다.
-
-- 앱 등록 상태
-- Redirect URI 유효성
-- 서비스 URL HTTP 응답
-- HTML에서 `/connect/v1.js` 발견 여부
-- HTML에서 해당 Client ID 발견 여부
-
-Next.js 등 런타임 주입 방식에서는 정적 HTML 검사 결과가 제한적일 수 있습니다.
-
-## 보안
-
-- 브라우저 앱에는 Discord Client Secret을 넣지 않습니다.
-- Universal Embed도 Authorization Code + PKCE(S256)를 사용합니다.
-- 운영 API는 `nakwol-connect-admin` access token + operator/admin 권한을 요구합니다.
-- operator가 0명일 때만 최초 맹원 bootstrap이 가능합니다.
-- Client ID와 Redirect URI는 서버의 `applications` 테이블에 저장되며 exact-match 검증을 사용합니다.
+- Apps: `https://nakwol-auth.sepsd21.workers.dev/admin/apps`
+- Developers: `https://nakwol-auth.sepsd21.workers.dev/admin/developers`

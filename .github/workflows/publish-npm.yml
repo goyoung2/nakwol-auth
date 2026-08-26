@@ -17,26 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
-
       - name: Use npm with trusted-publishing support
         run: |
           npm install --global npm@^11.15.0
           node --version
           npm --version
-
       - name: Install repository dependencies
         run: npm install --legacy-peer-deps
-
       - name: Full pre-publish verification
         run: |
           npm test
           npm run typecheck
-
       - name: Inspect package and registry ownership
         shell: bash
         run: |
@@ -44,17 +39,14 @@ jobs:
           PKG='nakwol-connect'
           VERSION=$(node -p "require('./packages/connect-cli/package.json').version")
           EXPECTED_REPO='https://github.com/goyoung2/nakwol-auth'
-
           echo "PACKAGE_NAME=$PKG" >> "$GITHUB_ENV"
           echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
           echo 'PACKAGE_EXISTS=false' >> "$GITHUB_ENV"
           echo 'ALREADY_PUBLISHED=false' >> "$GITHUB_ENV"
-
           set +e
           npm view "$PKG" name repository.url --json > /tmp/npm-existing.json 2> /tmp/npm-existing.err
           VIEW_STATUS=$?
           set -e
-
           if [ "$VIEW_STATUS" -eq 0 ]; then
             echo 'PACKAGE_EXISTS=true' >> "$GITHUB_ENV"
             cat /tmp/npm-existing.json
@@ -66,31 +58,20 @@ jobs:
           process.stdout.write(repo || '');
           NODE
             )
-            normalize_repo() {
-              printf '%s' "$1" | sed -E 's#^git\+##; s#\.git$##; s#/$##'
-            }
+            normalize_repo() { printf '%s' "$1" | sed -E 's#^git\+##; s#\.git$##; s#/$##'; }
             if [ "$(normalize_repo "$ACTUAL_REPO")" != "$(normalize_repo "$EXPECTED_REPO")" ]; then
               echo "::error::PACKAGE_NAME_TAKEN: npm package '$PKG' already exists and is not owned by this repository."
-              echo "Expected repository: $EXPECTED_REPO"
-              echo "Registry repository: ${ACTUAL_REPO:-<missing>}"
               exit 1
             fi
           else
-            if grep -qiE 'E404|404 Not Found|is not in this registry' /tmp/npm-existing.err; then
-              echo "NPM_PACKAGE_NAME_AVAILABLE:$PKG"
-            else
-              cat /tmp/npm-existing.err >&2
-              exit "$VIEW_STATUS"
-            fi
+            if grep -qiE 'E404|404 Not Found|is not in this registry' /tmp/npm-existing.err; then echo "NPM_PACKAGE_NAME_AVAILABLE:$PKG"; else cat /tmp/npm-existing.err >&2; exit "$VIEW_STATUS"; fi
           fi
-
           if npm view "$PKG@$VERSION" version --json > /tmp/npm-version.json 2>/dev/null; then
             echo 'ALREADY_PUBLISHED=true' >> "$GITHUB_ENV"
             echo "NPM_VERSION_ALREADY_PUBLISHED:$PKG@$VERSION"
           else
             echo "NPM_VERSION_READY_TO_PUBLISH:$PKG@$VERSION"
           fi
-
       - name: Require one-time token for first publication
         if: env.ALREADY_PUBLISHED != 'true' && env.PACKAGE_EXISTS != 'true'
         env:
@@ -98,19 +79,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${NPM_TOKEN:-}" ]; then
-            echo '::error::FIRST_PUBLISH_REQUIRES_NPM_TOKEN'
-            echo 'Create a granular npm token with package write permission and bypass 2FA, then save it as repository secret NPM_TOKEN.'
-            exit 1
-          fi
+          if [ -z "${NPM_TOKEN:-}" ]; then echo '::error::FIRST_PUBLISH_REQUIRES_NPM_TOKEN'; exit 1; fi
           echo 'NPM_FIRST_PUBLISH_TOKEN_OK'
-
       - name: First publish with one-time token
         if: env.ALREADY_PUBLISHED != 'true' && env.PACKAGE_EXISTS != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish ./packages/connect-cli --access public
-
       - name: Publish existing package with npm Trusted Publishing
         if: env.ALREADY_PUBLISHED != 'true' && env.PACKAGE_EXISTS == 'true'
         env:
@@ -120,7 +95,6 @@ jobs:
           set -euo pipefail
           echo 'NPM_TRUSTED_PUBLISHING_REQUIRED'
           npm publish ./packages/connect-cli --access public
-
       - name: Verify registry package and npx execution
         shell: bash
         run: |
@@ -128,13 +102,13 @@ jobs:
           for i in {1..12}; do
             PUBLISHED=$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version 2>/dev/null || true)
             echo "attempt=$i published=${PUBLISHED:-missing}"
-            if [ "$PUBLISHED" = "$PACKAGE_VERSION" ]; then
-              break
-            fi
+            if [ "$PUBLISHED" = "$PACKAGE_VERSION" ]; then break; fi
             sleep 5
           done
           test "$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version)" = "$PACKAGE_VERSION"
           npm exec --yes --package="$PACKAGE_NAME@$PACKAGE_VERSION" -- nakwol-connect help | tee /tmp/nakwol-connect-help.txt
-          grep -q 'NAKWOL Connect CLI v0.2' /tmp/nakwol-connect-help.txt
+          CLI_SERIES="${PACKAGE_VERSION%.*}"
+          grep -q "NAKWOL Connect CLI v${CLI_SERIES}" /tmp/nakwol-connect-help.txt
           grep -q 'doctor' /tmp/nakwol-connect-help.txt
+          grep -q 'data' /tmp/nakwol-connect-help.txt
           echo 'NAKWOL_CONNECT_NPM_PUBLISH_OK'

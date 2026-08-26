@@ -10,6 +10,24 @@ export async function hasDataScope(env: Pick<DataEnv, 'DB'>, clientId: string, s
   return Boolean(row?.allowed);
 }
 
+export async function getDataApplicationState(env: Pick<DataEnv, 'DB'>, clientId: string) {
+  const app = await env.DB.prepare(`SELECT status FROM data_applications WHERE client_id = ?`).bind(clientId).first<{ status:'active'|'disabled' }>();
+  if (!app) return { registered:false, status:null, scopes:[] as string[] };
+  const result = await env.DB.prepare(`SELECT scope FROM data_application_scopes WHERE client_id = ? ORDER BY scope`).bind(clientId).all<{ scope:string }>();
+  return { registered:true, status:app.status, scopes:(result.results || []).map((row) => row.scope) };
+}
+
+export async function replaceDataApplicationScopes(env: Pick<DataEnv, 'DB'>, clientId: string, status: 'active'|'disabled', scopes: DataScope[]) {
+  const now = Date.now();
+  const statements: any[] = [
+    env.DB.prepare(`INSERT INTO data_applications(client_id,status,created_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(client_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at`).bind(clientId,status,now,now),
+    env.DB.prepare(`DELETE FROM data_application_scopes WHERE client_id = ?`).bind(clientId),
+  ];
+  for (const scope of scopes) statements.push(env.DB.prepare(`INSERT INTO data_application_scopes(client_id,scope,created_at) VALUES (?,?,?)`).bind(clientId,scope,now));
+  await env.DB.batch(statements);
+  return getDataApplicationState(env, clientId);
+}
+
 export async function listGameAccounts(env: Pick<DataEnv, 'DB'>, userId: string) {
   const result = await env.DB.prepare(`SELECT id, nickname, server_code, is_primary, created_at, updated_at FROM game_accounts WHERE user_id = ? ORDER BY is_primary DESC, created_at ASC`).bind(userId).all<{ id:string; nickname:string; server_code:string; is_primary:number; created_at:number; updated_at:number }>();
   return result.results.map((row) => ({ ...row, is_primary: Boolean(row.is_primary) }));
@@ -29,7 +47,6 @@ export async function createGameAccount(env: Pick<DataEnv, 'DB'>, userId: string
 
 export type RegistryKind = 'generals' | 'tactics' | 'equipment' | 'stats' | 'formations' | 'warbooks';
 export interface RegistryListOptions { includeHidden?: boolean; }
-
 type RegistryResultRow = Record<string, unknown> & { metadata_json?: string };
 function parseRegistryRows(rows: RegistryResultRow[]) {
   return rows.map((row) => {

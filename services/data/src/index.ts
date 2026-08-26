@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
 import { handleRegistryList, handleRegistrySummary } from './routes/registry';
+import { handleConnectCliGetScopes, handleConnectCliPutScopes } from './connect-cli';
 import type { DataEnv } from './types';
 
 const app = new Hono<{ Bindings:DataEnv }>();
@@ -18,5 +19,7 @@ app.get('/v1/registry/equipment', (c) => handleRegistryList('equipment', c.req.r
 app.get('/v1/registry/stats', (c) => handleRegistryList('stats', c.req.raw, c.env));
 app.get('/v1/registry/formations', (c) => handleRegistryList('formations', c.req.raw, c.env));
 app.get('/v1/registry/warbooks', (c) => handleRegistryList('warbooks', c.req.raw, c.env));
+app.get('/connect/cli/apps/:clientId/scopes', (c) => handleConnectCliGetScopes(c.req.param('clientId'), c.req.raw, c.env));
+app.put('/connect/cli/apps/:clientId/scopes', (c) => handleConnectCliPutScopes(c.req.param('clientId'), c.req.raw, c.env));
 app.notFound(() => Response.json({ ok:false, error:{ code:'NOT_FOUND', message:'요청한 DATA 경로가 없습니다.' } }, { status:404 }));
 export default app;

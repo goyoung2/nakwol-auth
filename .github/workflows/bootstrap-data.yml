@@ -25,7 +25,7 @@ jobs:
           node-version: 22
       - name: Install DATA dependencies
         run: npm install --legacy-peer-deps
-      - name: Verify DATA v0.2
+      - name: Verify DATA v0.3
         run: |
           npm test
           npm run typecheck
@@ -41,29 +41,15 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler d1 execute DB --remote --json --command "SELECT (SELECT COUNT(*) FROM game_generals) AS generals,(SELECT COUNT(*) FROM game_generals WHERE enabled=1) AS generals_enabled,(SELECT COUNT(*) FROM game_tactics) AS tactics,(SELECT COUNT(*) FROM game_equipment_templates) AS equipment,(SELECT COUNT(*) FROM game_stat_types) AS stat_types,(SELECT COUNT(*) FROM game_formations) AS formations,(SELECT COUNT(*) FROM game_warbooks) AS warbooks;" > /tmp/data-registry.json
-          cat /tmp/data-registry.json
           node - <<'NODE'
-          const fs = require('fs');
-          const payload = JSON.parse(fs.readFileSync('/tmp/data-registry.json', 'utf8'));
-          function findCounts(value) {
-            if (!value || typeof value !== 'object') return null;
-            if (value.generals === 209 && value.generals_enabled === 140) return value;
-            for (const child of Object.values(value)) {
-              if (Array.isArray(child)) { for (const item of child) { const found = findCounts(item); if (found) return found; } }
-              else { const found = findCounts(child); if (found) return found; }
-            }
-            return null;
-          }
-          const row = findCounts(payload);
-          if (!row || row.tactics !== 1077 || row.equipment !== 134 || row.stat_types !== 281 || row.formations !== 8 || row.warbooks !== 442) {
-            console.error('NAKWOL DATA Registry count mismatch', row);
-            process.exit(1);
-          }
+          const fs = require('fs'); const payload=JSON.parse(fs.readFileSync('/tmp/data-registry.json','utf8'));
+          function find(v){if(!v||typeof v!=='object')return null;if(v.generals===209&&v.generals_enabled===140)return v;for(const c of Object.values(v)){if(Array.isArray(c)){for(const i of c){const f=find(i);if(f)return f;}}else{const f=find(c);if(f)return f;}}return null;}
+          const row=find(payload); if(!row||row.tactics!==1077||row.equipment!==134||row.stat_types!==281||row.formations!==8||row.warbooks!==442) process.exit(1);
           NODE
           echo 'NAKWOL_DATA_REGISTRY_COUNTS_OK'
       - name: Deploy DATA Worker
         run: npx wrangler deploy --keep-vars
-      - name: Verify production DATA v0.2
+      - name: Verify production DATA v0.3
         shell: bash
         run: |
           set -euo pipefail
@@ -72,16 +58,9 @@ jobs:
             health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-health.json -w '%{http_code}' "$origin/api/health" || true)
             schema=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-schema.json -w '%{http_code}' "$origin/api/schema" || true)
             echo "attempt=$i health=$health schema=$schema"
-            if [ "$health" = '200' ] && [ "$schema" = '200' ] && \
-               grep -q '"service":"nakwol-data"' /tmp/data-health.json && \
-               grep -q '"version":"0.2.0"' /tmp/data-health.json && \
-               grep -q '"schema_version":2' /tmp/data-schema.json; then
-              echo 'NAKWOL_DATA_BOOTSTRAP_OK'
-              exit 0
+            if [ "$health" = '200' ] && [ "$schema" = '200' ] && grep -q '"service":"nakwol-data"' /tmp/data-health.json && grep -q '"version":"0.3.0"' /tmp/data-health.json && grep -q '"schema_version":2' /tmp/data-schema.json; then
+              echo 'NAKWOL_DATA_BOOTSTRAP_OK'; exit 0
             fi
             sleep 5
           done
-          echo 'NAKWOL DATA production verification failed.'
-          cat /tmp/data-health.json || true
-          cat /tmp/data-schema.json || true
           exit 1
