@@ -26,60 +26,42 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-
       - name: Unit tests
         run: npm test
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Bundle check
         run: npx wrangler deploy --dry-run --outdir .dry-run
-
       - name: Validate Cloudflare CI credentials
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo '::error::Missing repository secret CLOUDFLARE_API_TOKEN'
-            exit 1
-          fi
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo '::error::Missing repository secret CLOUDFLARE_ACCOUNT_ID'
-            exit 1
-          fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then echo '::error::Missing repository secret CLOUDFLARE_API_TOKEN'; exit 1; fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then echo '::error::Missing repository secret CLOUDFLARE_ACCOUNT_ID'; exit 1; fi
           npx wrangler d1 list --json > /tmp/d1-auth-check.json
           grep -q 'nakwol-auth' /tmp/d1-auth-check.json
           echo 'CLOUDFLARE_CI_CREDENTIALS_OK'
-
       - name: Resolve existing NAKWOL AUTH D1
         run: node scripts/ensure-d1.mjs
-
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote
-
       - name: Verify required applications
         shell: bash
         run: |
           set -euo pipefail
           npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
-          cat /tmp/apps.json
           grep -q 'nakwol-auth-selftest' /tmp/apps.json
           grep -q 'nakwol-connect-admin' /tmp/apps.json
           grep -q 'nakwol-connect-cli' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
-
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
-
-      - name: Verify production AUTH, SDK, and Connect CLI distribution
+      - name: Verify production AUTH and Connect v0.3 distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -90,20 +72,23 @@ jobs:
             cs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect -w '%{http_code}' "$origin/connect/v1.js" || true)
             cm=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-manifest -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
             cp=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-package -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
+            ll=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/llms -w '%{http_code}' "$origin/llms.txt" || true)
             dv=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
-            echo "attempt=$i health=$hs sdk=$ss connect=$cs cli_manifest=$cm cli_package=$cp device=$dv"
-            if [ "$hs" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ] && [ "$cm" = '200' ] && [ "$cp" = '200' ] && [ "$dv" = '200' ]; then
+            echo "attempt=$i health=$hs sdk=$ss connect=$cs cli_manifest=$cm cli_package=$cp llms=$ll device=$dv"
+            if [ "$hs" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ] && [ "$cm" = '200' ] && [ "$cp" = '200' ] && [ "$ll" = '200' ] && [ "$dv" = '200' ]; then
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
                  grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk && \
-                 grep -q 'nakwol-ready' /tmp/connect && \
+                 grep -q 'window.NAKWOL_DATA' /tmp/connect && \
                  grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
+                 grep -q '"version":"0.3.0"' /tmp/cli-manifest && \
+                 grep -q 'init --scopes roster:read,decks:read' /tmp/llms && \
                  grep -q 'CLI 연결 승인' /tmp/device && \
                  test -s /tmp/cli-package; then
-                echo 'NAKWOL_CONNECT_V02_DEPLOY_OK'
+                echo 'NAKWOL_CONNECT_V03_DEPLOY_OK'
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo 'NAKWOL Connect v0.2 deployment verification failed.'
+          echo 'NAKWOL Connect v0.3 deployment verification failed.'
           exit 1
