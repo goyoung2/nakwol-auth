@@ -20,6 +20,7 @@ type EquipmentRow = {
 type TemplateRow = { id:string; name:string; type:EquipmentType; };
 type TraitRegistryRow = {
   id:string;
+  native_id:number|null;
   kind:TraitKind|null;
   name:string;
   description:string|null;
@@ -79,13 +80,20 @@ async function getOwnedEquipment(env:Pick<DataEnv,'DB'>, userId:string, accountI
     .bind(equipmentId,accountId,userId).first<EquipmentRow>();
 }
 
+function hasCanonicalTraitIdentity(row:TraitRegistryRow):boolean {
+  if (row.evidence_state !== 'canonical') return false;
+  if ((row.kind !== 'skill' && row.kind !== 'effect') || !Number.isSafeInteger(row.native_id) || Number(row.native_id) <= 0) return false;
+  const expectedId = `${row.kind === 'skill' ? 'ets' : 'ete'}:${row.native_id}`;
+  return row.id === expectedId;
+}
+
 async function validateTraits(env:Pick<DataEnv,'DB'>, traits:EquipmentTraitInput[], type:EquipmentType):Promise<TraitValidation> {
   const rows:Array<{ input:EquipmentTraitInput; trait:TraitRegistryRow }>=[];
   for (const input of traits) {
-    const trait = await env.DB.prepare(`SELECT id,kind,name,description,evidence_state,enabled FROM game_equipment_traits WHERE id = ? LIMIT 1`)
+    const trait = await env.DB.prepare(`SELECT id,native_id,kind,name,description,evidence_state,enabled FROM game_equipment_traits WHERE id = ? LIMIT 1`)
       .bind(input.traitId).first<TraitRegistryRow>();
     if (!trait || trait.enabled !== 1) return { kind:'trait_not_found' };
-    if (trait.evidence_state !== 'canonical') return { kind:'trait_unverified' };
+    if (!hasCanonicalTraitIdentity(trait)) return { kind:'trait_unverified' };
     const applicability = await env.DB.prepare(`SELECT evidence_state FROM game_equipment_trait_applicability WHERE trait_id = ? AND equipment_type = ? LIMIT 1`)
       .bind(input.traitId,type).first<{evidence_state:EvidenceState}>();
     if (!applicability || applicability.evidence_state !== 'canonical') return { kind:'trait_unverified_for_type' };
