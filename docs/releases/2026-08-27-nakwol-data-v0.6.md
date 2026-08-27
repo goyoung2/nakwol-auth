@@ -5,6 +5,10 @@ Service: `nakwol-data`
 Schema: `2`
 Release branch: `feature/nakwol-data-v0.6-equipment-instances`
 Pull request: `#14`
+Merge commit: `67ec0ef1bce0661b85c7f9cf8fc9d6fede3650ab`
+Deploy trigger commit: `fa6e85ee7b0c5ffd4f2fa6fafcc753d4262fac4a`
+Production workflow run: `33040570018`
+Production Worker Version ID: `c6d06cec-5dc5-4384-8a8f-0032f7f480e9`
 
 ## Context carried forward
 
@@ -81,7 +85,28 @@ Final release-candidate verification:
 
 ## Production verification
 
-Pending final merge and deployment. After production deployment, record the deployed Worker version id, production health/schema result, Registry count verification and final golden-baseline commit here.
+Production deployment completed successfully on 2026-08-27.
+
+- deployment workflow: `Deploy NAKWOL DATA`, run `33040570018`
+- deploy-trigger commit: `fa6e85ee7b0c5ffd4f2fa6fafcc753d4262fac4a`
+- release merge commit: `67ec0ef1bce0661b85c7f9cf8fc9d6fede3650ab`
+- production Worker Version ID: `c6d06cec-5dc5-4384-8a8f-0032f7f480e9`
+- production deploy test suite: 52 passed, 0 failed
+- TypeScript typecheck: passed
+- Worker dry-run bundle: passed
+- exact DATA D1 binding: ready
+- D1 migrations: `No migrations to apply!`
+- Registry seed: `NAKWOL_DATA_REGISTRY_SEEDED:0.2.0:--remote`
+- Registry counts: generals 209, enabled generals 140, tactics 1,077, equipment templates 134, stat types 281, formations 8, warbooks 442
+- Registry count gate: `NAKWOL_DATA_REGISTRY_COUNTS_OK`
+- production `/api/health`: HTTP 200
+- production `/api/schema`: HTTP 200
+- production contract: service `nakwol-data`, version `0.6.0`, schema `2`
+- production smoke gate: `NAKWOL_DATA_DEPLOY_OK`
+
+The first post-deploy request already returned HTTP 200 for health/schema while the version was still propagating; the second smoke attempt matched the full v0.6 contract and completed the deployment gate.
+
+This release is the production golden baseline for NAKWOL DATA permanent player assets through equipment instances.
 
 ## Next planned DATA work
 
