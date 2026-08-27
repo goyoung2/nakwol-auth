@@ -223,7 +223,7 @@ Each snapshot general freezes:
 - Registry general ID and name;
 - ownership state at capture time (`owned`);
 - owned breakthrough/promotion values when available, otherwise null;
-- weapon/mount instance identity and template name/type when attached;
+- weapon/mount instance identity, Registry template ID/name/type, and instance nickname/locked/favorite state when attached;
 - ordered tactic slots;
 - each tactic's Registry ID/name plus ownership and breakthrough state at capture time.
 
@@ -235,7 +235,7 @@ The snapshot is a historical value object. Later changes to:
 - deck name/status/note;
 - general/tactic ownership;
 - breakthrough/promotion;
-- equipment nickname/flags;
+- equipment nickname/locked/favorite state;
 - Registry display names
 
 do not rewrite existing `snapshot_json`.
@@ -301,8 +301,8 @@ Required regression coverage:
 5. composition equipment references must belong to the same account and match weapon/mount type;
 6. invalid replacement leaves the previous composition unchanged;
 7. delete removes the live deck while existing snapshot history survives;
-8. snapshot freezes names, composition, equipment identity, and ownership/breakthrough/promotion state at capture time;
-9. later live/ownership changes do not mutate snapshot output;
+8. snapshot freezes names, composition, equipment identity/state, and ownership/breakthrough/promotion state at capture time;
+9. later live/ownership/equipment changes do not mutate snapshot output;
 10. snapshot collection/detail are owner-isolated;
 11. package/service/deployment contract moves to `0.7.0` while schema remains `2`;
 12. all existing v0.6 tests remain green.
