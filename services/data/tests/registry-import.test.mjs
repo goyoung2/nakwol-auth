@@ -36,10 +36,17 @@ test('registry migration and seeder are idempotent and preserve user rows', () =
   const hidden = db.prepare("SELECT unique_tactic_id,metadata_json FROM game_generals WHERE id='g:1006'").get();
   assert.equal(hidden.unique_tactic_id,null);
   assert.equal(JSON.parse(hidden.metadata_json).unique_tactic_native_id,100601);
-  assert.deepEqual(db.prepare("SELECT native_id,kind,name,evidence_state FROM game_equipment_traits WHERE id='ets:56'").get(),
-    { native_id:56, kind:'skill', name:'구주', evidence_state:'canonical' });
-  assert.deepEqual(db.prepare("SELECT native_id,kind,name,evidence_state FROM game_equipment_traits WHERE id='ete:54'").get(),
-    { native_id:54, kind:'effect', name:'투영', evidence_state:'canonical' });
+
+  const guju = db.prepare("SELECT native_id,kind,name,evidence_state FROM game_equipment_traits WHERE id='ets:56'").get();
+  assert.equal(guju.native_id,56);
+  assert.equal(guju.kind,'skill');
+  assert.equal(guju.name,'구주');
+  assert.equal(guju.evidence_state,'canonical');
+  const projection = db.prepare("SELECT native_id,kind,name,evidence_state FROM game_equipment_traits WHERE id='ete:54'").get();
+  assert.equal(projection.native_id,54);
+  assert.equal(projection.kind,'effect');
+  assert.equal(projection.name,'투영');
+  assert.equal(projection.evidence_state,'canonical');
 
   db.exec("INSERT INTO data_users(id,first_seen_at,last_seen_at) VALUES ('usr_test',1,1); INSERT INTO game_accounts(id,user_id,nickname,server_code,is_primary,created_at,updated_at) VALUES ('gac_test','usr_test','테스트','5',1,1,1); INSERT INTO user_generals(account_id,general_id,owned,breakthrough,promotion,favorite,updated_at) VALUES ('gac_test','g:1000',1,5,2,1,1);");
   const templateId = db.prepare("SELECT id FROM game_equipment_templates WHERE type='weapon' ORDER BY id LIMIT 1").get().id;
