@@ -22,6 +22,7 @@
 - Equipment references must be real equipment instances owned by the same game account and must match the requested weapon/mount type.
 - Do not infer duplicate-general, duplicate-tactic, duplicate-equipment, formation, warbook, combat-legality, or other unsourced game rules.
 - `deck_settings` public API, equipment stats/traits, cross-user snapshot sharing, snapshot editing/deletion, season population, and promotion-item work remain out of scope.
+- Snapshot creation accepts a JSON object body; `{}` is valid and means `visibility='alliance'`.
 
 ---
 
@@ -34,7 +35,7 @@
 - Modify: `services/data/tests/domain.test.ts`
 
 **Interfaces:**
-- Consumes: `isCanonicalOwnableTacticMetadata(metadata)` and existing DATA error-code conventions.
+- Consumes: existing DATA validation/error-code conventions.
 - Produces:
   - `type DeckStatus = 'active'|'candidate'|'research'|'archived'`
   - `type DeckVisibility = 'private'|'alliance'|'public'`
@@ -50,7 +51,7 @@
 
 - [ ] **Step 1: Write domain normalization tests**
 
-Add concrete tests to `services/data/tests/domain.test.ts`:
+Add these tests to `services/data/tests/domain.test.ts`:
 
 ```ts
 import {
@@ -66,6 +67,7 @@ test('deck create input normalizes metadata without inventing game rules',()=>{
   });
   assert.throws(()=>normalizeCreateDeckInput({name:'   '}),/INVALID_DECK_NAME/);
   assert.throws(()=>normalizeCreateDeckInput({name:'x',status:'broken'}),/INVALID_DECK_STATUS/);
+  assert.throws(()=>normalizeCreateDeckInput({name:'x',visibility:'friends'}),/INVALID_DECK_VISIBILITY/);
 });
 
 test('deck patch distinguishes omitted fields and rejects empty patches',()=>{
@@ -74,6 +76,7 @@ test('deck patch distinguishes omitted fields and rejects empty patches',()=>{
   assert.equal(patch.note,null);
   assert.equal(patch.hasStatus,true);
   assert.equal(patch.status,'archived');
+  assert.equal(patch.hasName,false);
   assert.throws(()=>normalizePatchDeckInput({}),/EMPTY_DECK_PATCH/);
 });
 
@@ -81,7 +84,9 @@ test('composition input enforces positions and tactic slots only',()=>{
   assert.deepEqual(normalizeReplaceCompositionInput({generals:[{position:1,general_id:' g:1 ',tactics:[{slot:2,tactic_id:' t:1 '}]}]}),{
     generals:[{position:1,generalId:'g:1',weaponInstanceId:null,mountInstanceId:null,tactics:[{slot:2,tacticId:'t:1'}]}],
   });
+  assert.throws(()=>normalizeReplaceCompositionInput({generals:[{position:0,general_id:'g:1'}]}),/INVALID_GENERAL_POSITION/);
   assert.throws(()=>normalizeReplaceCompositionInput({generals:[{position:1,general_id:'g:1'},{position:1,general_id:'g:2'}]}),/DUPLICATE_GENERAL_POSITION/);
+  assert.throws(()=>normalizeReplaceCompositionInput({generals:[{position:1,general_id:'g:1',tactics:[{slot:3,tactic_id:'t:1'}]}]}),/INVALID_TACTIC_SLOT/);
   assert.throws(()=>normalizeReplaceCompositionInput({generals:[{position:1,general_id:'g:1',tactics:[{slot:1,tactic_id:'t:1'},{slot:1,tactic_id:'t:2'}]}]}),/DUPLICATE_TACTIC_SLOT/);
 });
 
@@ -92,38 +97,100 @@ test('snapshot visibility accepts alliance/public only',()=>{
 });
 ```
 
-- [ ] **Step 2: Write route-level RED tests**
+- [ ] **Step 2: Write route-level RED tests with exact assertions**
 
 Create `decks-api.test.ts` and `snapshots-api.test.ts` using the same `createSqliteD1`, AUTH fetch mocking, account seeding, Registry seeding, and scope-grant helpers used in `equipment-api.test.ts`.
 
-Minimum deck contract cases:
+`decks-api.test.ts` must contain these scenarios:
 
 ```ts
 test('deck routes are authenticated endpoints', async()=>{
-  const response=await (app as any).fetch(new Request('https://data.example/v1/game-accounts/gac_a/decks'), env, ctx);
+  const DB=createSqliteD1(migration);
+  const env={DB,AUTH_ORIGIN:'https://auth.example'} as any;
+  const response=await (app as any).fetch(
+    new Request('https://data.example/v1/game-accounts/gac_a/decks'),
+    env,
+    {waitUntil(){},passThroughOnException(){}},
+  );
   assert.equal(response.status,401);
+  assert.equal((await response.json() as any).error.code,'UNAUTHORIZED');
 });
-
-test('deck list/create/get are scope protected and owner isolated', async()=>{/* assert 403 without scope, 201 create, 200 owner list/get, 404 other user */});
-
-test('deck patch validates metadata and cannot cross accounts', async()=>{/* assert update + 400 invalid status + 404 cross-account */});
-
-test('composition accepts planned assets but rejects invalid registry/equipment references atomically', async()=>{/* seed previous composition, attempt invalid replace, assert previous rows unchanged */});
-
-test('deck delete removes live rows while snapshot history survives', async()=>{/* create snapshot first, delete deck, assert source_deck_id null and snapshot JSON intact */});
 ```
 
-Minimum snapshot cases:
+List/create/get scenario, in order:
 
-```ts
-test('snapshot creation freezes composition and permanent asset state', async()=>{/* assert names, ownership, breakthrough, promotion, equipment nickname/locked/favorite */});
-
-test('later live and roster changes do not mutate stored snapshot JSON', async()=>{/* mutate live deck + owned rows, read same snapshot, deepEqual original payload */});
-
-test('snapshot list/detail are owner isolated regardless of visibility', async()=>{/* public snapshot still 404 to another user */});
+```text
+seed gac_a for usr_abc and gac_other for usr_other
+GET gac_a/decks before grant -> 403 SCOPE_DENIED
+grant decks:write
+POST gac_a/decks with {name:' 연구덱 ',status:'research'} -> 201
+assert returned id /^dek_/, name '연구덱', status 'research', visibility 'private'
+grant decks:read
+GET gac_a/decks -> 200, one row, general_count=0, tactic_count=0, equipment_count=0
+GET gac_a/decks/:createdId -> 200 and matching metadata
+GET gac_other/decks as usr_abc -> 404 GAME_ACCOUNT_NOT_FOUND
+GET gac_other/decks/:createdId as usr_abc -> 404 DECK_NOT_FOUND
 ```
 
-- [ ] **Step 3: Run the full suite to verify RED**
+Metadata PATCH scenario:
+
+```text
+seed owner deck dek_one and grant decks:write
+PATCH note/status/is_primary -> 200 and trimmed note + archived + true
+PATCH {status:'broken'} -> 400 INVALID_DECK_STATUS
+PATCH {} -> 400 EMPTY_DECK_PATCH
+PATCH same deck through gac_other -> 404 DECK_NOT_FOUND
+```
+
+Composition scenario:
+
+```text
+seed enabled g:1/g:2 and hidden g:hidden
+seed canonical tactic t:20010 metadata {class:5,learn:1,get:3,copy:0,chip:1001}
+seed chipless tactic t:bad metadata {class:5,learn:1,get:3,copy:0,chip:0}
+seed same-account weapon eqp_w and mount eqp_m plus other-account weapon eqp_other
+PUT planned general g:1 + t:20010 without user_generals/user_tactics rows -> 200
+assert deck_general_slots and deck_tactic_slots contain requested rows
+PUT hidden general -> 404 GENERAL_NOT_FOUND
+PUT chipless tactic -> 404 TACTIC_NOT_FOUND
+PUT eqp_other -> 404 EQUIPMENT_NOT_FOUND
+PUT mount eqp_m into weapon_instance_id -> 400 EQUIPMENT_TYPE_MISMATCH
+after each invalid PUT assert previous valid composition rows are unchanged
+```
+
+Live delete + snapshot survival scenario:
+
+```text
+seed deck + deck_snapshots row whose source_deck_id is that deck
+DELETE owner deck -> 200 {deleted:true,id:'dek_one'}
+assert decks/deck_general_slots/deck_tactic_slots no longer contain live rows
+assert deck_snapshots row still exists, source_deck_id is null, snapshot_json byte-for-byte unchanged
+```
+
+`snapshots-api.test.ts` scenarios:
+
+```text
+snapshot creation:
+seed owned g:1 breakthrough=4 promotion=2 and planned unowned g:2
+seed owned t:20010 breakthrough=5 and planned unowned canonical t:20350
+seed eqp_w nickname='주력검', locked=1, favorite=1
+create live composition referencing those assets
+POST snapshot with {} -> 201, visibility alliance, id /^dks_/
+assert snapshot_json format_version=1, account/deck metadata, ordered generals/tactics,
+owned flags and permanent values, and equipment nickname/locked/favorite
+
+immutability:
+save the returned snapshot payload
+mutate live deck name, composition, user_generals, user_tactics, and user_equipment state
+GET same snapshot -> 200 and deepEqual snapshot payload to originally returned value
+
+owner isolation:
+create public snapshot for usr_abc
+GET list/detail as usr_abc with decks:read -> 200 and snapshot visible
+GET detail as usr_other with decks:read -> 404 SNAPSHOT_NOT_FOUND
+```
+
+- [ ] **Step 3: Run the suite to verify RED without unrelated regressions**
 
 Run from `services/data`:
 
@@ -131,20 +198,18 @@ Run from `services/data`:
 npm test
 ```
 
-Expected: all existing v0.6 tests stay green; new deck/snapshot tests fail because `decks-domain.ts` and/or v0.7 routes are not yet implemented. Do not accept failures in unrelated existing tests.
+Expected: existing v0.6 tests remain green. New deck/snapshot route tests fail because the routes are not registered. If compilation fails only because `decks-domain.ts` does not yet exist, create the exported types/functions with throwing bodies first, rerun, and require behavioral RED to be route/implementation failures rather than unrelated import failures.
 
-- [ ] **Step 4: Implement only the domain normalizers**
+- [ ] **Step 4: Implement the domain normalizers**
 
-Create `services/data/src/decks-domain.ts` with explicit structural types and deterministic error codes. Core implementation shape:
+Create `services/data/src/decks-domain.ts` with these public types:
 
 ```ts
 export type DeckStatus='active'|'candidate'|'research'|'archived';
 export type DeckVisibility='private'|'alliance'|'public';
-
 export interface CreateDeckInput {
   name:string; seasonId:string|null; status:DeckStatus; visibility:DeckVisibility; note:string|null; isPrimary:boolean;
 }
-
 export interface PatchDeckInput {
   hasName:boolean; name:string;
   hasSeasonId:boolean; seasonId:string|null;
@@ -153,7 +218,6 @@ export interface PatchDeckInput {
   hasNote:boolean; note:string|null;
   hasIsPrimary:boolean; isPrimary:boolean;
 }
-
 export interface CompositionTacticInput { slot:number; tacticId:string; }
 export interface CompositionGeneralInput {
   position:number; generalId:string; weaponInstanceId:string|null; mountInstanceId:string|null; tactics:CompositionTacticInput[];
@@ -162,7 +226,20 @@ export interface ReplaceCompositionInput { generals:CompositionGeneralInput[]; }
 export interface CreateSnapshotInput { visibility:'alliance'|'public'; }
 ```
 
-Normalize strings with `trim()`, store empty optional note/season/equipment IDs as `null`, reject non-object array entries, reject duplicate positions/slots, and reject more than 3 generals or more than 2 tactics per general through the position/slot uniqueness/range checks.
+Normalization rules:
+
+```text
+name: required string, trim, non-empty
+season_id: undefined/null/trimmed empty => null; otherwise trimmed string
+note: undefined/null/trimmed empty => null; non-string non-null => INVALID_NOTE
+is_primary: undefined => false on create; present non-boolean => INVALID_IS_PRIMARY
+composition.generals: required array; every entry is a non-array object
+position: integer 1..3, unique
+general_id: non-empty trimmed string
+weapon_instance_id/mount_instance_id: undefined/null/trimmed empty => null; otherwise trimmed string
+tactics: defaults []; every tactic is an object with integer slot 1..2, unique in its general, and non-empty trimmed tactic_id
+snapshot visibility: defaults alliance; only alliance/public accepted
+```
 
 - [ ] **Step 5: Run domain tests**
 
@@ -172,7 +249,7 @@ npx tsx --test tests/domain.test.ts
 
 Expected: domain tests pass; route tests remain RED.
 
-- [ ] **Step 6: Commit the domain contract**
+- [ ] **Step 6: Commit the domain contract and RED tests**
 
 ```bash
 git add services/data/src/decks-domain.ts services/data/tests/domain.test.ts services/data/tests/decks-api.test.ts services/data/tests/snapshots-api.test.ts
@@ -191,29 +268,19 @@ git commit -m "test(data): define v0.7 deck contracts"
 
 **Interfaces:**
 - Consumes: `CreateDeckInput`, `PatchDeckInput`, `newDataId('dek')`, `runAuthedHandler`, `DataAccessError`, D1 schema-2 `decks` and `game_accounts`.
-- Produces:
-  - `listDecks(env,userId,accountId)`
-  - `createDeck(env,userId,accountId,input)`
-  - `getDeck(env,userId,accountId,deckId)`
-  - `patchDeck(env,userId,accountId,deckId,input)`
-  - `deleteDeck(env,userId,accountId,deckId)`
-  - HTTP handlers `handleListDecks`, `handleCreateDeck`, `handleGetDeck`, `handlePatchDeck`, `handleDeleteDeck`
+- Produces: `listDecks`, `createDeck`, `getDeck`, `patchDeck`, `deleteDeck`, and HTTP handlers `handleListDecks`, `handleCreateDeck`, `handleGetDeck`, `handlePatchDeck`, `handleDeleteDeck`.
 
-- [ ] **Step 1: Narrow RED tests to live deck metadata**
-
-Run:
+- [ ] **Step 1: Verify live-deck metadata tests are RED**
 
 ```bash
 npx tsx --test --test-name-pattern="deck routes|deck list/create/get|deck patch" tests/decks-api.test.ts
 ```
 
-Expected: FAIL because live deck routes do not exist.
+Expected: route tests fail with NOT_FOUND/404.
 
-- [ ] **Step 2: Implement ownership-safe deck queries**
+- [ ] **Step 2: Implement ownership-safe list/create/get**
 
-`decks-store.ts` must join `decks` to `game_accounts` for deck-specific owner checks. Do not fetch a deck by ID and perform ownership checks later in application code.
-
-List query must return structural counts without exposing user IDs:
+List query:
 
 ```sql
 SELECT d.id,d.name,d.season_id,d.status,d.visibility,d.note,d.is_primary,d.created_at,d.updated_at,
@@ -226,45 +293,56 @@ WHERE d.account_id=? AND ga.user_id=?
 ORDER BY d.is_primary DESC,d.updated_at DESC,d.id;
 ```
 
-Create must verify account ownership, verify non-null `season_id` against `game_seasons.enabled=1`, generate `newDataId('dek')`, and insert metadata. PATCH must resolve omitted-vs-null fields from `PatchDeckInput`, revalidate changed season ID, and update `updated_at`.
+Create flow:
 
-- [ ] **Step 3: Implement live deck routes**
+```text
+SELECT account WHERE id=? AND user_id=?; absent => account_not_found
+if seasonId non-null, SELECT enabled game_seasons row; absent => invalid_season
+newDataId('dek'), Date.now(), INSERT decks
+return normalized metadata
+```
 
-`routes/decks.ts` should use local JSON-object parsing and a deck-specific validation-response mapping. Route status contract:
+Get must query by deck ID + account ID + owner user ID in one join. During Task 2 return metadata plus `composition:{generals:[]}`; Task 3 replaces that with actual composition.
 
-```ts
+- [ ] **Step 3: Implement PATCH/delete**
+
+PATCH loads the owner-scoped current row, applies `has*` fields, revalidates changed season, updates `updated_at`, and returns normalized metadata. Delete first owner-scopes the deck, then deletes by `(id,account_id)`. Inaccessible deck => `DECK_NOT_FOUND`.
+
+- [ ] **Step 4: Implement live deck routes**
+
+`routes/decks.ts` uses a local JSON-object parser and deck validation-message map. Status contract:
+
+```text
 POST create -> 201
 GET list/get -> 200
 PATCH -> 200
 DELETE -> 200 with {deleted:true,id:deckId}
 ```
 
-Stable 400 codes include `INVALID_DECK_NAME`, `INVALID_DECK_STATUS`, `INVALID_DECK_VISIBILITY`, `INVALID_SEASON`, `INVALID_NOTE`, `INVALID_IS_PRIMARY`, `EMPTY_DECK_PATCH`; inaccessible account/deck is 404 `GAME_ACCOUNT_NOT_FOUND` / `DECK_NOT_FOUND`.
+400 codes: `INVALID_DECK_NAME`, `INVALID_DECK_STATUS`, `INVALID_DECK_VISIBILITY`, `INVALID_SEASON`, `INVALID_NOTE`, `INVALID_IS_PRIMARY`, `EMPTY_DECK_PATCH`. 404 codes: `GAME_ACCOUNT_NOT_FOUND`, `DECK_NOT_FOUND`.
 
-- [ ] **Step 4: Register live deck routes in `index.ts`**
-
-Add exactly:
+- [ ] **Step 5: Register live deck routes**
 
 ```ts
-app.get('/v1/game-accounts/:accountId/decks', ...);
-app.post('/v1/game-accounts/:accountId/decks', ...);
-app.get('/v1/game-accounts/:accountId/decks/:deckId', ...);
-app.patch('/v1/game-accounts/:accountId/decks/:deckId', ...);
-app.delete('/v1/game-accounts/:accountId/decks/:deckId', ...);
+app.get('/v1/game-accounts/:accountId/decks', (c)=>handleListDecks(c.req.param('accountId'),c.req.raw,c.env));
+app.post('/v1/game-accounts/:accountId/decks', (c)=>handleCreateDeck(c.req.param('accountId'),c.req.raw,c.env));
+app.get('/v1/game-accounts/:accountId/decks/:deckId', (c)=>handleGetDeck(c.req.param('accountId'),c.req.param('deckId'),c.req.raw,c.env));
+app.patch('/v1/game-accounts/:accountId/decks/:deckId', (c)=>handlePatchDeck(c.req.param('accountId'),c.req.param('deckId'),c.req.raw,c.env));
+app.delete('/v1/game-accounts/:accountId/decks/:deckId', (c)=>handleDeleteDeck(c.req.param('accountId'),c.req.param('deckId'),c.req.raw,c.env));
 ```
 
-Read routes use `decks:read`; mutations use `decks:write` inside handlers.
+Handlers enforce `decks:read` or `decks:write` with `runAuthedHandler`.
 
-- [ ] **Step 5: Run live deck tests and regression suite**
+- [ ] **Step 6: Run live deck tests and regression suite**
 
 ```bash
 npx tsx --test --test-name-pattern="deck routes|deck list/create/get|deck patch" tests/decks-api.test.ts
 npm test
 ```
 
-Expected: live metadata tests pass; composition/snapshot tests remain the only new RED failures; existing v0.6 tests pass.
+Expected: live metadata tests pass; composition/snapshot tests remain RED; v0.6 tests pass.
 
-- [ ] **Step 6: Commit live deck CRUD**
+- [ ] **Step 7: Commit live deck CRUD**
 
 ```bash
 git add services/data/src/decks-store.ts services/data/src/routes/decks.ts services/data/src/index.ts services/data/tests/decks-api.test.ts
@@ -282,11 +360,8 @@ git commit -m "feat(data): add v0.7 live deck CRUD"
 - Test: `services/data/tests/decks-api.test.ts`
 
 **Interfaces:**
-- Consumes: `ReplaceCompositionInput`, existing `isCanonicalOwnableTacticMetadata`, schema-2 Registry/roster/equipment tables.
-- Produces:
-  - `replaceDeckComposition(env,userId,accountId,deckId,input)`
-  - `getDeckComposition(env,userId,accountId,deckId)` used by live GET and snapshots
-  - `handlePutDeckComposition(...)`
+- Consumes: `ReplaceCompositionInput`, `isCanonicalOwnableTacticMetadata`, Registry/roster/equipment tables.
+- Produces: `replaceDeckComposition(env,userId,accountId,deckId,input)`, `getDeckComposition(env,userId,accountId,deckId)`, `handlePutDeckComposition(...)`.
 
 - [ ] **Step 1: Verify composition tests are RED**
 
@@ -294,26 +369,26 @@ git commit -m "feat(data): add v0.7 live deck CRUD"
 npx tsx --test --test-name-pattern="composition" tests/decks-api.test.ts
 ```
 
-Expected: FAIL because composition route/store operations do not exist.
+Expected: composition route returns NOT_FOUND/404.
 
 - [ ] **Step 2: Implement complete pre-write validation**
 
-For every requested general:
+General:
 
 ```sql
 SELECT id,name FROM game_generals WHERE id=? AND enabled=1 LIMIT 1;
 ```
 
-For every tactic:
+Tactic:
 
 ```sql
 SELECT id,name,metadata_json FROM game_tactics WHERE id=? AND enabled=1 LIMIT 1;
 SELECT 1 AS matched FROM game_generals WHERE unique_tactic_id=? LIMIT 1;
 ```
 
-Parse metadata and require `isCanonicalOwnableTacticMetadata(metadata)===true` and no unique-tactic reference. Do not query `user_generals` or `user_tactics` as a legality prerequisite.
+Require `isCanonicalOwnableTacticMetadata(metadata)===true` and no unique-tactic reference. Do not require `user_generals` / `user_tactics` ownership.
 
-For equipment, query with account ownership and template type in the same SQL:
+Equipment:
 
 ```sql
 SELECT ue.id,et.type
@@ -323,11 +398,9 @@ WHERE ue.id=? AND ue.account_id=?
 LIMIT 1;
 ```
 
-Return `EQUIPMENT_NOT_FOUND` when absent and `EQUIPMENT_TYPE_MISMATCH` when a weapon is supplied as a mount or vice versa.
+Absent => `EQUIPMENT_NOT_FOUND`; wrong type => `EQUIPMENT_TYPE_MISMATCH`.
 
-- [ ] **Step 3: Implement one-batch replacement after all validation succeeds**
-
-Build statements only after the entire request validates:
+- [ ] **Step 3: Replace all slots in one D1 batch after validation**
 
 ```ts
 const statements=[
@@ -340,11 +413,11 @@ const statements=[
 await env.DB.batch(statements);
 ```
 
-Because validation is complete before the first mutation, any 400/404 validation error leaves the previous composition unchanged.
+No write is constructed/executed before all validation succeeds.
 
-- [ ] **Step 4: Implement ordered full-composition read**
+- [ ] **Step 4: Implement ordered full composition read**
 
-Return generals ordered by `position`, tactics ordered by `(general_position,slot)`, with Registry names and attached equipment fields. Response general shape:
+Return generals ordered by `position`, tactics by `(general_position,slot)`, with Registry names and equipment identity/state:
 
 ```ts
 {
@@ -357,24 +430,24 @@ Return generals ordered by `position`, tactics ordered by `(general_position,slo
 }
 ```
 
-- [ ] **Step 5: Register composition route**
+Update single-deck GET to return `composition:{generals:[...]}`.
+
+- [ ] **Step 5: Implement/register composition route**
 
 ```ts
-app.put('/v1/game-accounts/:accountId/decks/:deckId/composition', ...);
+app.put('/v1/game-accounts/:accountId/decks/:deckId/composition', (c)=>handlePutDeckComposition(c.req.param('accountId'),c.req.param('deckId'),c.req.raw,c.env));
 ```
 
-The handler requires `decks:write`.
+Use `decks:write`; map structural errors to 400, inaccessible/invalid referenced resources to 404 except type mismatch 400.
 
 - [ ] **Step 6: Prove atomicity and planned-asset behavior**
-
-Run:
 
 ```bash
 npx tsx --test --test-name-pattern="composition" tests/decks-api.test.ts
 npm test
 ```
 
-Expected: tests prove unowned enabled generals/canonical tactics are accepted, hidden/noncanonical records are rejected, cross-account/wrong-type equipment is rejected, and invalid replacement preserves previous rows.
+Expected: planned unowned assets accepted; hidden/noncanonical records and invalid equipment rejected; invalid replacements preserve last valid composition.
 
 - [ ] **Step 7: Commit composition support**
 
@@ -395,12 +468,8 @@ git commit -m "feat(data): add atomic deck composition"
 - Test: `services/data/tests/decks-api.test.ts`
 
 **Interfaces:**
-- Consumes: `getDeckComposition(...)`, `CreateSnapshotInput`, `newDataId('dks')`, `user_generals`, `user_tactics`, `user_equipment`, Registry tables.
-- Produces:
-  - `createDeckSnapshot(env,userId,accountId,deckId,input)`
-  - `listDeckSnapshots(env,userId)`
-  - `getDeckSnapshot(env,userId,snapshotId)`
-  - handlers `handleCreateDeckSnapshot`, `handleListDeckSnapshots`, `handleGetDeckSnapshot`
+- Consumes: `getDeckComposition(...)`, `CreateSnapshotInput`, `newDataId('dks')`, roster/equipment/Registry tables.
+- Produces: `createDeckSnapshot`, `listDeckSnapshots`, `getDeckSnapshot`, `handleCreateDeckSnapshot`, `handleListDeckSnapshots`, `handleGetDeckSnapshot`.
 
 - [ ] **Step 1: Verify snapshot tests are RED**
 
@@ -408,11 +477,11 @@ git commit -m "feat(data): add atomic deck composition"
 npx tsx --test tests/snapshots-api.test.ts
 ```
 
-Expected: FAIL because snapshot routes do not exist.
+Expected: snapshot routes return NOT_FOUND/404.
 
-- [ ] **Step 2: Implement snapshot materialization as a value object**
+- [ ] **Step 2: Materialize snapshot value object**
 
-Build the exact `snapshot_json` from current owner-visible live data. Top-level shape:
+Load owner-scoped account/deck/composition and enrich permanent state from the same account. Build:
 
 ```ts
 {
@@ -420,31 +489,19 @@ Build the exact `snapshot_json` from current owner-visible live data. Top-level 
   captured_at:now,
   account:{id:accountId,nickname:account.nickname,server_code:account.server_code},
   deck:{id,name,season_id,status,visibility,note,is_primary,created_at,updated_at},
-  generals:[...]
+  generals:[{
+    position,general_id,general_name,
+    owned:boolean,breakthrough:number|null,promotion:number|null,
+    weapon:{id,template_id,template_name,type:'weapon',nickname,locked,favorite}|null,
+    mount:{id,template_id,template_name,type:'mount',nickname,locked,favorite}|null,
+    tactics:[{slot,tactic_id,tactic_name,owned:boolean,breakthrough:number|null}],
+  }],
 }
 ```
 
-For each general, freeze:
+Planned unowned assets use `owned:false` and null permanent values.
 
-```ts
-{
-  position,
-  general_id,
-  general_name,
-  owned:boolean,
-  breakthrough:number|null,
-  promotion:number|null,
-  weapon:{id,template_id,template_name,type:'weapon',nickname,locked,favorite}|null,
-  mount:{id,template_id,template_name,type:'mount',nickname,locked,favorite}|null,
-  tactics:[{
-    slot,tactic_id,tactic_name,owned:boolean,breakthrough:number|null
-  }]
-}
-```
-
-Use left joins or explicit lookup queries so planned unowned assets serialize with `owned:false` and null permanent-state values.
-
-- [ ] **Step 3: Insert snapshot only after materialization succeeds**
+- [ ] **Step 3: Insert immutable snapshot after materialization**
 
 ```ts
 const id=newDataId('dks');
@@ -453,33 +510,44 @@ await env.DB.prepare(
 ).bind(id,deckId,userId,input.visibility,JSON.stringify(snapshot),now).run();
 ```
 
-Do not add PATCH/DELETE endpoints for snapshots.
+Return `{id,source_deck_id:deckId,visibility,snapshot,created_at:now}`. No mutation/delete endpoint.
 
 - [ ] **Step 4: Implement owner-only list/detail**
 
-List/detail must filter directly on `owner_user_id=?`. Detail returns parsed `snapshot_json`, stored visibility, source deck ID (possibly null), and created timestamp. A different owner gets `SNAPSHOT_NOT_FOUND` even when visibility is `public`.
-
-- [ ] **Step 5: Register snapshot routes**
-
-```ts
-app.post('/v1/game-accounts/:accountId/decks/:deckId/snapshots', ...);
-app.get('/v1/deck-snapshots', ...);
-app.get('/v1/deck-snapshots/:snapshotId', ...);
+```sql
+SELECT id,source_deck_id,visibility,snapshot_json,created_at
+FROM deck_snapshots
+WHERE owner_user_id=?
+ORDER BY created_at DESC,id;
 ```
 
-Creation uses `decks:write`; list/detail use `decks:read`.
+Detail adds `AND id=? LIMIT 1`. Parse JSON to `snapshot`. Different owner => `SNAPSHOT_NOT_FOUND`, even for public visibility.
 
-- [ ] **Step 6: Verify immutability and source-deck deletion behavior**
+- [ ] **Step 5: Implement/register snapshot routes**
 
-Tests must:
+```ts
+app.post('/v1/game-accounts/:accountId/decks/:deckId/snapshots', (c)=>handleCreateDeckSnapshot(c.req.param('accountId'),c.req.param('deckId'),c.req.raw,c.env));
+app.get('/v1/deck-snapshots', (c)=>handleListDeckSnapshots(c.req.raw,c.env));
+app.get('/v1/deck-snapshots/:snapshotId', (c)=>handleGetDeckSnapshot(c.req.param('snapshotId'),c.req.raw,c.env));
+```
 
-1. capture a snapshot;
-2. mutate live deck name/composition;
-3. mutate general/tactic breakthrough/promotion;
-4. mutate equipment nickname/locked/favorite;
-5. read snapshot and assert deep equality with the original captured payload;
-6. delete the source deck;
-7. assert snapshot still exists and `source_deck_id` is null while its JSON still names the deleted live deck.
+Creation requires `decks:write`; list/detail `decks:read`. `{}` body is valid for creation.
+
+- [ ] **Step 6: Verify immutability and source-deck deletion**
+
+Exact sequence:
+
+```text
+capture snapshot -> save returned snapshot object
+PATCH live deck name/note
+PUT different live composition
+UPDATE user_generals breakthrough/promotion
+UPDATE user_tactics breakthrough
+UPDATE user_equipment nickname/locked/favorite
+GET same snapshot -> snapshot deep-equals saved object
+DELETE source deck
+GET same snapshot -> 200, source_deck_id=null, snapshot deep-equals saved object
+```
 
 Run:
 
@@ -488,7 +556,7 @@ npx tsx --test tests/snapshots-api.test.ts tests/decks-api.test.ts
 npm test
 ```
 
-Expected: all v0.7 functional tests plus all previous tests pass.
+Expected: all functional and regression tests pass.
 
 - [ ] **Step 7: Commit snapshots**
 
@@ -515,59 +583,40 @@ git commit -m "feat(data): add immutable deck snapshots"
 - Create: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
 
 **Interfaces:**
-- Consumes: completed v0.7 API behavior from Tasks 1-4.
-- Produces: release contract `DATA_SERVICE_VERSION='0.7.0'`, unchanged schema `2`, deployment smoke checks for 0.7.0, documentation of supported/deferred deck behavior.
+- Consumes: completed v0.7 behavior.
+- Produces: `DATA_SERVICE_VERSION='0.7.0'`, unchanged schema `2`, deployment smoke checks for 0.7.0, release docs.
 
-- [ ] **Step 1: Move tests to the 0.7 release contract first**
-
-Change version expectations before changing workflows/service constants:
+- [ ] **Step 1: Move tests to 0.7 release contract first**
 
 ```ts
 assert.equal(DATA_SERVICE_VERSION,'0.7.0');
-assert.deepEqual(await publicHealthResponse().json(),{
-  ok:true,service:'nakwol-data',version:'0.7.0',schema_version:2,
-});
+assert.deepEqual(await publicHealthResponse().json(),{ok:true,service:'nakwol-data',version:'0.7.0',schema_version:2});
 assert.match(workflow,/"version":"0\.7\.0"/);
 assert.equal(packageJson.version,'0.7.0');
 ```
 
-- [ ] **Step 2: Run and record the expected release-contract RED**
+- [ ] **Step 2: Run expected release-contract RED**
 
 ```bash
 npm test
 ```
 
-Expected: version/deployment contract tests fail specifically because runtime/package/workflows still advertise 0.6.0. Functional deck/snapshot tests must remain green.
+Expected: version/deployment tests fail only because runtime/package/workflows still say 0.6.0; deck/snapshot tests remain green.
 
-- [ ] **Step 3: Bump runtime/package/workflow versions**
-
-Set:
+- [ ] **Step 3: Bump runtime/package/workflows**
 
 ```ts
 export const DATA_SERVICE_VERSION='0.7.0' as const;
 export const DATA_SCHEMA_VERSION=2 as const;
 ```
 
-Set `services/data/package.json` version to `0.7.0`.
+Set package version 0.7.0. In both workflows rename verification steps to v0.7 and change production grep to `"version":"0.7.0"`; keep schema 2.
 
-In both DATA deployment workflows rename steps to `Verify DATA v0.7` / `Verify production DATA v0.7` and change production health grep from `"version":"0.6.0"` to `"version":"0.7.0"`. Keep `"schema_version":2` unchanged.
+- [ ] **Step 4: Document exact v0.7 surface**
 
-- [ ] **Step 4: Document exact v0.7 surface and deferred behavior**
+README/DATA/CHANGELOG/release record enumerate live CRUD, atomic composition, owner-only immutable snapshots, planned-unowned policy, canonical tactic rule, same-account typed equipment rule, schema2/no migration, and all deferred domains. Preserve Connect control API docs and v0.4-v0.6 history.
 
-README/DATA/CHANGELOG/release record must include:
-
-- live deck CRUD endpoints;
-- atomic composition endpoint;
-- owner-only immutable snapshot create/list/detail;
-- research/planned unowned generals/tactics policy;
-- canonical tactic restriction;
-- account-owned type-correct equipment restriction;
-- no migration / schema 2;
-- `deck_settings`, cross-user sharing, snapshot mutation, game legality rules deferred.
-
-`DATA.md` must preserve all existing Connect control API documentation and previous v0.4-v0.6 sections.
-
-- [ ] **Step 5: Run the complete release candidate verification**
+- [ ] **Step 5: Run complete release candidate verification**
 
 ```bash
 npm test
@@ -575,7 +624,7 @@ npm run typecheck
 npm run bundle
 ```
 
-Expected: zero test failures, typecheck exit 0, Wrangler dry-run bundle exit 0.
+Expected: zero failures and exit 0 for typecheck/bundle.
 
 - [ ] **Step 6: Commit release preparation**
 
@@ -589,15 +638,15 @@ git commit -m "release(data): prepare v0.7.0"
 ### Task 6: PR review, merge, production deployment, and new golden baseline
 
 **Files:**
-- Modify after successful production deployment: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
-- Modify after successful production deployment: `DATA.md`
-- Modify on `main` to trigger deployment: `ops/data-deploy.flag`
+- Modify after deployment: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
+- Modify after deployment: `DATA.md`
+- Modify on `main`: `ops/data-deploy.flag`
 
 **Interfaces:**
-- Consumes: fully verified feature branch and existing DATA GitHub Actions deployment pipeline.
-- Produces: merged PR, deployed Worker 0.7.0/schema2, recorded Worker Version ID/workflow run/golden commit.
+- Consumes: verified feature branch and existing DATA Actions pipeline.
+- Produces: merged PR, deployed Worker 0.7.0/schema2, recorded immutable deployment evidence.
 
-- [ ] **Step 1: Open a draft PR against `main` and inspect the complete diff**
+- [ ] **Step 1: Open draft PR and inspect complete diff**
 
 PR title:
 
@@ -605,11 +654,9 @@ PR title:
 Release NAKWOL DATA v0.7 decks and snapshots API
 ```
 
-Review every changed file for scope creep, owner leaks, accidental Connect-doc deletion, migration changes, or any new game rule not in the approved spec.
+Review for owner leaks, scope creep, accidental Connect-doc deletion, migration changes, and unsourced game rules.
 
-- [ ] **Step 2: Verify the exact PR HEAD again**
-
-Use the PR CI logs to confirm the exact final head has:
+- [ ] **Step 2: Verify exact final PR HEAD**
 
 ```text
 npm test -> 0 failures
@@ -617,54 +664,38 @@ npm run typecheck -> success
 npm run bundle -> success
 ```
 
-Do not merge on stale earlier evidence.
+Do not merge on stale evidence.
 
-- [ ] **Step 3: Mark ready and merge only the verified head**
+- [ ] **Step 3: Mark ready and merge guarded by expected head SHA**
 
-Use the expected PR head SHA guard when merging. Record the merge commit in the release record.
+Record actual PR number and merge commit.
 
-- [ ] **Step 4: Trigger production deployment from `main`**
+- [ ] **Step 4: Trigger production deployment**
 
-Change `ops/data-deploy.flag` to:
+Set `ops/data-deploy.flag` exactly:
 
 ```text
 deploy nakwol-data 0.7.0 decks snapshots
 ```
 
-This must trigger the existing `Deploy NAKWOL DATA` workflow.
-
-- [ ] **Step 5: Verify the production deployment pipeline**
-
-Require every deployment step to succeed:
+- [ ] **Step 5: Verify every production gate**
 
 ```text
-Verify DATA v0.7
-Require existing exact DATA D1
+Verify DATA v0.7 -> success
+Require existing exact DATA D1 -> success
 Apply DATA migrations -> No migrations to apply!
-Seed DATA Registry
+Seed DATA Registry -> success
 Verify DATA Registry counts -> NAKWOL_DATA_REGISTRY_COUNTS_OK
-Deploy DATA Worker
+Deploy DATA Worker -> success
 Verify production DATA v0.7 -> NAKWOL_DATA_DEPLOY_OK
 ```
 
-Production smoke must observe `/api/health` HTTP 200 with service `nakwol-data`, version `0.7.0`, and `/api/schema` HTTP 200 with schema version `2`.
+Smoke must see health/schema HTTP 200, service `nakwol-data`, version `0.7.0`, schema `2`.
 
-- [ ] **Step 6: Record immutable production evidence**
+- [ ] **Step 6: Record actual production evidence**
 
-Update `docs/releases/2026-08-27-nakwol-data-v0.7.md` with:
+Write PR number, merge commit, deploy commit, workflow run ID, Worker Version ID, final test totals, migration result, Registry gate, and smoke result into the release record. Update `DATA.md` Current production golden to 0.7.0.
 
-- PR number;
-- merge commit;
-- deploy-trigger commit;
-- production workflow run ID;
-- production Worker Version ID;
-- final test count/pass/fail;
-- D1 migration result;
-- Registry count gate result;
-- health/schema smoke result.
+- [ ] **Step 7: Verify recorded golden state against GitHub/Cloudflare evidence**
 
-Update `DATA.md` `Current production golden` to 0.7.0 and link the v0.7 release record.
-
-- [ ] **Step 7: Final verification of the recorded golden state**
-
-Fetch `DATA.md`, the release record, PR metadata, and production workflow logs from `main`. Confirm the recorded SHAs/IDs match actual GitHub/Cloudflare deployment evidence before declaring v0.7 complete.
+Fetch `DATA.md`, release record, merged PR metadata, and production workflow logs from `main`; compare every recorded SHA/ID/version before declaring v0.7 complete.
