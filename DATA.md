@@ -83,7 +83,7 @@ DATA control API:
 
 전법 돌파는 0~5 정수입니다. PUT은 현재 상태를 멱등적으로 UPSERT하고 DELETE는 해당 계정의 보유 전법만 제거합니다.
 
-보유 가능한 정식 전법은 ID 대역을 추측하지 않고 authoritative Registry 메타데이터로 판정합니다. 다음 조건을 모두 만족해야 합니다.
+보유 가능한 정식 전법은 ID 대역을 추측하지 않고 authoritative Registry 메타데이터로 판정합니다.
 
 - `enabled=1`
 - `class=5`
@@ -94,6 +94,29 @@ DATA control API:
 - 어떤 장수의 `unique_tactic_id`로도 참조되지 않음
 
 현재 확정 Seed에서는 이 조건을 만족하는 정식 보유 전법이 146개이고, 146개 모두 서로 다른 chip에 1:1로 연결됩니다. `755x`, `177xx`, `600xxx`, `810xxx` 등의 chip 없는 내부/콘텐츠 파생 레코드는 자동으로 제외됩니다.
+
+## v0.6 사용자 무기·탈것 인스턴스 API
+
+기존 schema 2의 `user_equipment`를 사용합니다. 새 migration은 없습니다.
+
+- `GET /v1/game-accounts/:accountId/equipment` — `equipment:read`
+- `POST /v1/game-accounts/:accountId/equipment` — `equipment:write`
+- `PATCH /v1/game-accounts/:accountId/equipment/:equipmentId` — `equipment:write`
+- `DELETE /v1/game-accounts/:accountId/equipment/:equipmentId` — `equipment:write`
+
+생성은 `game_equipment_templates.enabled=1`인 무기 또는 탈것만 허용합니다. DATA가 고유한 `eqp_...` 인스턴스 ID를 발급하며, 저장 가능한 현재 상태는 다음과 같습니다.
+
+- `template_id`
+- 선택적 `nickname`
+- `locked`
+- `favorite`
+- `created_at`, `updated_at`
+
+생성 후 `template_id`는 변경할 수 없습니다. 목록/수정/삭제는 AUTH principal이 실제 소유한 game account와 그 안의 equipment instance로만 제한됩니다.
+
+DB에는 `user_equipment_stats`와 `user_equipment_traits` 자리가 이미 있지만, 현재 authoritative source에는 “어떤 스탯/특기가 어떤 장비에 실제로 붙을 수 있는가”를 확정할 전체 매핑과 trait Registry가 없습니다. 따라서 v0.6은 `stats`/`traits` 입력을 `EQUIPMENT_OPTIONS_UNSUPPORTED`로 명시적으로 거부합니다. `game_stat_types` 281개 전체를 장비 옵션으로 추정하지 않습니다.
+
+`locked`는 저장되는 게임 상태이며, DATA API가 임의로 “잠긴 장비는 삭제 불가”라는 별도 게임 규칙을 만들지는 않습니다.
 
 ## Registry APIs
 
@@ -108,10 +131,10 @@ DATA control API:
 
 ## Deployment
 
-Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.5는 schema 2를 그대로 사용하며 새 migration은 없습니다.
+Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.6은 schema 2를 그대로 사용하며 새 migration은 없습니다.
 
 ## Next
 
-1. 무기·탈것 인스턴스 API
-2. 덱 편집/스냅샷 API
-3. 승품 재료와 장비 특기 Registry 보강
+1. 덱 편집/스냅샷 API
+2. 장비 옵션/특기 authoritative Registry 보강 후 장비 옵션 API 개방
+3. 승품 재료 Registry 보강

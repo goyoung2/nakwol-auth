@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0 - 2026-08-27
+
+- Add authenticated equipment instance list/create/update/delete APIs on the existing `user_equipment` schema.
+- Enforce `equipment:read` for reads and `equipment:write` for mutations.
+- Isolate every equipment operation to game accounts owned by the verified AUTH principal.
+- Create instances only from enabled weapon/mount Registry templates and generate stable `eqp_...` DATA ids.
+- Persist mutable instance state: nickname, locked and favorite; keep `template_id` immutable after creation.
+- Explicitly reject `stats` and `traits` writes with `EQUIPMENT_OPTIONS_UNSUPPORTED` until authoritative equipment-option and trait mappings exist.
+- Treat `locked` as stored game state only; DATA does not invent a delete prohibition that is not sourced from game rules.
+- Keep DATA schema at version 2; no migration is required.
+
 ## 0.5.0 - 2026-08-27
 
 - Add authenticated owned-tactic list/upsert/delete APIs on the existing `user_tactics` schema.

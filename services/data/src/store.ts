@@ -1,6 +1,6 @@
 import type { DataEnv, DataPrincipal, DataScope } from './types.ts';
-import { isCanonicalOwnableTacticMetadata } from './domain.ts';
-import type { OwnedGeneralInput, OwnedTacticInput } from './domain.ts';
+import { isCanonicalOwnableTacticMetadata, newDataId } from './domain.ts';
+import type { CreateEquipmentInput, OwnedGeneralInput, OwnedTacticInput, PatchEquipmentInput } from './domain.ts';
 
 export async function upsertDataUser(env: Pick<DataEnv, 'DB'>, principal: DataPrincipal): Promise<void> {
   const now = Date.now();
@@ -170,4 +170,56 @@ export async function deleteOwnedTactic(env: Pick<DataEnv, 'DB'>, userId:string,
   if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
   await env.DB.prepare(`DELETE FROM user_tactics WHERE account_id = ? AND tactic_id = ?`).bind(accountId, tacticId).run();
   return { kind:'ok', data:{ deleted:true, tactic_id:tacticId } };
+}
+
+type EquipmentRow = {
+  id:string; template_id:string; template_name:string; type:'weapon'|'mount'; nickname:string|null;
+  locked:number; favorite:number; created_at:number; updated_at:number;
+};
+function mapEquipment(row:EquipmentRow) {
+  return { ...row, locked:Boolean(row.locked), favorite:Boolean(row.favorite) };
+}
+
+export async function listEquipment(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string) {
+  if (!await ownsGameAccount(env, userId, accountId)) return null;
+  const result = await env.DB.prepare(`SELECT ue.id, ue.template_id, et.name AS template_name, et.type, ue.nickname, ue.locked, ue.favorite, ue.created_at, ue.updated_at FROM user_equipment ue JOIN game_equipment_templates et ON et.id = ue.template_id WHERE ue.account_id = ? ORDER BY ue.created_at, ue.id`).bind(accountId).all<EquipmentRow>();
+  return result.results.map(mapEquipment);
+}
+
+export type CreateEquipmentResult =
+  | { kind:'account_not_found' }
+  | { kind:'template_not_found' }
+  | { kind:'ok'; data:ReturnType<typeof mapEquipment> };
+export async function createEquipment(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, input:CreateEquipmentInput):Promise<CreateEquipmentResult> {
+  if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
+  const template = await env.DB.prepare(`SELECT id, name, type FROM game_equipment_templates WHERE id = ? AND enabled = 1 LIMIT 1`).bind(input.templateId).first<{id:string;name:string;type:'weapon'|'mount'}>();
+  if (!template) return { kind:'template_not_found' };
+  const id = newDataId('eqp');
+  const now = Date.now();
+  await env.DB.prepare(`INSERT INTO user_equipment(id,account_id,template_id,nickname,locked,favorite,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`).bind(id,accountId,template.id,input.nickname,input.locked?1:0,input.favorite?1:0,now,now).run();
+  return { kind:'ok', data:{ id, template_id:template.id, template_name:template.name, type:template.type, nickname:input.nickname, locked:input.locked, favorite:input.favorite, created_at:now, updated_at:now } };
+}
+
+async function getOwnedEquipment(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, equipmentId:string):Promise<EquipmentRow|null> {
+  return env.DB.prepare(`SELECT ue.id, ue.template_id, et.name AS template_name, et.type, ue.nickname, ue.locked, ue.favorite, ue.created_at, ue.updated_at FROM user_equipment ue JOIN game_accounts ga ON ga.id = ue.account_id JOIN game_equipment_templates et ON et.id = ue.template_id WHERE ue.id = ? AND ue.account_id = ? AND ga.user_id = ? LIMIT 1`).bind(equipmentId,accountId,userId).first<EquipmentRow>();
+}
+
+export type PatchEquipmentResult = { kind:'equipment_not_found' } | { kind:'ok'; data:ReturnType<typeof mapEquipment> };
+export async function patchEquipment(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, equipmentId:string, input:PatchEquipmentInput):Promise<PatchEquipmentResult> {
+  const current = await getOwnedEquipment(env,userId,accountId,equipmentId);
+  if (!current) return { kind:'equipment_not_found' };
+  const nickname = input.hasNickname ? input.nickname : current.nickname;
+  const locked = input.hasLocked ? input.locked : Boolean(current.locked);
+  const favorite = input.hasFavorite ? input.favorite : Boolean(current.favorite);
+  const now = Date.now();
+  await env.DB.prepare(`UPDATE user_equipment SET nickname = ?, locked = ?, favorite = ?, updated_at = ? WHERE id = ? AND account_id = ?`).bind(nickname,locked?1:0,favorite?1:0,now,equipmentId,accountId).run();
+  return { kind:'ok', data:{ id:current.id, template_id:current.template_id, template_name:current.template_name, type:current.type, nickname, locked, favorite, created_at:current.created_at, updated_at:now } };
+}
+
+export type DeleteEquipmentResult = { kind:'equipment_not_found' } | { kind:'ok'; data:{ deleted:true; id:string } };
+export async function deleteEquipment(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, equipmentId:string):Promise<DeleteEquipmentResult> {
+  const current = await getOwnedEquipment(env,userId,accountId,equipmentId);
+  if (!current) return { kind:'equipment_not_found' };
+  await env.DB.prepare(`DELETE FROM user_equipment WHERE id = ? AND account_id = ?`).bind(equipmentId,accountId).run();
+  return { kind:'ok', data:{ deleted:true, id:equipmentId } };
 }
