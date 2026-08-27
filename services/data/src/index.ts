@@ -40,6 +40,7 @@ app.get('/v1/registry/summary', (c) => handleRegistrySummary(c.req.raw, c.env));
 app.get('/v1/registry/generals', (c) => handleRegistryList('generals', c.req.raw, c.env));
 app.get('/v1/registry/tactics', (c) => handleRegistryList('tactics', c.req.raw, c.env));
 app.get('/v1/registry/equipment', (c) => handleRegistryList('equipment', c.req.raw, c.env));
+app.get('/v1/registry/equipment-traits', (c) => handleRegistryList('equipment_traits', c.req.raw, c.env));
 app.get('/v1/registry/stats', (c) => handleRegistryList('stats', c.req.raw, c.env));
 app.get('/v1/registry/formations', (c) => handleRegistryList('formations', c.req.raw, c.env));
 app.get('/v1/registry/warbooks', (c) => handleRegistryList('warbooks', c.req.raw, c.env));
