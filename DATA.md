@@ -18,6 +18,19 @@ NAKWOL DATA Worker/D1
 
 DATA는 AUTH D1에 직접 접근하지 않습니다.
 
+## Current production golden
+
+- DATA service: `0.6.0`
+- DATA schema: `2`
+- production Worker Version ID: `c6d06cec-5dc5-4384-8a8f-0032f7f480e9`
+- release merge commit: `67ec0ef1bce0661b85c7f9cf8fc9d6fede3650ab`
+- deploy trigger commit: `fa6e85ee7b0c5ffd4f2fa6fafcc753d4262fac4a`
+- production workflow run: `33040570018`
+- verification: 52/52 tests, typecheck, Worker bundle, D1/Registry count gate, production health/schema passed
+- release record: `docs/releases/2026-08-27-nakwol-data-v0.6.md`
+
+이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다.
+
 ## v0.2 Registry
 
 `nslg-s-season-raw-research-kit-v1`의 확정 카탈로그를 재현 가능한 Seed Source로 사용합니다.
