@@ -52,6 +52,11 @@ const tactics = await window.NAKWOL_CONNECT.data.registry.tactics();
 
 `connect/v1.js`가 현재 앱 access token과 `X-NAKWOL-CLIENT-ID`를 자동 주입합니다. embed에 기록된 scope는 개발 편의용이고 실제 권한 판정은 DATA Worker가 수행합니다.
 
+DATA control API:
+
+- `GET /connect/cli/apps/:clientId/scopes`
+- `PUT /connect/cli/apps/:clientId/scopes`
+
 지원 scope:
 - `profile:read`, `profile:write`
 - `roster:read`, `roster:write`
