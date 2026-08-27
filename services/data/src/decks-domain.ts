@@ -128,7 +128,7 @@ export function normalizeReplaceCompositionInput(input:Record<string,unknown>):R
 }
 
 export function normalizeCreateSnapshotInput(input:Record<string,unknown>):CreateSnapshotInput {
-  const value=input.visibility??'alliance';
+  const value=input.visibility===undefined?'alliance':input.visibility;
   if(value!=='alliance'&&value!=='public') throw new Error('INVALID_SNAPSHOT_VISIBILITY');
   return {visibility:value};
 }
