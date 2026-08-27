@@ -26,4 +26,20 @@ export function normalizeOwnedGeneralInput(input:{breakthrough?:unknown;promotio
   const note=typeof input.note==='string'?(input.note.trim()||null):null;
   return {breakthrough:Number(breakthrough),promotion:Number(promotion),favorite:input.favorite===true,note};
 }
+export interface OwnedTacticInput { breakthrough:number; favorite:boolean; note:string|null; }
+export function normalizeOwnedTacticInput(input:{breakthrough?:unknown;favorite?:unknown;note?:unknown;}):OwnedTacticInput{
+  const breakthrough=input.breakthrough??0;
+  if(!Number.isInteger(breakthrough)||Number(breakthrough)<0||Number(breakthrough)>5) throw new Error('INVALID_BREAKTHROUGH');
+  if(input.favorite!==undefined&&typeof input.favorite!=='boolean') throw new Error('INVALID_FAVORITE');
+  if(input.note!==undefined&&input.note!==null&&typeof input.note!=='string') throw new Error('INVALID_NOTE');
+  const note=typeof input.note==='string'?(input.note.trim()||null):null;
+  return {breakthrough:Number(breakthrough),favorite:input.favorite===true,note};
+}
+export function isCanonicalOwnableTacticMetadata(metadata:Record<string,unknown>):boolean{
+  return metadata.class===5
+    && metadata.learn===1
+    && metadata.get===3
+    && (metadata.copy??0)===0
+    && Number(metadata.chip??0)>0;
+}
 export function newDataId(prefix:DataIdPrefix):string{const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);const body=Array.from(bytes,(v)=>v.toString(16).padStart(2,'0')).join('');return `${prefix}_${body}`;}
