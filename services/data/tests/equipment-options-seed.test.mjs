@@ -1,13 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readEquipmentOptionsSeed } from '../scripts/equipment-options-seed.mjs';
 
-const seedPath = fileURLToPath(new URL('../seeds/equipment-options-v0.8.json', import.meta.url));
-
-test('v0.8 equipment option supplement freezes 106 skills and 74 effects from Korean client evidence', () => {
-  assert.equal(existsSync(seedPath), true, 'missing equipment-options-v0.8.json');
-  const seed = JSON.parse(readFileSync(seedPath, 'utf8'));
+test('v0.8 equipment option supplement freezes 106 skills and 74 effects from Korean client evidence', async () => {
+  const seed = await readEquipmentOptionsSeed();
 
   assert.equal(seed.version, '0.8.0');
   assert.equal(seed.schema, 3);
