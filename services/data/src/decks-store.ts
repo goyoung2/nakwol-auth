@@ -20,7 +20,13 @@ type DeckListRow = DeckRow & {
   equipment_count:number;
 };
 
-function mapDeck<T extends DeckRow>(row:T) {
+export type DeckData = Omit<DeckRow,'is_primary'> & {is_primary:boolean};
+export type DeckListData = DeckData & {general_count:number;tactic_count:number;equipment_count:number};
+
+function mapDeck(row:DeckRow):DeckData {
+  return { ...row, is_primary:Boolean(row.is_primary) };
+}
+function mapDeckList(row:DeckListRow):DeckListData {
   return { ...row, is_primary:Boolean(row.is_primary) };
 }
 
@@ -43,7 +49,7 @@ async function getOwnedDeckRow(env:Pick<DataEnv,'DB'>,userId:string,accountId:st
     LIMIT 1`).bind(deckId,accountId,userId).first<DeckRow>();
 }
 
-export async function listDecks(env:Pick<DataEnv,'DB'>,userId:string,accountId:string) {
+export async function listDecks(env:Pick<DataEnv,'DB'>,userId:string,accountId:string):Promise<DeckListData[]|null> {
   if(!await ownsGameAccount(env,userId,accountId)) return null;
   const result=await env.DB.prepare(`SELECT d.id,d.name,d.season_id,d.status,d.visibility,d.note,d.is_primary,d.created_at,d.updated_at,
       (SELECT COUNT(*) FROM deck_general_slots gs WHERE gs.deck_id=d.id) AS general_count,
@@ -53,13 +59,13 @@ export async function listDecks(env:Pick<DataEnv,'DB'>,userId:string,accountId:s
     JOIN game_accounts ga ON ga.id=d.account_id
     WHERE d.account_id=? AND ga.user_id=?
     ORDER BY d.is_primary DESC,d.updated_at DESC,d.id`).bind(accountId,userId).all<DeckListRow>();
-  return result.results.map(mapDeck);
+  return result.results.map(mapDeckList);
 }
 
 export type CreateDeckResult =
   | {kind:'account_not_found'}
   | {kind:'season_not_found'}
-  | {kind:'ok';data:ReturnType<typeof mapDeck<DeckRow>>};
+  | {kind:'ok';data:DeckData};
 
 export async function createDeck(env:Pick<DataEnv,'DB'>,userId:string,accountId:string,input:CreateDeckInput):Promise<CreateDeckResult> {
   if(!await ownsGameAccount(env,userId,accountId)) return {kind:'account_not_found'};
@@ -71,7 +77,7 @@ export async function createDeck(env:Pick<DataEnv,'DB'>,userId:string,accountId:
   return {kind:'ok',data:{id,name:input.name,season_id:input.seasonId,status:input.status,visibility:input.visibility,note:input.note,is_primary:input.isPrimary,created_at:now,updated_at:now}};
 }
 
-export type GetDeckResult = {kind:'deck_not_found'} | {kind:'ok';data:ReturnType<typeof mapDeck<DeckRow>>};
+export type GetDeckResult = {kind:'deck_not_found'} | {kind:'ok';data:DeckData};
 export async function getDeck(env:Pick<DataEnv,'DB'>,userId:string,accountId:string,deckId:string):Promise<GetDeckResult> {
   const row=await getOwnedDeckRow(env,userId,accountId,deckId);
   if(!row) return {kind:'deck_not_found'};
@@ -81,7 +87,7 @@ export async function getDeck(env:Pick<DataEnv,'DB'>,userId:string,accountId:str
 export type PatchDeckResult =
   | {kind:'deck_not_found'}
   | {kind:'season_not_found'}
-  | {kind:'ok';data:ReturnType<typeof mapDeck<DeckRow>>};
+  | {kind:'ok';data:DeckData};
 
 export async function patchDeck(env:Pick<DataEnv,'DB'>,userId:string,accountId:string,deckId:string,input:PatchDeckInput):Promise<PatchDeckResult> {
   const current=await getOwnedDeckRow(env,userId,accountId,deckId);
