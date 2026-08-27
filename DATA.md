@@ -31,6 +31,22 @@ DATA는 AUTH D1에 직접 접근하지 않습니다.
 
 이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다.
 
+## v0.7 release candidate
+
+v0.7.0 덱 편집/불변 스냅샷 구현은 feature branch와 PR #15에서 검증 중입니다. 운영 배포가 완료되기 전까지 위 v0.6 production golden을 변경하지 않습니다.
+
+현재 release-candidate 검증 범위:
+
+- live deck CRUD
+- 전체 composition 원자 교체
+- 미보유 planned 장수/전법 지원
+- canonical 장착 전법 검증
+- 같은 game account의 무기/탈것 인스턴스 연결
+- immutable owner-only deck snapshot
+- DATA service `0.7.0`, schema `2`, 새 migration 없음
+
+개발 기록은 `docs/releases/2026-08-27-nakwol-data-v0.7.md`에 남깁니다.
+
 ## v0.2 Registry
 
 `nslg-s-season-raw-research-kit-v1`의 확정 카탈로그를 재현 가능한 Seed Source로 사용합니다.
@@ -131,6 +147,45 @@ DB에는 `user_equipment_stats`와 `user_equipment_traits` 자리가 이미 있�
 
 `locked`는 저장되는 게임 상태이며, DATA API가 임의로 “잠긴 장비는 삭제 불가”라는 별도 게임 규칙을 만들지는 않습니다.
 
+## v0.7 덱 편집 API
+
+기존 schema 2의 `decks`, `deck_general_slots`, `deck_tactic_slots`를 사용하며 새 migration은 없습니다.
+
+- `GET /v1/game-accounts/:accountId/decks` — `decks:read`
+- `POST /v1/game-accounts/:accountId/decks` — `decks:write`
+- `GET /v1/game-accounts/:accountId/decks/:deckId` — `decks:read`
+- `PATCH /v1/game-accounts/:accountId/decks/:deckId` — `decks:write`
+- `DELETE /v1/game-accounts/:accountId/decks/:deckId` — `decks:write`
+- `PUT /v1/game-accounts/:accountId/decks/:deckId/composition` — `decks:write`
+
+덱 본체는 이름, 선택적 시즌, 상태(`active`/`candidate`/`research`/`archived`), visibility(`private`/`alliance`/`public`), note, is_primary를 저장합니다.
+
+composition은 장수 position 1~3, 각 장수의 전법 slot 1~2, 선택적 무기·탈것 인스턴스를 한 요청으로 전체 교체합니다. 요청 전체를 검증한 뒤에만 D1 batch를 실행하므로 실패 시 기존 구성을 보존합니다.
+
+연구/후보덱을 위해 `user_generals` 또는 `user_tactics` 보유 여부는 구성의 선행 조건이 아닙니다. 장수는 활성 Registry 항목, 전법은 v0.5 canonical 장착 전법만 허용합니다. 장비는 같은 game account 소유 인스턴스여야 하며 weapon/mount 타입을 검증합니다.
+
+중복 장수·전법·장비 사용 금지 같은 출처 미확정 게임 규칙은 DATA 계층에서 임의로 만들지 않습니다.
+
+## v0.7 불변 덱 스냅샷
+
+기존 schema 2의 `deck_snapshots`를 사용합니다.
+
+- `POST /v1/game-accounts/:accountId/decks/:deckId/snapshots` — `decks:write`
+- `GET /v1/deck-snapshots` — `decks:read`
+- `GET /v1/deck-snapshots/:snapshotId` — `decks:read`
+
+스냅샷은 `dks_...` ID와 `format_version: 1` JSON을 생성하며 다음 값을 생성 시점에 동결합니다.
+
+- game account nickname/server
+- live deck 메타데이터
+- 장수 ID/이름과 owned/breakthrough/promotion 상태
+- 무기·탈것 ID/템플릿/이름과 nickname/locked/favorite 상태
+- 전법 ID/이름과 owned/breakthrough 상태
+
+생성 후 live deck, Registry 이름, 보유 상태, 돌파/승품, 장비 정보가 변경돼도 snapshot JSON을 다시 계산하지 않습니다. live deck 삭제 시 snapshot은 유지되고 `source_deck_id`만 NULL이 됩니다.
+
+`visibility=alliance|public`은 향후 공유 정책을 위한 저장 메타데이터입니다. v0.7의 snapshot list/detail은 visibility와 무관하게 `owner_user_id`로 격리하며 cross-user 조회는 아직 열지 않습니다.
+
 ## Registry APIs
 
 - `GET /v1/registry/summary`
@@ -144,10 +199,10 @@ DB에는 `user_equipment_stats`와 `user_equipment_traits` 자리가 이미 있�
 
 ## Deployment
 
-Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.6은 schema 2를 그대로 사용하며 새 migration은 없습니다.
+Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. v0.7 release candidate도 DATA schema 2를 그대로 사용하며 새 migration은 없습니다. 운영 배포가 검증되기 전에는 Current production golden을 v0.6에서 변경하지 않습니다.
 
 ## Next
 
-1. 덱 편집/스냅샷 API
-2. 장비 옵션/특기 authoritative Registry 보강 후 장비 옵션 API 개방
-3. 승품 재료 Registry 보강
+1. 장비 옵션/특기 authoritative Registry 보강 후 장비 옵션 API 개방
+2. 승품 재료 Registry 보강
+3. `deck_settings` 진형/병서 모델과 공개 API 설계
