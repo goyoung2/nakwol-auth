@@ -58,7 +58,6 @@ DATA control API:
 - `PUT /connect/cli/apps/:clientId/scopes`
 
 지원 scope:
-
 - `profile:read`, `profile:write`
 - `roster:read`, `roster:write`
 - `equipment:read`, `equipment:write`
@@ -66,13 +65,35 @@ DATA control API:
 
 ## v0.4 사용자 장수 보유 API
 
-기존 schema 2의 `user_generals`를 사용합니다. 새 migration 없이 장수 보유 여부를 행 존재로 관리하며 PUT은 항상 `owned=1`로 저장합니다.
+기존 schema 2의 `user_generals`를 사용합니다.
 
 - `GET /v1/game-accounts/:accountId/roster/generals` — `roster:read`
 - `PUT /v1/game-accounts/:accountId/roster/generals/:generalId` — `roster:write`
 - `DELETE /v1/game-accounts/:accountId/roster/generals/:generalId` — `roster:write`
 
 모든 endpoint는 AUTH principal이 실제 소유한 game account만 읽고 쓸 수 있습니다. 새 보유 장수는 `game_generals.enabled=1`인 Registry 항목만 허용합니다. 돌파는 0~5, 승품은 0 이상의 정수로 검증합니다.
+
+## v0.5 사용자 전법 보유 API
+
+기존 schema 2의 `user_tactics`를 그대로 사용합니다.
+
+- `GET /v1/game-accounts/:accountId/roster/tactics` — `roster:read`
+- `PUT /v1/game-accounts/:accountId/roster/tactics/:tacticId` — `roster:write`
+- `DELETE /v1/game-accounts/:accountId/roster/tactics/:tacticId` — `roster:write`
+
+전법 돌파는 0~5 정수입니다. PUT은 현재 상태를 멱등적으로 UPSERT하고 DELETE는 해당 계정의 보유 전법만 제거합니다.
+
+보유 가능한 정식 전법은 ID 대역을 추측하지 않고 authoritative Registry 메타데이터로 판정합니다. 다음 조건을 모두 만족해야 합니다.
+
+- `enabled=1`
+- `class=5`
+- `learn=1`
+- `get=3`
+- `copy=0`
+- `chip>0`
+- 어떤 장수의 `unique_tactic_id`로도 참조되지 않음
+
+현재 확정 Seed에서는 이 조건을 만족하는 정식 보유 전법이 146개이고, 146개 모두 서로 다른 chip에 1:1로 연결됩니다. `755x`, `177xx`, `600xxx`, `810xxx` 등의 chip 없는 내부/콘텐츠 파생 레코드는 자동으로 제외됩니다.
 
 ## Registry APIs
 
@@ -87,11 +108,10 @@ DATA control API:
 
 ## Deployment
 
-Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.4은 schema 2를 그대로 사용하며 새 migration은 없습니다.
+Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.5는 schema 2를 그대로 사용하며 새 migration은 없습니다.
 
 ## Next
 
-1. 사용자 전법 보유/돌파 API와 실제 보유 가능 전법 분류
-2. 무기·탈것 인스턴스 API
-3. 덱 편집/스냅샷 API
-4. 승품 재료와 장비 특기 Registry 보강
+1. 무기·탈것 인스턴스 API
+2. 덱 편집/스냅샷 API
+3. 승품 재료와 장비 특기 Registry 보강

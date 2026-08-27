@@ -1,5 +1,6 @@
 import type { DataEnv, DataPrincipal, DataScope } from './types.ts';
-import type { OwnedGeneralInput } from './domain.ts';
+import { isCanonicalOwnableTacticMetadata } from './domain.ts';
+import type { OwnedGeneralInput, OwnedTacticInput } from './domain.ts';
 
 export async function upsertDataUser(env: Pick<DataEnv, 'DB'>, principal: DataPrincipal): Promise<void> {
   const now = Date.now();
@@ -130,4 +131,43 @@ export async function deleteOwnedGeneral(env: Pick<DataEnv, 'DB'>, userId: strin
   if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
   await env.DB.prepare(`DELETE FROM user_generals WHERE account_id = ? AND general_id = ?`).bind(accountId, generalId).run();
   return { kind:'ok', data:{ deleted:true, general_id:generalId } };
+}
+
+export async function listOwnedTactics(env: Pick<DataEnv, 'DB'>, userId: string, accountId: string) {
+  if (!await ownsGameAccount(env, userId, accountId)) return null;
+  const result = await env.DB.prepare(`SELECT ut.tactic_id, t.name, ut.breakthrough, ut.favorite, ut.note, ut.updated_at FROM user_tactics ut JOIN game_tactics t ON t.id = ut.tactic_id WHERE ut.account_id = ? AND ut.owned = 1 ORDER BY t.name, ut.tactic_id`).bind(accountId).all<{ tactic_id:string; name:string; breakthrough:number; favorite:number; note:string|null; updated_at:number }>();
+  return result.results.map((row) => ({ ...row, favorite:Boolean(row.favorite) }));
+}
+
+type TacticRegistryRow = { id:string; name:string; metadata_json:string };
+async function getCanonicalOwnableTactic(env: Pick<DataEnv, 'DB'>, tacticId:string):Promise<{id:string;name:string}|null> {
+  const tactic = await env.DB.prepare(`SELECT id, name, metadata_json FROM game_tactics WHERE id = ? AND enabled = 1 LIMIT 1`).bind(tacticId).first<TacticRegistryRow>();
+  if (!tactic) return null;
+  let metadata:Record<string,unknown> = {};
+  try { metadata = JSON.parse(tactic.metadata_json || '{}') as Record<string,unknown>; } catch { return null; }
+  if (!isCanonicalOwnableTacticMetadata(metadata)) return null;
+  const unique = await env.DB.prepare(`SELECT 1 AS matched FROM game_generals WHERE unique_tactic_id = ? LIMIT 1`).bind(tacticId).first<{matched:number}>();
+  if (unique) return null;
+  return { id:tactic.id, name:tactic.name };
+}
+
+export type UpsertOwnedTacticResult =
+  | { kind:'account_not_found' }
+  | { kind:'tactic_not_found' }
+  | { kind:'ok'; data:{ tactic_id:string; name:string; breakthrough:number; favorite:boolean; note:string|null; updated_at:number } };
+
+export async function upsertOwnedTactic(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, tacticId:string, input:OwnedTacticInput):Promise<UpsertOwnedTacticResult> {
+  if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
+  const tactic = await getCanonicalOwnableTactic(env, tacticId);
+  if (!tactic) return { kind:'tactic_not_found' };
+  const now = Date.now();
+  await env.DB.prepare(`INSERT INTO user_tactics(account_id,tactic_id,owned,breakthrough,favorite,note,updated_at) VALUES (?,?,1,?,?,?,?) ON CONFLICT(account_id,tactic_id) DO UPDATE SET owned=1, breakthrough=excluded.breakthrough, favorite=excluded.favorite, note=excluded.note, updated_at=excluded.updated_at`).bind(accountId,tacticId,input.breakthrough,input.favorite?1:0,input.note,now).run();
+  return { kind:'ok', data:{ tactic_id:tacticId, name:tactic.name, breakthrough:input.breakthrough, favorite:input.favorite, note:input.note, updated_at:now } };
+}
+
+export type DeleteOwnedTacticResult = { kind:'account_not_found' } | { kind:'ok'; data:{ deleted:true; tactic_id:string } };
+export async function deleteOwnedTactic(env: Pick<DataEnv, 'DB'>, userId:string, accountId:string, tacticId:string):Promise<DeleteOwnedTacticResult> {
+  if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
+  await env.DB.prepare(`DELETE FROM user_tactics WHERE account_id = ? AND tactic_id = ?`).bind(accountId, tacticId).run();
+  return { kind:'ok', data:{ deleted:true, tactic_id:tacticId } };
 }
