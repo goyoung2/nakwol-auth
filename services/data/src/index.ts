@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
-import { handleCreateDeck, handleDeleteDeck, handleGetDeck, handleListDecks, handlePatchDeck } from './routes/decks';
+import { handleCreateDeck, handleDeleteDeck, handleGetDeck, handleListDecks, handlePatchDeck, handlePutDeckComposition } from './routes/decks';
 import { handleCreateEquipment, handleDeleteEquipment, handleListEquipment, handlePatchEquipment } from './routes/equipment';
 import { handleDeleteOwnedGeneral, handleListOwnedGenerals, handlePutOwnedGeneral } from './routes/generals';
 import { handleDeleteOwnedTactic, handleListOwnedTactics, handlePutOwnedTactic } from './routes/tactics';
@@ -28,6 +28,7 @@ app.patch('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handlePa
 app.delete('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handleDeleteEquipment(c.req.param('accountId'), c.req.param('equipmentId'), c.req.raw, c.env));
 app.get('/v1/game-accounts/:accountId/decks', (c) => handleListDecks(c.req.param('accountId'), c.req.raw, c.env));
 app.post('/v1/game-accounts/:accountId/decks', (c) => handleCreateDeck(c.req.param('accountId'), c.req.raw, c.env));
+app.put('/v1/game-accounts/:accountId/decks/:deckId/composition', (c) => handlePutDeckComposition(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
 app.get('/v1/game-accounts/:accountId/decks/:deckId', (c) => handleGetDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
 app.patch('/v1/game-accounts/:accountId/decks/:deckId', (c) => handlePatchDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
 app.delete('/v1/game-accounts/:accountId/decks/:deckId', (c) => handleDeleteDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
