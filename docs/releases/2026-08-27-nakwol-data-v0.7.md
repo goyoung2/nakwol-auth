@@ -2,12 +2,16 @@
 
 Date: 2026-08-27
 Service: `nakwol-data`
-Target service version: `0.7.0`
+Service version: `0.7.0`
 Schema: `2`
 Release branch: `feature/nakwol-data-v0.7-decks`
 Pull request: `#15`
 Base production golden: DATA `0.6.0`
 Base main commit: `6820c09d5b798030d6f51076eb63ff1d70ce49bc`
+Release merge commit: `bfdfd7e2e4605cf0ed13cd5e67be609ea324e996`
+Deploy trigger commit: `771b832d731ed6605d5e6435f5c134e6a2cb4d2d`
+Production workflow run: `33043770476`
+Production Worker Version ID: `1337d16b-1b72-4ec1-b26f-f0a99c5a5330`
 
 ## Design and implementation records
 
@@ -101,7 +105,7 @@ Composition GREEN — workflow `33042790684` after correcting one SQLite test-ro
 Feature GREEN — workflow `33042947242`, job `98420425107`:
 
 - tests: 64 passed, 0 failed
-- snapshot capture state test: passed
+- snapshot capture-state test: passed
 - snapshot immutability-after-live-change test: passed
 - snapshot owner-isolation test: passed
 - TypeScript typecheck: passed
@@ -120,21 +124,47 @@ Release-contract GREEN — workflow `33043165550`, job `98421110403`:
 - TypeScript typecheck: passed
 - Worker dry-run bundle: passed
 
+Code-review RED — workflow `33043519789`, job `98422199331`:
+
+- total tests: 65
+- passed: 64
+- failed: 1
+- newly added snapshot-create scope/source-deck-owner isolation test passed
+- only failure: explicit `visibility: null` was incorrectly treated as an omitted value and defaulted to `alliance`
+
+Review-fix GREEN — workflow `33043642697`, job `98422584863`, head `ab0c1f46dafdb5810f670fd2f707b446c6da18c5`:
+
+- tests: 65 passed, 0 failed
+- explicit null snapshot visibility is rejected
+- snapshot-create scope and source-deck ownership isolation passed
+- TypeScript typecheck: passed
+- Worker dry-run bundle: passed
+- final diff review found no additional blocking issue
+
 ## Production verification
 
-Pending merge and production deployment.
+Production deployment completed successfully on 2026-08-27.
 
-Do not replace the DATA v0.6 production golden until all of the following have fresh production evidence:
+- PR #15 merge commit: `bfdfd7e2e4605cf0ed13cd5e67be609ea324e996`
+- deploy-trigger commit: `771b832d731ed6605d5e6435f5c134e6a2cb4d2d`
+- deployment workflow: `Deploy NAKWOL DATA`, run `33043770476`, job `98422986831`
+- production Worker Version ID: `1337d16b-1b72-4ec1-b26f-f0a99c5a5330`
+- deploy-time tests: 65 passed, 0 failed
+- TypeScript typecheck: passed
+- Worker dry-run bundle: passed
+- exact DATA D1 binding: `NAKWOL_DATA_D1_READY`
+- D1 migrations: `No migrations to apply!`
+- Registry seed: `NAKWOL_DATA_REGISTRY_SEEDED:0.2.0:--remote`
+- Registry import: 2,155 queries processed
+- Registry counts: generals 209, enabled generals 140, tactics 1,077, equipment templates 134, stat types 281, formations 8, warbooks 442
+- Registry count gate: `NAKWOL_DATA_REGISTRY_COUNTS_OK`
+- production `/api/health`: HTTP 200
+- production `/api/schema`: HTTP 200
+- production contract: service `nakwol-data`, version `0.7.0`, schema `2`
+- production smoke matched the full v0.7 contract on attempt 1
+- production smoke gate: `NAKWOL_DATA_DEPLOY_OK`
 
-- PR #15 merged to `main`;
-- `ops/data-deploy.flag` triggers DATA 0.7 deployment;
-- deploy-time full tests/typecheck/bundle pass;
-- exact existing D1 is resolved;
-- D1 reports no new migration to apply;
-- Registry UPSERT and count gate pass;
-- Worker deploy completes and returns a new Worker Version ID;
-- `/api/health` and `/api/schema` return HTTP 200 with service `nakwol-data`, version `0.7.0`, schema `2`;
-- `NAKWOL_DATA_DEPLOY_OK` is emitted.
+This release is the production golden baseline for NAKWOL DATA through permanent player assets, live deck editing and immutable deck snapshots.
 
 ## Next planned DATA work
 
