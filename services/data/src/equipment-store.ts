@@ -121,19 +121,23 @@ function toEquipmentData(row:EquipmentRow, traits:EquipmentTraitData[]):Equipmen
   };
 }
 
+const D1_EQUIPMENT_TRAIT_READ_CHUNK_SIZE = 100;
+
 async function loadTraitsForEquipmentIds(env:Pick<DataEnv,'DB'>, equipmentIds:string[]):Promise<Map<string,EquipmentTraitData[]>> {
   const grouped=new Map<string,EquipmentTraitData[]>();
-  if (equipmentIds.length===0) return grouped;
-  const placeholders=equipmentIds.map(()=>'?').join(',');
-  const result=await env.DB.prepare(`SELECT ut.equipment_id,ut.slot,gt.id AS trait_id,gt.kind,gt.name,gt.description
-    FROM user_equipment_traits ut
-    JOIN game_equipment_traits gt ON gt.id = ut.trait_id
-    WHERE ut.equipment_id IN (${placeholders})
-    ORDER BY ut.equipment_id,ut.slot`).bind(...equipmentIds).all<TraitJoinRow>();
-  for (const row of result.results || []) {
-    const items=grouped.get(row.equipment_id)??[];
-    items.push({ slot:row.slot,trait_id:row.trait_id,kind:row.kind,name:row.name,description:row.description });
-    grouped.set(row.equipment_id,items);
+  for (let offset=0; offset<equipmentIds.length; offset+=D1_EQUIPMENT_TRAIT_READ_CHUNK_SIZE) {
+    const chunk=equipmentIds.slice(offset,offset+D1_EQUIPMENT_TRAIT_READ_CHUNK_SIZE);
+    const placeholders=chunk.map(()=>'?').join(',');
+    const result=await env.DB.prepare(`SELECT ut.equipment_id,ut.slot,gt.id AS trait_id,gt.kind,gt.name,gt.description
+      FROM user_equipment_traits ut
+      JOIN game_equipment_traits gt ON gt.id = ut.trait_id
+      WHERE ut.equipment_id IN (${placeholders})
+      ORDER BY ut.equipment_id,ut.slot`).bind(...chunk).all<TraitJoinRow>();
+    for (const row of result.results || []) {
+      const items=grouped.get(row.equipment_id)??[];
+      items.push({ slot:row.slot,trait_id:row.trait_id,kind:row.kind,name:row.name,description:row.description });
+      grouped.set(row.equipment_id,items);
+    }
   }
   return grouped;
 }
