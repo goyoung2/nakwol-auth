@@ -1,4 +1,4 @@
-export const DATA_SERVICE_VERSION = '0.3.0' as const;
+export const DATA_SERVICE_VERSION = '0.4.0' as const;
 export const DATA_SCHEMA_VERSION = 2 as const;
 
 export const DATA_SCOPES = [
@@ -14,5 +14,16 @@ export function normalizeGameAccountInput(input:{nickname?:unknown;server_code?:
   if(!nickname) throw new Error('INVALID_NICKNAME');
   if(!serverCode) throw new Error('INVALID_SERVER_CODE');
   return {nickname,serverCode,isPrimary:input.is_primary===true};
+}
+export interface OwnedGeneralInput { breakthrough:number; promotion:number; favorite:boolean; note:string|null; }
+export function normalizeOwnedGeneralInput(input:{breakthrough?:unknown;promotion?:unknown;favorite?:unknown;note?:unknown;}):OwnedGeneralInput{
+  const breakthrough=input.breakthrough??0;
+  const promotion=input.promotion??0;
+  if(!Number.isInteger(breakthrough)||Number(breakthrough)<0||Number(breakthrough)>5) throw new Error('INVALID_BREAKTHROUGH');
+  if(!Number.isInteger(promotion)||Number(promotion)<0) throw new Error('INVALID_PROMOTION');
+  if(input.favorite!==undefined&&typeof input.favorite!=='boolean') throw new Error('INVALID_FAVORITE');
+  if(input.note!==undefined&&input.note!==null&&typeof input.note!=='string') throw new Error('INVALID_NOTE');
+  const note=typeof input.note==='string'?(input.note.trim()||null):null;
+  return {breakthrough:Number(breakthrough),promotion:Number(promotion),favorite:input.favorite===true,note};
 }
 export function newDataId(prefix:DataIdPrefix):string{const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);const body=Array.from(bytes,(v)=>v.toString(16).padStart(2,'0')).join('');return `${prefix}_${body}`;}

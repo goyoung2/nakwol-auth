@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
+import { handleDeleteOwnedGeneral, handleListOwnedGenerals, handlePutOwnedGeneral } from './routes/generals';
 import { handleRegistryList, handleRegistrySummary } from './routes/registry';
 import { handleConnectCliGetScopes, handleConnectCliPutScopes } from './connect-cli';
 import type { DataEnv } from './types';
@@ -12,6 +13,9 @@ app.get('/api/schema', () => publicSchemaResponse());
 app.get('/v1/me', (c) => handleMe(c.req.raw, c.env));
 app.get('/v1/game-accounts', (c) => handleListGameAccounts(c.req.raw, c.env));
 app.post('/v1/game-accounts', (c) => handleCreateGameAccount(c.req.raw, c.env));
+app.get('/v1/game-accounts/:accountId/roster/generals', (c) => handleListOwnedGenerals(c.req.param('accountId'), c.req.raw, c.env));
+app.put('/v1/game-accounts/:accountId/roster/generals/:generalId', (c) => handlePutOwnedGeneral(c.req.param('accountId'), c.req.param('generalId'), c.req.raw, c.env));
+app.delete('/v1/game-accounts/:accountId/roster/generals/:generalId', (c) => handleDeleteOwnedGeneral(c.req.param('accountId'), c.req.param('generalId'), c.req.raw, c.env));
 app.get('/v1/registry/summary', (c) => handleRegistrySummary(c.req.raw, c.env));
 app.get('/v1/registry/generals', (c) => handleRegistryList('generals', c.req.raw, c.env));
 app.get('/v1/registry/tactics', (c) => handleRegistryList('tactics', c.req.raw, c.env));

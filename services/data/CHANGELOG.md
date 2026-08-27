@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 - 2026-08-27
+
+- Add authenticated owned-general list/upsert/delete APIs on existing `user_generals` schema.
+- Enforce `roster:read` for reads and `roster:write` for mutations.
+- Isolate roster access to game accounts owned by the verified AUTH principal.
+- Accept only enabled Registry generals for new owned-general records.
+- Validate breakthrough as 0..5 and promotion as a non-negative integer.
+- Keep DATA schema at version 2; no migration is required.
+
 ## 0.3.0 - 2026-08-27
 
 - Add Connect CLI control endpoints for exact DATA scope get/replace.
