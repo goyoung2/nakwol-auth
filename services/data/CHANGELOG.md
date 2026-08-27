@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 - 2026-08-27
+
+- Add authenticated live-deck list/create/read/update/delete APIs using existing schema-2 deck tables.
+- Add atomic whole-composition replacement for up to three general positions and two tactic slots per position.
+- Allow planned/research decks to reference enabled Registry generals and canonical equipable tactics even when the account does not own them.
+- Reuse the v0.5 canonical tactic predicate and exclude general unique/internal tactic records from equip slots.
+- Restrict weapon/mount references to equipment instances owned by the same game account and validate equipment type without inventing duplicate-use rules.
+- Add immutable `dks_...` deck snapshots with `format_version: 1` that freeze deck metadata, Registry names, roster breakthrough/promotion state and equipment nickname/locked/favorite state at capture time.
+- Keep v0.7 snapshot list/detail owner-only even when snapshot visibility is `alliance` or `public`; cross-user sharing remains deferred.
+- Preserve snapshots after live-deck deletion through the existing `source_deck_id ON DELETE SET NULL` behavior.
+- Keep DATA schema at version 2; no migration is required.
+
 ## 0.6.0 - 2026-08-27
 
 - Add authenticated equipment instance list/create/update/delete APIs on the existing `user_equipment` schema.
