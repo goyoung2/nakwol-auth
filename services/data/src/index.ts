@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
+import { handleCreateEquipment, handleDeleteEquipment, handleListEquipment, handlePatchEquipment } from './routes/equipment';
 import { handleDeleteOwnedGeneral, handleListOwnedGenerals, handlePutOwnedGeneral } from './routes/generals';
 import { handleDeleteOwnedTactic, handleListOwnedTactics, handlePutOwnedTactic } from './routes/tactics';
 import { handleRegistryList, handleRegistrySummary } from './routes/registry';
@@ -20,6 +21,10 @@ app.delete('/v1/game-accounts/:accountId/roster/generals/:generalId', (c) => han
 app.get('/v1/game-accounts/:accountId/roster/tactics', (c) => handleListOwnedTactics(c.req.param('accountId'), c.req.raw, c.env));
 app.put('/v1/game-accounts/:accountId/roster/tactics/:tacticId', (c) => handlePutOwnedTactic(c.req.param('accountId'), c.req.param('tacticId'), c.req.raw, c.env));
 app.delete('/v1/game-accounts/:accountId/roster/tactics/:tacticId', (c) => handleDeleteOwnedTactic(c.req.param('accountId'), c.req.param('tacticId'), c.req.raw, c.env));
+app.get('/v1/game-accounts/:accountId/equipment', (c) => handleListEquipment(c.req.param('accountId'), c.req.raw, c.env));
+app.post('/v1/game-accounts/:accountId/equipment', (c) => handleCreateEquipment(c.req.param('accountId'), c.req.raw, c.env));
+app.patch('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handlePatchEquipment(c.req.param('accountId'), c.req.param('equipmentId'), c.req.raw, c.env));
+app.delete('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handleDeleteEquipment(c.req.param('accountId'), c.req.param('equipmentId'), c.req.raw, c.env));
 app.get('/v1/registry/summary', (c) => handleRegistrySummary(c.req.raw, c.env));
 app.get('/v1/registry/generals', (c) => handleRegistryList('generals', c.req.raw, c.env));
 app.get('/v1/registry/tactics', (c) => handleRegistryList('tactics', c.req.raw, c.env));
