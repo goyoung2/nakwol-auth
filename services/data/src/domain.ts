@@ -1,4 +1,4 @@
-export const DATA_SERVICE_VERSION = '0.4.0' as const;
+export const DATA_SERVICE_VERSION = '0.5.0' as const;
 export const DATA_SCHEMA_VERSION = 2 as const;
 
 export const DATA_SCOPES = [
