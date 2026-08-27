@@ -25,7 +25,7 @@ jobs:
           node-version: 22
       - name: Install DATA dependencies
         run: npm install --legacy-peer-deps
-      - name: Verify DATA v0.7
+      - name: Verify DATA v0.8
         run: |
           npm test
           npm run typecheck
@@ -40,16 +40,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT (SELECT COUNT(*) FROM game_generals) AS generals,(SELECT COUNT(*) FROM game_generals WHERE enabled=1) AS generals_enabled,(SELECT COUNT(*) FROM game_tactics) AS tactics,(SELECT COUNT(*) FROM game_equipment_templates) AS equipment,(SELECT COUNT(*) FROM game_stat_types) AS stat_types,(SELECT COUNT(*) FROM game_formations) AS formations,(SELECT COUNT(*) FROM game_warbooks) AS warbooks;" > /tmp/data-registry.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT (SELECT COUNT(*) FROM game_generals) AS generals,(SELECT COUNT(*) FROM game_generals WHERE enabled=1) AS generals_enabled,(SELECT COUNT(*) FROM game_tactics) AS tactics,(SELECT COUNT(*) FROM game_equipment_templates) AS equipment,(SELECT COUNT(*) FROM game_stat_types) AS stat_types,(SELECT COUNT(*) FROM game_formations) AS formations,(SELECT COUNT(*) FROM game_warbooks) AS warbooks,(SELECT COUNT(*) FROM game_equipment_traits WHERE kind='skill' AND evidence_state='canonical') AS traits_skill,(SELECT COUNT(*) FROM game_equipment_traits WHERE kind='effect' AND evidence_state='canonical') AS traits_effect,(SELECT COUNT(*) FROM game_equipment_trait_applicability WHERE evidence_state='canonical') AS traits_applicability;" > /tmp/data-registry.json
           node - <<'NODE'
           const fs = require('fs'); const payload=JSON.parse(fs.readFileSync('/tmp/data-registry.json','utf8'));
           function find(v){if(!v||typeof v!=='object')return null;if(v.generals===209&&v.generals_enabled===140)return v;for(const c of Object.values(v)){if(Array.isArray(c)){for(const i of c){const f=find(i);if(f)return f;}}else{const f=find(c);if(f)return f;}}return null;}
-          const row=find(payload); if(!row||row.tactics!==1077||row.equipment!==134||row.stat_types!==281||row.formations!==8||row.warbooks!==442) process.exit(1);
+          const row=find(payload); if(!row||row.tactics!==1077||row.equipment!==134||row.stat_types!==281||row.formations!==8||row.warbooks!==442||row.traits_skill!==106||row.traits_effect!==74||row.traits_applicability!==0) process.exit(1);
           NODE
           echo 'NAKWOL_DATA_REGISTRY_COUNTS_OK'
       - name: Deploy DATA Worker
         run: npx wrangler deploy --keep-vars
-      - name: Verify production DATA v0.7
+      - name: Verify production DATA v0.8
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
             health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-health.json -w '%{http_code}' "$origin/api/health" || true)
             schema=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-schema.json -w '%{http_code}' "$origin/api/schema" || true)
             echo "attempt=$i health=$health schema=$schema"
-            if [ "$health" = '200' ] && [ "$schema" = '200' ] && grep -q '"service":"nakwol-data"' /tmp/data-health.json && grep -q '"version":"0.7.0"' /tmp/data-health.json && grep -q '"schema_version":2' /tmp/data-schema.json; then
+            if [ "$health" = '200' ] && [ "$schema" = '200' ] && grep -q '"service":"nakwol-data"' /tmp/data-health.json && grep -q '"version":"0.8.0"' /tmp/data-health.json && grep -q '"schema_version":3' /tmp/data-schema.json; then
               echo 'NAKWOL_DATA_DEPLOY_OK'; exit 0
             fi
             sleep 5
