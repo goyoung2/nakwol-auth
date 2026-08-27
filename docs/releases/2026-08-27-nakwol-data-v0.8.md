@@ -167,6 +167,22 @@ Release-contract GREEN — workflow `33049359159`, job `98440803851`:
 - bootstrap/deploy contracts updated to `0.8.0 / schema 3`
 - production count gate includes 106 canonical skill identities, 74 canonical effect identities and initial canonical applicability count 0
 
+Review-driven D1 limit RED — workflow `33049932802`, job `98442678791`:
+
+- 70 tests total
+- 69 passed
+- only failure: an inventory of 101 equipment instances caused one trait-read `IN (...)` query to bind 101 IDs and exceed the guarded D1 100-bound-parameter limit
+- functional v0.8 contracts remained green
+
+Review-driven D1 limit GREEN — branch commit `2c66200c5c117cef12c3e7c232e265cfd2ba145e`, workflow `33051086648`, job `98446490878`:
+
+- trait reads are chunked at a maximum of 100 equipment IDs per query
+- 70/70 tests passed
+- D1 large-inventory regression passed
+- TypeScript typecheck passed
+- Worker dry-run bundle passed
+- no API, evidence, ownership or mutation contract changed by the fix
+
 ## Production verification
 
 Pending merge and production deployment.
