@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 - 2026-08-27
+
+- Add authenticated owned-tactic list/upsert/delete APIs on the existing `user_tactics` schema.
+- Enforce `roster:read` for reads and `roster:write` for mutations, with game-account ownership isolation.
+- Derive canonical user-ownable tactics from authoritative Registry metadata and real chip linkage instead of ID-range heuristics.
+- Lock the current Registry invariant at 146 canonical ownable tactic records with 146 unique chip links.
+- Reject hidden tactics, chipless internal/content variants, copied variants and tactics referenced as a general's unique tactic.
+- Validate tactic breakthrough as 0..5 and keep writes idempotent.
+- Keep DATA schema at version 2; no migration is required.
+
 ## 0.4.0 - 2026-08-27
 
 - Add authenticated owned-general list/upsert/delete APIs on existing `user_generals` schema.

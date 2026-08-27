@@ -4,7 +4,7 @@ NAKWOL ID에 귀속되는 삼국지 천하결전 영구 게임 자산과 덱 정
 
 - Worker: `nakwol-data`
 - D1: `nakwol-data`
-- Service version: `0.4.0`
+- Service version: `0.5.0`
 - Schema version: `2`
 - Identity source: NAKWOL AUTH `/me`
 
@@ -37,21 +37,28 @@ X-NAKWOL-CLIENT-ID: my-app
 
 ## v0.4 owned generals
 
-사용자 장수 자산은 기존 schema 2의 `user_generals`를 사용하며 새 migration이 필요하지 않습니다.
-
 - `GET /v1/game-accounts/:accountId/roster/generals` — `roster:read`
 - `PUT /v1/game-accounts/:accountId/roster/generals/:generalId` — `roster:write`
 - `DELETE /v1/game-accounts/:accountId/roster/generals/:generalId` — `roster:write`
 
-`PUT`은 한 장수의 현재 상태를 멱등적으로 저장합니다. 생략한 값은 `breakthrough=0`, `promotion=0`, `favorite=false`, `note=null`로 취급합니다.
+`PUT`은 한 장수의 현재 상태를 멱등적으로 저장합니다. `breakthrough`는 0~5, `promotion`은 0 이상의 정수입니다. 활성화된 Registry 장수만 새 보유 자산으로 등록할 수 있습니다.
+
+## v0.5 owned tactics
+
+- `GET /v1/game-accounts/:accountId/roster/tactics` — `roster:read`
+- `PUT /v1/game-accounts/:accountId/roster/tactics/:tacticId` — `roster:write`
+- `DELETE /v1/game-accounts/:accountId/roster/tactics/:tacticId` — `roster:write`
+
+`PUT` 예시:
 
 ```json
 {
   "breakthrough": 5,
-  "promotion": 7,
   "favorite": true,
   "note": "주력"
 }
 ```
 
-`breakthrough`는 0~5 정수, `promotion`은 0 이상의 정수입니다. 현재 Registry에서 사용자 노출 대상으로 활성화된 장수만 새 보유 자산으로 등록할 수 있고, 모든 요청은 AUTH 사용자가 실제 소유한 game account에만 접근할 수 있습니다.
+전법 돌파는 0~5 정수입니다. 새 보유 자산은 authoritative Registry에서 실제 전법 보유 아이템과 연결되는 정식 레코드만 허용합니다. 현재 판정은 `enabled=1`, `class=5`, `learn=1`, `get=3`, `copy=0`, `chip>0`을 만족하고 어떤 장수의 `unique_tactic_id`로도 참조되지 않아야 합니다. 현 Seed에서는 이 조건을 만족하는 전법이 146개이며 chip도 146개 모두 1:1로 유일합니다.
+
+장수와 전법 API 모두 AUTH가 확인한 사용자가 실제 소유한 game account만 읽고 쓸 수 있습니다.
