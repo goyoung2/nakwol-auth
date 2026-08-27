@@ -161,4 +161,4 @@ test('owned general DELETE removes the account asset and remains owner isolated'
   const body = await response.json() as any;
   assert.deepEqual(body.data, { deleted: true, general_id: 'general:1' });
   assert.equal(DB.raw.prepare('SELECT COUNT(*) AS n FROM user_generals WHERE account_id=?').get('gac_a').n, 0);
-}
+});
