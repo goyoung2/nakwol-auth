@@ -25,7 +25,7 @@ jobs:
           node-version: 22
       - name: Install DATA dependencies
         run: npm install --legacy-peer-deps
-      - name: Verify DATA v0.6
+      - name: Verify DATA v0.7
         run: |
           npm test
           npm run typecheck
@@ -49,7 +49,7 @@ jobs:
           echo 'NAKWOL_DATA_REGISTRY_COUNTS_OK'
       - name: Deploy DATA Worker
         run: npx wrangler deploy --keep-vars
-      - name: Verify production DATA v0.6
+      - name: Verify production DATA v0.7
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
             health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-health.json -w '%{http_code}' "$origin/api/health" || true)
             schema=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-schema.json -w '%{http_code}' "$origin/api/schema" || true)
             echo "attempt=$i health=$health schema=$schema"
-            if [ "$health" = '200' ] && [ "$schema" = '200' ] && grep -q '"service":"nakwol-data"' /tmp/data-health.json && grep -q '"version":"0.6.0"' /tmp/data-health.json && grep -q '"schema_version":2' /tmp/data-schema.json; then
+            if [ "$health" = '200' ] && [ "$schema" = '200' ] && grep -q '"service":"nakwol-data"' /tmp/data-health.json && grep -q '"version":"0.7.0"' /tmp/data-health.json && grep -q '"schema_version":2' /tmp/data-schema.json; then
               echo 'NAKWOL_DATA_BOOTSTRAP_OK'; exit 0
             fi
             sleep 5
