@@ -62,7 +62,7 @@ TDD RED:
 
 Implementation GREEN:
 
-- total tests: 50 passed
+- total tests at first implementation gate: 50 passed
 - TypeScript typecheck: passed
 - Worker dry-run bundle: passed
 
@@ -70,6 +70,14 @@ Release-contract RED:
 
 - after the service/package/test expectations were moved to 0.6.0, CI correctly failed because bootstrap/deploy workflows still asserted 0.5.0
 - workflows were then updated to assert 0.6.0
+
+Final release-candidate verification:
+
+- total tests: 52 passed, 0 failed
+- TypeScript typecheck: passed
+- Worker dry-run bundle: passed
+- package/service/deployment contract: `0.6.0`
+- schema contract: `2`
 
 ## Production verification
 
