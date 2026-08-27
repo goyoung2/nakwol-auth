@@ -20,22 +20,24 @@ DATA는 AUTH D1에 직접 접근하지 않습니다.
 
 ## Current production golden
 
-- DATA service: `0.7.0`
-- DATA schema: `2`
-- production Worker Version ID: `1337d16b-1b72-4ec1-b26f-f0a99c5a5330`
-- release merge commit: `bfdfd7e2e4605cf0ed13cd5e67be609ea324e996`
-- deploy trigger commit: `771b832d731ed6605d5e6435f5c134e6a2cb4d2d`
-- production workflow run: `33043770476`
-- verification: 65/65 tests, typecheck, Worker bundle, exact D1, no migration, Registry UPSERT/count gate, production health/schema passed
-- release record: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
+- DATA service: `0.8.0`
+- DATA schema: `3`
+- production Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
+- release merge commit: `509b74259891a54adf81cef29a0a3d84f2d01b43`
+- deploy trigger commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- production workflow run: `33051511909`
+- production workflow job: `98447911107`
+- verification: 70/70 tests, typecheck, Worker bundle, exact D1, schema-3 migration, Registry UPSERT/count gate, production health/schema passed
+- Registry production gate: generals 209 / enabled generals 140 / tactics 1077 / equipment templates 134 / stat types 281 / formations 8 / warbooks 442 / canonical skill traits 106 / canonical effect traits 74 / canonical applicability 0
+- release record: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
 
-이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6), live deck 편집과 불변 snapshot(v0.7)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다. **v0.8 운영 배포가 끝나기 전에는 이 production golden을 변경하지 않습니다.**
+이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6), live deck 편집과 불변 snapshot(v0.7), 장비 특기/이펙트 canonical identity와 evidence-gated mutation 및 snapshot trait 동결(v0.8)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다.
 
-## v0.8 release candidate
+## v0.8 production boundary
 
 v0.8.0은 장비 특기/이펙트의 canonical identity와 weapon/mount applicability evidence를 분리하는 schema 3 릴리스입니다.
 
-현재 release-candidate 범위:
+운영 반영 범위:
 
 - schema `2 -> 3` migration
 - 한국 클라이언트 기반 특기 `equipment_skill` 106개 + 이펙트 `equipment_effect` 74개 = canonical identity 180개
@@ -47,10 +49,11 @@ v0.8.0은 장비 특기/이펙트의 canonical identity와 weapon/mount applicab
 - equipment read 응답에 trait ID/kind/name/description 포함
 - deck snapshot에 당시 trait display state 동결
 - generic `stats` 쓰기 계속 차단
+- 대량 장비 목록에서 D1 100-bound-parameter 한계를 넘지 않도록 trait read를 100개 단위로 chunk
 
 초기 supplement에는 **canonical applicability가 0개**입니다. 이는 미완성이 아니라 안전 경계입니다. `equipment_skill`/`equipment_effect`의 ID·이름·설명은 authoritative client source로 확정됐지만, 각 항목이 weapon/mount 중 어디에 적용 가능한지를 완전하게 확정하는 별도 근거는 아직 부족합니다. 따라서 production에서 trait mutation 요청은 canonical applicability가 추가되기 전까지 `EQUIPMENT_TRAIT_UNVERIFIED_FOR_TYPE`으로 거부됩니다.
 
-현재 release-contract 후보는 `0.8.0 / schema 3`이며 PR #16에서 검증 중입니다. 개발 기록은 `docs/releases/2026-08-27-nakwol-data-v0.8.md`에 남깁니다.
+운영 배포는 migration `0003_equipment_options_v08.sql`, v0.2 Registry + v0.8 supplement seed, 106/74/0 특기 count gate, Worker deploy 및 `0.8.0 / schema 3` production smoke까지 통과했습니다. 상세 기록은 `docs/releases/2026-08-27-nakwol-data-v0.8.md`에 남깁니다.
 
 ## v0.2 Registry
 
