@@ -1,5 +1,5 @@
-export const DATA_SERVICE_VERSION = '0.7.0' as const;
-export const DATA_SCHEMA_VERSION = 2 as const;
+export const DATA_SERVICE_VERSION = '0.8.0' as const;
+export const DATA_SCHEMA_VERSION = 3 as const;
 
 export const DATA_SCOPES = [
   'profile:read','profile:write','roster:read','roster:write',
