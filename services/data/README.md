@@ -7,6 +7,7 @@ NAKWOL ID에 귀속되는 삼국지 천하결전 영구 게임 자산과 덱 정
 - Service version: `0.7.0`
 - Schema version: `2`
 - Identity source: NAKWOL AUTH `/me`
+- Release record: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
 
 ## Local
 
