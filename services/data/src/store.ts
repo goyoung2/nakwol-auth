@@ -1,4 +1,5 @@
 import type { DataEnv, DataPrincipal, DataScope } from './types.ts';
+import type { OwnedGeneralInput } from './domain.ts';
 
 export async function upsertDataUser(env: Pick<DataEnv, 'DB'>, principal: DataPrincipal): Promise<void> {
   const now = Date.now();
@@ -97,4 +98,36 @@ export async function getRegistrySummary(env: Pick<DataEnv, 'DB'>) {
       warbooks: await scalar(env, `SELECT COUNT(*) AS n FROM game_warbooks`),
     },
   };
+}
+
+async function ownsGameAccount(env: Pick<DataEnv, 'DB'>, userId: string, accountId: string): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT 1 AS owned FROM game_accounts WHERE id = ? AND user_id = ? LIMIT 1`).bind(accountId, userId).first<{ owned:number }>();
+  return Boolean(row?.owned);
+}
+
+export async function listOwnedGenerals(env: Pick<DataEnv, 'DB'>, userId: string, accountId: string) {
+  if (!await ownsGameAccount(env, userId, accountId)) return null;
+  const result = await env.DB.prepare(`SELECT ug.general_id, g.name, ug.breakthrough, ug.promotion, ug.favorite, ug.note, ug.updated_at FROM user_generals ug JOIN game_generals g ON g.id = ug.general_id WHERE ug.account_id = ? AND ug.owned = 1 ORDER BY g.name, ug.general_id`).bind(accountId).all<{ general_id:string; name:string; breakthrough:number; promotion:number; favorite:number; note:string|null; updated_at:number }>();
+  return result.results.map((row) => ({ ...row, favorite:Boolean(row.favorite) }));
+}
+
+export type UpsertOwnedGeneralResult =
+  | { kind:'account_not_found' }
+  | { kind:'general_not_found' }
+  | { kind:'ok'; data:{ general_id:string; name:string; breakthrough:number; promotion:number; favorite:boolean; note:string|null; updated_at:number } };
+
+export async function upsertOwnedGeneral(env: Pick<DataEnv, 'DB'>, userId: string, accountId: string, generalId: string, input: OwnedGeneralInput): Promise<UpsertOwnedGeneralResult> {
+  if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
+  const general = await env.DB.prepare(`SELECT id, name FROM game_generals WHERE id = ? AND enabled = 1 LIMIT 1`).bind(generalId).first<{ id:string; name:string }>();
+  if (!general) return { kind:'general_not_found' };
+  const now = Date.now();
+  await env.DB.prepare(`INSERT INTO user_generals(account_id,general_id,owned,breakthrough,promotion,favorite,note,updated_at) VALUES (?,?,1,?,?,?,?,?) ON CONFLICT(account_id,general_id) DO UPDATE SET owned=1, breakthrough=excluded.breakthrough, promotion=excluded.promotion, favorite=excluded.favorite, note=excluded.note, updated_at=excluded.updated_at`).bind(accountId,generalId,input.breakthrough,input.promotion,input.favorite?1:0,input.note,now).run();
+  return { kind:'ok', data:{ general_id:generalId, name:general.name, breakthrough:input.breakthrough, promotion:input.promotion, favorite:input.favorite, note:input.note, updated_at:now } };
+}
+
+export type DeleteOwnedGeneralResult = { kind:'account_not_found' } | { kind:'ok'; data:{ deleted:true; general_id:string } };
+export async function deleteOwnedGeneral(env: Pick<DataEnv, 'DB'>, userId: string, accountId: string, generalId: string): Promise<DeleteOwnedGeneralResult> {
+  if (!await ownsGameAccount(env, userId, accountId)) return { kind:'account_not_found' };
+  await env.DB.prepare(`DELETE FROM user_generals WHERE account_id = ? AND general_id = ?`).bind(accountId, generalId).run();
+  return { kind:'ok', data:{ deleted:true, general_id:generalId } };
 }
