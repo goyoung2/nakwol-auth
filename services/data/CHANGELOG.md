@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0 - 2026-08-27
+
+- Promote 180 Korean-client equipment special-option identities into DATA Registry: 106 `equipment_skill` rows and 74 `equipment_effect` rows with zero unresolved localization entries.
+- Add schema 3 evidence model separating canonical trait identity from weapon/mount applicability evidence.
+- Add `GET /v1/registry/equipment-traits` under `equipment:read`, exposing identity and applicability evidence independently.
+- Add evidence-gated `traits` support to equipment POST/PATCH; writes require both canonical identity and canonical applicability for the target equipment type.
+- Preserve atomic whole-trait replacement: all references validate before D1 mutation; PATCH omission preserves traits and `traits: []` clears them.
+- Keep duplicate slot invalid while not inventing restrictions on repeated trait IDs or skill/effect combinations without authoritative game evidence.
+- Keep generic `stats` writes blocked because the 281 generic stat definitions are not an authoritative equipment-option domain.
+- Extend equipment reads with Registry-backed trait display data and freeze trait ID/kind/name/description inside immutable deck snapshots.
+- Seed the v0.8 supplement by UPSERT only, preserving existing user-owned rows and all v0.2 Registry counts.
+- Initial canonical applicability count is intentionally zero; production trait writes remain closed until authoritative weapon/mount applicability evidence is added.
+
 ## 0.7.0 - 2026-08-27
 
 - Add authenticated live-deck list/create/read/update/delete APIs using existing schema-2 deck tables.
