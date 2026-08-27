@@ -9,19 +9,23 @@ Base main commit: `9608424b520f1320bcf6b30b143ab86c5f48bc9e`
 
 ## Goal
 
-Open the first authoritative equipment-option write path without reinterpreting the existing 281 generic game stat definitions as equipment options. v0.8 promotes client-backed equipment special traits/effects into Registry, exposes their evidence status, and permits user-equipment trait writes only when the trait is canonical and its applicability to the equipment type is explicitly verified.
+Open the first authoritative equipment special-option path without reinterpreting the existing 281 generic game stat definitions as equipment options. v0.8 promotes client-backed equipment `skill`/`effect` identities into Registry, exposes their evidence status, and implements mutation support behind an explicit applicability write gate.
+
+A production trait is writable only when both its identity and its applicability to the target equipment type have canonical evidence. The first v0.8 seed is allowed to contain zero canonically writable applicability rows rather than fabricate a rule. This means Registry/read support and the mutation contract can ship before every applicability rule is known.
 
 ## Evidence boundary
 
 The previously imported `nslg-s-season-raw-research-kit-v1` contains equipment templates and generic stat definitions, but it does not provide a complete authoritative equipment option/trait mapping. Therefore v0.6 correctly rejected both `stats` and `traits` writes.
 
-Newly identified project evidence changes only the special-trait boundary:
+Newly identified project evidence changes the special-option boundary:
 
-- `nslg-battle-report-platform/tools/battle_replay_pipeline/product_projection/build_enemy_deck_gear_catalog.js` reads the Korean client `decompiled_lua/Data/Scenario2001/equipment.lua` and parses `equipment_skill[...]` and `equipment_effect[...]` records with Korean localization. This is canonical client evidence for trait/effect identity, name, and description.
-- `nslg-battle-report-platform/tools/battle_replay_pipeline/product_projection/combatant_detail_projection.js` projects runtime `equipData` and `horseData` as slot/key/value observations. This is observation evidence, not by itself a complete possibility rule.
+- `nslg-battle-report-platform/tools/battle_replay_pipeline/product_projection/build_enemy_deck_gear_catalog.js` reads the Korean client `decompiled_lua/Data/Scenario2001/equipment.lua` and parses `equipment_skill[...]` and `equipment_effect[...]` records with Korean localization. This is canonical client evidence for special-option identity, native ID, name, and description.
+- The committed derived artifact `goyoung2/nslg-warroom/viewer/enemy-decks/gear-catalog.json`, blob `c1f94bc603be73c7498aa7258ba5b68cb8c32536`, contains 106 `skills`, 74 `effects`, and zero unresolved localization rows. These 180 rows form the v0.8 canonical identity source snapshot.
+- `nslg-battle-report-platform/tools/battle_replay_pipeline/product_projection/combatant_detail_projection.js` projects runtime `equipData` and `horseData` as slot/key/value observations. Runtime option keys are structurally distinct: `might`, `intelligence`, `defence`, `speed`, `skill`, and `effect`.
+- Runtime observations prove that a combination occurred, but absence from observations never proves a combination is impossible.
 - The DATA schema already has `game_equipment_traits`, `user_equipment_traits`, and two trait slots per equipment instance.
 
-v0.8 must preserve the distinction between canonical identity and observed applicability. Absence from observations never means impossible.
+v0.8 preserves the distinction between canonical identity and observed applicability.
 
 ## Chosen architecture: evidence-gated hybrid
 
@@ -33,11 +37,11 @@ Evidence states:
 - `observed`: seen in runtime/report evidence but not sufficient to claim a complete rule.
 - `unresolved`: preserved data whose meaning/applicability is not yet safe for mutation validation.
 
-`observed` records are readable but never become write-authority automatically.
+`observed` records are readable but never become write authority automatically.
 
 ## Schema 3
 
-The existing `game_equipment_traits` table remains the canonical trait identity table. Schema 3 adds explicit typed identity/evidence columns and a separate applicability table.
+The existing `game_equipment_traits` table remains the canonical identity table. Schema 3 adds explicit typed identity/evidence columns and a separate applicability table.
 
 `game_equipment_traits` additions:
 
@@ -57,33 +61,33 @@ New table `game_equipment_trait_applicability`:
 - primary key `(trait_id, equipment_type)`
 - FK to `game_equipment_traits(id)` with `ON DELETE CASCADE`
 
-The existing `game_equipment_traits.equipment_type` column is retained for compatibility but is no longer sufficient for mutation authorization. New code uses the applicability table. Unknown type is represented by no canonical applicability row, not by pretending `equipment_type='any'`.
+The existing `game_equipment_traits.equipment_type` column is retained for compatibility but is not mutation authority. New code uses the applicability table. Unknown type is represented by no canonical applicability row, not by pretending `equipment_type='any'`.
 
 Schema version becomes `3` through migration `0003_equipment_options_v08.sql`.
 
 ## Stable IDs
 
-Canonical Registry IDs use distinct namespaces so source IDs cannot collide across the two client tables:
+Canonical Registry IDs use distinct namespaces so equal source-native numbers from the two client tables cannot collide:
 
-- special trait: `ets:<native_id>` for `equipment_skill`
-- special effect: `ete:<native_id>` for `equipment_effect`
+- `ets:<native_id>` for `equipment_skill`
+- `ete:<native_id>` for `equipment_effect`
 
 The source-native ID and kind are also stored in columns and provenance metadata.
 
 ## Registry ingestion
 
-v0.8 adds a deterministic supplement seed for equipment traits instead of changing the meaning of the existing v0.2 seed.
+v0.8 adds a deterministic supplement seed for equipment special options instead of changing the meaning of the existing v0.2 Registry seed.
 
-The supplement format contains:
+The initial committed supplement is generated from the frozen `gear-catalog.json` source snapshot and contains:
 
-- source dataset/provenance metadata;
-- canonical trait/effect rows;
-- zero or more applicability rows with explicit evidence state;
+- 106 canonical `skill` identities;
+- 74 canonical `effect` identities;
+- zero unresolved identity rows;
+- zero or more applicability rows, but only when applicability has separate explicit evidence;
+- source repository/path/blob SHA and original source paths as provenance;
 - counts used by tests and deployment gates.
 
-The build/import scripts never infer applicability from a missing observation, text keyword, numeric ID range, or generic stat ID. Production seeding remains UPSERT-only and never deletes user-owned rows.
-
-If the authoritative client data is unavailable to the repository at implementation time, the importer and API may still be completed, but no trait becomes writable until a committed supplement contains a `canonical` applicability row. Production must never fabricate seed rows merely to make the API usable.
+The builder/importer never infers applicability from missing observations, text keywords, numeric ID ranges, generic stat IDs, or duplicate names. Production seeding remains UPSERT-only and never deletes user-owned rows.
 
 ## Registry API
 
@@ -91,7 +95,7 @@ Add authenticated Registry endpoint:
 
 `GET /v1/registry/equipment-traits`
 
-It requires `equipment:read` and returns enabled trait identities with:
+It requires `equipment:read` and returns enabled identities with:
 
 - `id`
 - `native_id`
@@ -100,9 +104,9 @@ It requires `equipment:read` and returns enabled trait identities with:
 - `description`
 - `evidence_state`
 - `applicability[]` containing equipment type and evidence state
-- provenance metadata already safe for Registry responses
+- provenance metadata safe for Registry responses
 
-Observed/unresolved rows remain visible so clients can explain why a trait is not currently writable.
+Observed/unresolved applicability remains visible so clients can explain why an identity is not currently writable.
 
 Existing `GET /v1/registry/equipment` remains unchanged.
 
@@ -134,14 +138,14 @@ Rules:
 - slots are integer 1 or 2 and unique;
 - `trait_id` must exist and be enabled;
 - trait identity must have `evidence_state='canonical'`;
-- the equipment template type must have a matching applicability row with `evidence_state='canonical'`;
+- the target equipment template type must have a matching applicability row with `evidence_state='canonical'`;
 - all trait references validate before replacement;
 - POST inserts the equipment instance and trait rows atomically;
 - PATCH replaces the entire trait set only when `traits` is present; omission leaves traits unchanged; `traits: []` clears both slots;
 - cross-account mutation remains impossible through existing owner isolation;
-- duplicate trait IDs across slot 1/2 are rejected because they are the same selected trait twice, a structural duplicate rather than a guessed game-balance rule.
+- the same `trait_id` in both slots is not rejected unless later authoritative game evidence establishes that restriction; v0.8 does not invent it.
 
-`stats` remains unsupported in v0.8 and still returns `EQUIPMENT_OPTIONS_UNSUPPORTED` (or the existing equivalent) because the generic 281 stat Registry is not an authoritative equipment-stat option domain.
+`stats` remains unsupported in v0.8 and continues to return `EQUIPMENT_OPTIONS_UNSUPPORTED` because the generic 281 stat Registry is not an authoritative equipment-stat option domain.
 
 ## Read representation
 
@@ -157,7 +161,7 @@ Equipment list/create/patch responses include `traits` joined with Registry disp
 }
 ```
 
-The API does not reconstruct historical values. Deck snapshot behavior is extended so a snapshot freezes the equipment traits attached at snapshot creation time, including Registry ID/kind/name/description. Later Registry renames or equipment edits do not mutate existing snapshot JSON.
+Deck snapshot behavior is extended so a snapshot freezes the equipment traits attached at snapshot creation time, including Registry ID/kind/name/description. Later Registry renames or equipment edits do not mutate existing snapshot JSON.
 
 ## Errors
 
@@ -165,7 +169,6 @@ New stable errors:
 
 - `INVALID_EQUIPMENT_TRAITS`
 - `DUPLICATE_EQUIPMENT_TRAIT_SLOT`
-- `DUPLICATE_EQUIPMENT_TRAIT`
 - `EQUIPMENT_TRAIT_NOT_FOUND`
 - `EQUIPMENT_TRAIT_UNVERIFIED`
 - `EQUIPMENT_TRAIT_UNVERIFIED_FOR_TYPE`
@@ -182,23 +185,24 @@ v0.8 does not:
 
 - treat all 281 `game_stat_types` as equipment options;
 - open `user_equipment_stats` writes;
-- infer min/max numeric option values;
-- infer weapon/mount applicability from names or missing observations;
-- add a public/cross-user equipment-sharing API;
+- infer min/max numeric stat-option values;
+- infer weapon/mount applicability from names, text, ID ranges, or missing observations;
+- add public/cross-user equipment sharing;
 - change equipment template identity or v0.7 deck composition rules;
-- invent a game rule requiring one `skill` plus one `effect` or forbidding two of the same kind unless authoritative evidence later establishes it.
+- invent a rule requiring one `skill` plus one `effect`, forbidding two of the same kind, or forbidding the same ID in both slots.
 
 ## Testing contract
 
 TDD must cover:
 
-- schema 2 -> 3 migration and idempotent production migration behavior;
-- deterministic trait supplement parsing and UPSERT preservation;
+- schema 2 -> 3 migration;
+- deterministic 106+74 identity supplement and provenance;
+- idempotent UPSERT preservation of user-owned rows;
 - Registry endpoint scope/evidence output;
 - POST/PATCH trait success only with canonical identity + canonical type applicability;
 - observed/unresolved/missing/wrong-type rejection;
 - owner isolation;
-- unique slot and duplicate trait validation;
+- unique slot validation;
 - all-reference validation before mutation and no partial replacement;
 - `stats` still rejected;
 - equipment reads include traits;
@@ -208,4 +212,4 @@ TDD must cover:
 
 ## Release boundary
 
-Do not replace the v0.7 production golden until the exact merged main commit has passed full tests/typecheck/bundle, schema-3 migration on the existing D1, seed/count validation, Worker deployment, and production `/api/health` + `/api/schema` smoke for `0.8.0` / schema `3`.
+Do not replace the v0.7 production golden until the exact merged main commit has passed full tests/typecheck/bundle, schema-3 migration on the existing D1, special-option seed/count validation, Worker deployment, and production `/api/health` + `/api/schema` smoke for `0.8.0` / schema `3`.
