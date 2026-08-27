@@ -48,36 +48,57 @@ function normalizeOptionalNickname(value:unknown):string|null {
   if(typeof value!=='string') throw new Error('INVALID_NICKNAME');
   return value.trim()||null;
 }
-function assertEquipmentOptionsUnsupported(input:Record<string,unknown>):void {
-  if(Object.prototype.hasOwnProperty.call(input,'stats')||Object.prototype.hasOwnProperty.call(input,'traits')) throw new Error('EQUIPMENT_OPTIONS_UNSUPPORTED');
+function assertUnsupportedEquipmentStats(input:Record<string,unknown>):void {
+  if(Object.prototype.hasOwnProperty.call(input,'stats')) throw new Error('EQUIPMENT_OPTIONS_UNSUPPORTED');
 }
-export interface CreateEquipmentInput { templateId:string; nickname:string|null; locked:boolean; favorite:boolean; }
+export interface EquipmentTraitInput { slot:1|2; traitId:string; }
+function normalizeEquipmentTraits(value:unknown):EquipmentTraitInput[] {
+  if(!Array.isArray(value)||value.length>2) throw new Error('INVALID_EQUIPMENT_TRAITS');
+  const slots=new Set<number>();
+  const result:EquipmentTraitInput[]=[];
+  for(const raw of value){
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw new Error('INVALID_EQUIPMENT_TRAITS');
+    const row=raw as Record<string,unknown>;
+    const slot=row.slot;
+    const traitId=typeof row.trait_id==='string'?row.trait_id.trim():'';
+    if((slot!==1&&slot!==2)||!traitId) throw new Error('INVALID_EQUIPMENT_TRAITS');
+    if(slots.has(slot)) throw new Error('DUPLICATE_EQUIPMENT_TRAIT_SLOT');
+    slots.add(slot);
+    result.push({slot,traitId});
+  }
+  return result.sort((a,b)=>a.slot-b.slot);
+}
+export interface CreateEquipmentInput { templateId:string; nickname:string|null; locked:boolean; favorite:boolean; traits:EquipmentTraitInput[]; }
 export function normalizeCreateEquipmentInput(input:Record<string,unknown>):CreateEquipmentInput {
-  assertEquipmentOptionsUnsupported(input);
+  assertUnsupportedEquipmentStats(input);
   const templateId=typeof input.template_id==='string'?input.template_id.trim():'';
   if(!templateId) throw new Error('INVALID_EQUIPMENT_TEMPLATE');
   if(input.locked!==undefined&&typeof input.locked!=='boolean') throw new Error('INVALID_LOCKED');
   if(input.favorite!==undefined&&typeof input.favorite!=='boolean') throw new Error('INVALID_FAVORITE');
-  return {templateId,nickname:normalizeOptionalNickname(input.nickname),locked:input.locked===true,favorite:input.favorite===true};
+  const traits=Object.prototype.hasOwnProperty.call(input,'traits')?normalizeEquipmentTraits(input.traits):[];
+  return {templateId,nickname:normalizeOptionalNickname(input.nickname),locked:input.locked===true,favorite:input.favorite===true,traits};
 }
 export interface PatchEquipmentInput {
   hasNickname:boolean; nickname:string|null;
   hasLocked:boolean; locked:boolean;
   hasFavorite:boolean; favorite:boolean;
+  hasTraits:boolean; traits:EquipmentTraitInput[];
 }
 export function normalizePatchEquipmentInput(input:Record<string,unknown>):PatchEquipmentInput {
-  assertEquipmentOptionsUnsupported(input);
+  assertUnsupportedEquipmentStats(input);
   if(Object.prototype.hasOwnProperty.call(input,'template_id')) throw new Error('EQUIPMENT_TEMPLATE_IMMUTABLE');
   const hasNickname=Object.prototype.hasOwnProperty.call(input,'nickname');
   const hasLocked=Object.prototype.hasOwnProperty.call(input,'locked');
   const hasFavorite=Object.prototype.hasOwnProperty.call(input,'favorite');
-  if(!hasNickname&&!hasLocked&&!hasFavorite) throw new Error('EMPTY_EQUIPMENT_PATCH');
+  const hasTraits=Object.prototype.hasOwnProperty.call(input,'traits');
+  if(!hasNickname&&!hasLocked&&!hasFavorite&&!hasTraits) throw new Error('EMPTY_EQUIPMENT_PATCH');
   if(hasLocked&&typeof input.locked!=='boolean') throw new Error('INVALID_LOCKED');
   if(hasFavorite&&typeof input.favorite!=='boolean') throw new Error('INVALID_FAVORITE');
   return {
     hasNickname,nickname:hasNickname?normalizeOptionalNickname(input.nickname):null,
     hasLocked,locked:input.locked===true,
     hasFavorite,favorite:input.favorite===true,
+    hasTraits,traits:hasTraits?normalizeEquipmentTraits(input.traits):[],
   };
 }
 export function newDataId(prefix:DataIdPrefix):string{const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);const body=Array.from(bytes,(v)=>v.toString(16).padStart(2,'0')).join('');return `${prefix}_${body}`;}
