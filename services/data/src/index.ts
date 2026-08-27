@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
+import { handleCreateDeck, handleDeleteDeck, handleGetDeck, handleListDecks, handlePatchDeck } from './routes/decks';
 import { handleCreateEquipment, handleDeleteEquipment, handleListEquipment, handlePatchEquipment } from './routes/equipment';
 import { handleDeleteOwnedGeneral, handleListOwnedGenerals, handlePutOwnedGeneral } from './routes/generals';
 import { handleDeleteOwnedTactic, handleListOwnedTactics, handlePutOwnedTactic } from './routes/tactics';
@@ -25,6 +26,11 @@ app.get('/v1/game-accounts/:accountId/equipment', (c) => handleListEquipment(c.r
 app.post('/v1/game-accounts/:accountId/equipment', (c) => handleCreateEquipment(c.req.param('accountId'), c.req.raw, c.env));
 app.patch('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handlePatchEquipment(c.req.param('accountId'), c.req.param('equipmentId'), c.req.raw, c.env));
 app.delete('/v1/game-accounts/:accountId/equipment/:equipmentId', (c) => handleDeleteEquipment(c.req.param('accountId'), c.req.param('equipmentId'), c.req.raw, c.env));
+app.get('/v1/game-accounts/:accountId/decks', (c) => handleListDecks(c.req.param('accountId'), c.req.raw, c.env));
+app.post('/v1/game-accounts/:accountId/decks', (c) => handleCreateDeck(c.req.param('accountId'), c.req.raw, c.env));
+app.get('/v1/game-accounts/:accountId/decks/:deckId', (c) => handleGetDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
+app.patch('/v1/game-accounts/:accountId/decks/:deckId', (c) => handlePatchDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
+app.delete('/v1/game-accounts/:accountId/decks/:deckId', (c) => handleDeleteDeck(c.req.param('accountId'), c.req.param('deckId'), c.req.raw, c.env));
 app.get('/v1/registry/summary', (c) => handleRegistrySummary(c.req.raw, c.env));
 app.get('/v1/registry/generals', (c) => handleRegistryList('generals', c.req.raw, c.env));
 app.get('/v1/registry/tactics', (c) => handleRegistryList('tactics', c.req.raw, c.env));
