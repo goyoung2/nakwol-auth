@@ -13,6 +13,12 @@ const REQUIRED = [
 ];
 
 const loadV02 = async () => `${await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8')}\n${await readFile(new URL('../migrations/0002_registry_v02.sql', import.meta.url), 'utf8')}`;
+const loadV03 = async () => readFile(new URL('../migrations/0003_equipment_options_v08.sql', import.meta.url), 'utf8');
+
+async function applyCurrentSchema(db: DatabaseSync): Promise<void> {
+  db.exec(await loadV02());
+  db.exec(await loadV03());
+}
 
 function columnNames(db: DatabaseSync, table: string): Set<string> {
   return new Set((db.prepare(`PRAGMA table_info(${table})`).all() as any[]).map((row) => String(row.name)));
@@ -20,7 +26,7 @@ function columnNames(db: DatabaseSync, table: string): Set<string> {
 
 test('migrations create the v0.8 schema 3 equipment evidence model', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec(await loadV02());
+  await applyCurrentSchema(db);
 
   const names = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as any[]).map((row) => row.name));
   for (const table of REQUIRED) assert.equal(names.has(table), true, `missing ${table}`);
@@ -50,14 +56,16 @@ test('schema 3 migration preserves schema-2 user trait rows', async () => {
   db.prepare('INSERT INTO user_equipment(id,account_id,template_id,nickname,locked,favorite,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run('eqp_legacy','gac_test','w:1',null,0,0,now,now);
   db.prepare("INSERT INTO user_equipment_traits(equipment_id,slot,trait_id) VALUES ('eqp_legacy',1,'legacy:1')").run();
 
-  // RED: schema-2 state cannot yet satisfy the v0.8 evidence model.
+  db.exec(await loadV03());
+
   assert.equal((db.prepare("SELECT value FROM data_schema_meta WHERE key='schema_version'").get() as any)?.value, '3');
   assert.equal((db.prepare("SELECT trait_id FROM user_equipment_traits WHERE equipment_id='eqp_legacy' AND slot=1").get() as any)?.trait_id, 'legacy:1');
+  assert.equal((db.prepare("SELECT evidence_state FROM game_equipment_traits WHERE id='legacy:1'").get() as any)?.evidence_state, 'unresolved');
 });
 
 test('migration enforces permanent asset bounds', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec(await loadV02());
+  await applyCurrentSchema(db);
   const now = Date.now();
   db.prepare('INSERT INTO data_users(id,first_seen_at,last_seen_at) VALUES (?,?,?)').run('usr_test',now,now);
   db.prepare('INSERT INTO game_accounts(id,user_id,nickname,server_code,is_primary,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('gac_test','usr_test','tester','5',1,now,now);
