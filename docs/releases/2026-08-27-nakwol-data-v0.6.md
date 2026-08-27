@@ -9,6 +9,7 @@ Merge commit: `67ec0ef1bce0661b85c7f9cf8fc9d6fede3650ab`
 Deploy trigger commit: `fa6e85ee7b0c5ffd4f2fa6fafcc753d4262fac4a`
 Production workflow run: `33040570018`
 Production Worker Version ID: `c6d06cec-5dc5-4384-8a8f-0032f7f480e9`
+Golden marker commit: `61728bc1b57684f881792ad8680325483cdd0286`
 
 ## Context carried forward
 
@@ -103,6 +104,7 @@ Production deployment completed successfully on 2026-08-27.
 - production `/api/schema`: HTTP 200
 - production contract: service `nakwol-data`, version `0.6.0`, schema `2`
 - production smoke gate: `NAKWOL_DATA_DEPLOY_OK`
+- current production golden marker in `DATA.md`: commit `61728bc1b57684f881792ad8680325483cdd0286`
 
 The first post-deploy request already returned HTTP 200 for health/schema while the version was still propagating; the second smoke attempt matched the full v0.6 contract and completed the deployment gate.
 
