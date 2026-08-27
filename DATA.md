@@ -20,22 +20,20 @@ DATA는 AUTH D1에 직접 접근하지 않습니다.
 
 ## Current production golden
 
-- DATA service: `0.6.0`
+- DATA service: `0.7.0`
 - DATA schema: `2`
-- production Worker Version ID: `c6d06cec-5dc5-4384-8a8f-0032f7f480e9`
-- release merge commit: `67ec0ef1bce0661b85c7f9cf8fc9d6fede3650ab`
-- deploy trigger commit: `fa6e85ee7b0c5ffd4f2fa6fafcc753d4262fac4a`
-- production workflow run: `33040570018`
-- verification: 52/52 tests, typecheck, Worker bundle, D1/Registry count gate, production health/schema passed
-- release record: `docs/releases/2026-08-27-nakwol-data-v0.6.md`
+- production Worker Version ID: `1337d16b-1b72-4ec1-b26f-f0a99c5a5330`
+- release merge commit: `bfdfd7e2e4605cf0ed13cd5e67be609ea324e996`
+- deploy trigger commit: `771b832d731ed6605d5e6435f5c134e6a2cb4d2d`
+- production workflow run: `33043770476`
+- verification: 65/65 tests, typecheck, Worker bundle, exact D1, no migration, Registry UPSERT/count gate, production health/schema passed
+- release record: `docs/releases/2026-08-27-nakwol-data-v0.7.md`
 
-이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다.
+이 기준은 장수 보유(v0.4), 전법 보유(v0.5), 무기·탈것 인스턴스(v0.6), live deck 편집과 불변 snapshot(v0.7)까지 운영 배포가 검증된 현재 DATA 골든 기준입니다.
 
-## v0.7 release candidate
+## v0.7 production release
 
-v0.7.0 덱 편집/불변 스냅샷 구현은 feature branch와 PR #15에서 검증 중입니다. 운영 배포가 완료되기 전까지 위 v0.6 production golden을 변경하지 않습니다.
-
-현재 release-candidate 검증 범위:
+v0.7.0은 schema 2를 그대로 사용하면서 다음 기능을 운영에 추가했습니다.
 
 - live deck CRUD
 - 전체 composition 원자 교체
@@ -43,9 +41,11 @@ v0.7.0 덱 편집/불변 스냅샷 구현은 feature branch와 PR #15에서 검�
 - canonical 장착 전법 검증
 - 같은 game account의 무기/탈것 인스턴스 연결
 - immutable owner-only deck snapshot
-- DATA service `0.7.0`, schema `2`, 새 migration 없음
+- snapshot에 당시 장수/전법 보유·돌파·승품 및 장비 nickname/locked/favorite 상태 동결
 
-개발 기록은 `docs/releases/2026-08-27-nakwol-data-v0.7.md`에 남깁니다.
+운영 배포는 `33043770476`에서 65/65 테스트, typecheck, bundle, exact D1, `No migrations to apply!`, Registry count gate, production `0.7.0 / schema 2` health/schema smoke까지 통과했습니다.
+
+상세 개발·검증 기록은 `docs/releases/2026-08-27-nakwol-data-v0.7.md`에 남깁니다.
 
 ## v0.2 Registry
 
@@ -199,7 +199,7 @@ composition은 장수 position 1~3, 각 장수의 전법 slot 1~2, 선택적 무
 
 ## Deployment
 
-Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. v0.7 release candidate도 DATA schema 2를 그대로 사용하며 새 migration은 없습니다. 운영 배포가 검증되기 전에는 Current production golden을 v0.6에서 변경하지 않습니다.
+Registry seed는 DELETE/TRUNCATE 없이 UPSERT만 수행합니다. DATA v0.7은 schema 2를 그대로 사용하며 새 migration은 없습니다. 운영 배포 `33043770476`에서 exact D1, Registry count gate, production health/schema가 검증됐습니다.
 
 ## Next
 
