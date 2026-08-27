@@ -2,12 +2,18 @@
 
 Date: 2026-08-27
 Service: `nakwol-data`
-Target service version: `0.8.0`
-Target schema: `3`
+Service version: `0.8.0`
+Schema: `3`
 Release branch: `feature/nakwol-data-v0.8-equipment-options`
 Pull request: `#16`
 Base production golden: DATA `0.7.0`, schema `2`
 Base main commit: `9608424b520f1320bcf6b30b143ab86c5f48bc9e`
+Release merge commit: `509b74259891a54adf81cef29a0a3d84f2d01b43`
+Deploy trigger commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+Production workflow: `33051511909`
+Production job: `98447911107`
+Production Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
+Production golden marker commit: `4af1635b08c0b69c1f952ae58618c506cb747855`
 
 ## Design and plan
 
@@ -51,7 +57,7 @@ Registry:
 
 - `GET /v1/registry/equipment-traits` — `equipment:read`
 
-Equipment POST/PATCH now accept optional `traits`:
+Equipment POST/PATCH accept optional `traits`:
 
 ```json
 {
@@ -66,6 +72,7 @@ Write gate:
 
 - enabled Registry identity required;
 - identity evidence must be `canonical`;
+- stable identity must agree with kind/native ID;
 - matching `weapon`/`mount` applicability evidence must be `canonical`;
 - all references validate before D1 batch mutation;
 - PATCH omission preserves the current set;
@@ -183,24 +190,81 @@ Review-driven D1 limit GREEN — branch commit `2c66200c5c117cef12c3e7c232e265cf
 - Worker dry-run bundle passed
 - no API, evidence, ownership or mutation contract changed by the fix
 
+Final release-candidate verification — HEAD `7536f163496c154870b53b5b835c48d8389b23cc`, workflow `33051385526`, job `98447492127`:
+
+- 70/70 tests passed
+- canonical authority regression passed
+- D1 100-bound-parameter regression passed
+- TypeScript typecheck passed
+- Worker dry-run bundle passed
+
 ## Production verification
 
-Pending merge and production deployment.
+PR #16 merged successfully:
 
-Do not replace the DATA v0.7 production golden until all of the following have fresh production evidence:
+- merge commit: `509b74259891a54adf81cef29a0a3d84f2d01b43`
+- deploy trigger commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- production workflow: `33051511909`
+- production job: `98447911107`
 
-- PR #16 merged to `main`;
-- `ops/data-deploy.flag` triggers DATA 0.8 deployment;
-- full tests/typecheck/bundle pass on the exact deploy commit;
-- existing exact D1 resolves;
-- migration `0003_equipment_options_v08.sql` applies successfully;
-- v0.2 Registry plus v0.8 special-option supplement seed successfully;
-- original Registry count gate remains unchanged;
-- canonical special identity counts are 106 skill / 74 effect;
-- initial canonical applicability count is 0;
-- Worker deploy completes and returns a new Worker Version ID;
-- `/api/health` and `/api/schema` return HTTP 200 with `0.8.0` / schema `3`;
-- `NAKWOL_DATA_DEPLOY_OK` is emitted.
+Exact deploy commit verification:
+
+- 70/70 tests passed
+- TypeScript `tsc --noEmit` passed
+- Worker dry-run bundle passed
+- bundle: 147.19 KiB / gzip 30.48 KiB
+- exact D1 resolved: `NAKWOL_DATA_D1_READY`
+
+Production D1 migration:
+
+- remote D1 ID: `80b1d21d-a3d1-47ec-b16a-d4403a1f0cb3`
+- migration applied: `0003_equipment_options_v08.sql`
+- migration status: success
+- 9 migration commands executed
+
+Production Registry seed:
+
+- 2338 queries processed
+- 2694 rows read
+- 3142 rows written
+- `NAKWOL_DATA_REGISTRY_SEEDED:0.2.0:--remote`
+- `NAKWOL_DATA_EQUIPMENT_OPTIONS_SEEDED:0.8.0:--remote`
+
+Production Registry count gate:
+
+- generals: 209
+- enabled generals: 140
+- tactics: 1077
+- equipment templates: 134
+- stat types: 281
+- formations: 8
+- warbooks: 442
+- canonical skill traits: 106
+- canonical effect traits: 74
+- canonical applicability: 0
+- marker: `NAKWOL_DATA_REGISTRY_COUNTS_OK`
+
+Worker production deploy:
+
+- origin: `https://nakwol-data.sepsd21.workers.dev`
+- Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
+- startup time: 5 ms
+
+Production smoke:
+
+- attempt 1: health HTTP 200
+- attempt 1: schema HTTP 200
+- health service/version matched `nakwol-data / 0.8.0`
+- schema matched `3`
+- marker: `NAKWOL_DATA_DEPLOY_OK`
+
+`DATA.md` was promoted to the v0.8 production golden in commit `4af1635b08c0b69c1f952ae58618c506cb747855` only after all production evidence above was green.
+
+## Current production boundary
+
+v0.8 production includes all prior v0.4–v0.7 DATA capabilities plus schema-3 equipment special-option identity Registry, evidence-gated trait mutation, equipment trait display reads, snapshot trait freezing, and the large-inventory D1 bind-limit fix.
+
+Canonical applicability remains intentionally 0 in this release. Therefore trait mutation is implemented but safely closed in production until authoritative weapon/mount applicability evidence is added. Generic equipment stat options remain unsupported for the same evidence-quality reason.
 
 ## Next planned DATA work
 
