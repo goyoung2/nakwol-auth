@@ -3,7 +3,7 @@ name: Production Smoke
 on:
   pull_request:
     branches:
-      - main
+      - stable
     paths:
       - 'ops/production-smoke.flag'
 
@@ -18,17 +18,13 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-
       - name: Resolve production D1
         run: node scripts/ensure-d1.mjs
-
       - name: Verify NAKWOL Connect v0.2 schema and registrations
         shell: bash
         run: |
@@ -36,7 +32,6 @@ jobs:
           npx wrangler d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_operators','application_settings','connect_developers','application_owners','connect_device_requests','connect_cli_tokens') ORDER BY name;" > /tmp/schema.json
           cat /tmp/schema.json
           for table in auth_operators application_settings connect_developers application_owners connect_device_requests connect_cli_tokens; do grep -q "$table" /tmp/schema.json; done
-
           npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id; SELECT client_id,framework,access_policy FROM application_settings WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
           cat /tmp/apps.json
           grep -q 'nakwol-connect-admin' /tmp/apps.json
@@ -44,7 +39,6 @@ jobs:
           grep -q 'siege-calculator' /tmp/apps.json
           grep -q 'public' /tmp/apps.json
           echo 'NAKWOL_CONNECT_V02_D1_OK'
-
       - name: Verify production routes and device start
         shell: bash
         run: |
@@ -76,7 +70,6 @@ jobs:
             sleep 5
           done
           grep -q 'NAKWOL Connect' /tmp/admin.html
-
       - name: Execute production CLI package
         shell: bash
         run: |

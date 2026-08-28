@@ -3,7 +3,7 @@ name: Deploy NAKWOL DATA
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [stable]
     paths: ['ops/data-deploy.flag']
 
 permissions:

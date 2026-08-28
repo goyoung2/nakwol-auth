@@ -2,13 +2,19 @@ name: Verify NAKWOL DATA
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - dev
+      - main
+      - stable
     paths:
       - 'services/data/**'
       - '.github/workflows/verify-data.yml'
       - '.github/workflows/bootstrap-data.yml'
       - '.github/workflows/deploy-data.yml'
+      - '.github/workflows/repository-governance.yml'
       - 'DATA.md'
+      - 'BRANCHING.md'
+      - 'CODEX_HANDOFF.md'
 
 permissions:
   contents: read
