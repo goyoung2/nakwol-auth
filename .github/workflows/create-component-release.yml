@@ -1,0 +1,84 @@
+name: Create Component Release
+
+on:
+  push:
+    branches:
+      - stable
+    paths:
+      - 'ops/release.json'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate release descriptor
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const value = JSON.parse(fs.readFileSync('ops/release.json','utf8'));
+          if (typeof value.enabled !== 'boolean') throw new Error('RELEASE_ENABLED_MUST_BE_BOOLEAN');
+          if (!['data','connect','auth'].includes(value.component)) throw new Error('INVALID_RELEASE_COMPONENT');
+          if (!/^\d+\.\d+\.\d+$/.test(value.version ?? '')) throw new Error('INVALID_RELEASE_VERSION');
+          if (!/^[0-9a-f]{40}$/.test(value.target_sha ?? '')) throw new Error('INVALID_RELEASE_TARGET_SHA');
+          if (typeof value.notes_file !== 'string' || !value.notes_file.trim()) throw new Error('INVALID_RELEASE_NOTES_FILE');
+          const lines = [
+            `RELEASE_ENABLED=${value.enabled ? 'true' : 'false'}`,
+            `RELEASE_COMPONENT=${value.component}`,
+            `RELEASE_VERSION=${value.version}`,
+            `RELEASE_TAG=${value.component}-v${value.version}`,
+            `RELEASE_TARGET_SHA=${value.target_sha}`,
+            `RELEASE_NOTES_FILE=${value.notes_file}`,
+          ];
+          fs.appendFileSync(process.env.GITHUB_ENV, `${lines.join('\n')}\n`);
+          NODE
+      - name: Skip disabled descriptor
+        if: env.RELEASE_ENABLED != 'true'
+        run: echo 'COMPONENT_RELEASE_DISABLED'
+      - name: Verify release target and uniqueness
+        if: env.RELEASE_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin stable --no-tags
+          git cat-file -e "${RELEASE_TARGET_SHA}^{commit}"
+          git merge-base --is-ancestor "$RELEASE_TARGET_SHA" origin/stable
+          test -f "$RELEASE_NOTES_FILE"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists: $RELEASE_TAG"
+            exit 1
+          fi
+      - name: Create immutable component release
+        if: env.RELEASE_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --target "$RELEASE_TARGET_SHA" \
+            --title "$RELEASE_TAG" \
+            --notes-file "$RELEASE_NOTES_FILE"
+      - name: Verify created release
+        if: env.RELEASE_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --json tagName,targetCommitish,isDraft,isPrerelease > /tmp/release.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('/tmp/release.json','utf8'));
+          if(r.tagName!==process.env.RELEASE_TAG||r.targetCommitish!==process.env.RELEASE_TARGET_SHA||r.isDraft||r.isPrerelease) process.exit(1);
+          NODE
+          echo "NAKWOL_COMPONENT_RELEASE_OK:$RELEASE_TAG"
