@@ -28,6 +28,8 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 
 일반 작업은 반드시 최신 `dev`에서 새 task branch를 만든다. 과거 feature/ops/release 실험 브랜치를 새 작업의 base로 사용하지 않는다.
 
+**Important GitHub UI note:** repository default branch is still `main` until admin checkpoint issue #24 is completed. Codex must explicitly check out/start from `dev` even if GitHub UI initially presents `main`.
+
 ## Current production DATA golden
 
 - DATA 0.8.0
@@ -63,6 +65,21 @@ Registry production counts:
 - canonical equipment skill traits 106
 - canonical equipment effect traits 74
 - canonical applicability 0
+
+## Formal GitHub Release baseline
+
+The first formal component-prefixed release exists:
+
+- tag/name: `data-v0.8.0`
+- GitHub Release ID: `378361577`
+- exact target commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- release workflow: `33157010443`
+- release job: `98802084828`
+- draft: false
+- prerelease: false
+- notes source: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
+
+The release target is intentionally the exact commit that performed the verified production deployment, not a later documentation-only commit.
 
 ## Important v0.8 safety boundary
 
@@ -135,6 +152,7 @@ Before claiming any release complete, run the full relevant suite on the exact f
 - Release is created only after production smoke succeeds.
 - `ops/release.json` is the auditable release descriptor.
 - DATA production golden docs are changed only after actual production evidence is green.
+- After a release has been created, the descriptor should return to `enabled:false` during normal branch synchronization; never leave a new release request armed accidentally.
 
 ## Hotfix rule
 
@@ -169,11 +187,38 @@ The repository currently contains historical branches such as:
 
 They are **non-authoritative historical refs** after governance migration. Do not branch from them, merge them, or treat their unmerged commits as required work without a fresh comparison against `dev` and an explicit new plan.
 
-## Branch protection state
+Stale PR #5 was explicitly renamed `[ARCHIVED]` and closed. It is historical evidence only.
+
+## Repository governance already active in code/CI
+
+The following repository-level controls are implemented and verified in committed workflows:
+
+- `Repository Governance` validates PR source/base promotion paths.
+- `quality-gate` runs full AUTH/Connect and DATA verification on PRs to `dev`, `main`, and `stable`.
+- AUTH/Connect production deploy triggers from `stable` only.
+- DATA production deploy/bootstrap triggers from `stable` only.
+- npm publish trigger uses `stable` only.
+- production-smoke PR path targets `stable` only.
+- governance-only test/admin-script changes are excluded from AUTH production deployment path filtering.
+- component release creation is stable-only and requires an explicit audited release descriptor.
+
+## GitHub Settings admin checkpoint
 
 Target policy is PR required + CI required + no force-push + no deletion for `dev`, `main`, `stable`, with 0 mandatory external approvals for this solo repository.
 
-The connected ChatGPT GitHub action surface cannot directly write branch-protection/ruleset settings. `scripts/apply-repository-governance.mjs` and `.github/workflows/apply-repository-governance.yml` codify the desired configuration. Until a run with an admin-capable `REPO_ADMIN_TOKEN` succeeds, treat protection as **codified but not yet confirmed active**.
+As of this handoff, GitHub Settings themselves are **not yet active**:
+
+- repository default branch: `main` (target: `dev`)
+- automatic deletion of merged head branches: disabled (target: enabled)
+- `dev` branch protection: disabled
+- `main` branch protection: disabled
+- `stable` branch protection: disabled
+
+The connected ChatGPT GitHub action surface cannot write these repository settings directly. The desired protection payload is codified in `scripts/apply-repository-governance.mjs`, and `.github/workflows/apply-repository-governance.yml` is a manual admin workflow requiring `REPO_ADMIN_TOKEN` with repository Administration write permission.
+
+Open tracking issue: **#24 — `Repository admin checkpoint: activate dev default and branch protections`**.
+
+Do not claim repository protections are active until issue #24 is completed and the actual branch metadata reports protection enabled.
 
 ## Do not do these
 
