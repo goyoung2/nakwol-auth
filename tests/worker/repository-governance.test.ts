@@ -38,6 +38,9 @@ test('production-capable push workflows target stable instead of main', async ()
     const pushBlock = workflow.match(/push:\s*\n([\s\S]*?)(?=\n\S|$)/)?.[1] ?? '';
     assert.doesNotMatch(pushBlock, /\bmain\b/, path);
   }
+  const deploy = await optional('.github/workflows/deploy.yml');
+  assert.match(deploy, /!tests\/worker\/repository-governance\.test\.ts/);
+  assert.match(deploy, /!scripts\/apply-repository-governance\.mjs/);
   const smoke = await optional('.github/workflows/production-smoke.yml');
   assert.match(smoke, /pull_request:[\s\S]*stable/, 'production-smoke.yml');
 });
