@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "component": "data",
   "version": "0.8.0",
   "target_sha": "5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61",
