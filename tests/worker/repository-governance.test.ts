@@ -47,7 +47,8 @@ test('production-capable push workflows target stable instead of main', async ()
 
 test('release and protection automation are explicit and fail closed', async () => {
   const release = await optional('.github/workflows/create-component-release.yml');
-  const descriptor = await optional('ops/release.json');
+  const descriptorText = await optional('ops/release.json');
+  const descriptor = JSON.parse(descriptorText || '{}') as Record<string,unknown>;
   const governance = await optional('scripts/apply-repository-governance.mjs');
   const applyWorkflow = await optional('.github/workflows/apply-repository-governance.yml');
 
@@ -56,9 +57,11 @@ test('release and protection automation are explicit and fail closed', async () 
   assert.match(release, /contents:\s*write/);
   assert.match(release, /gh release create/);
   assert.match(release, /merge-base --is-ancestor/);
-  assert.match(descriptor, /"enabled"\s*:\s*false/);
-  assert.match(descriptor, /"component"\s*:\s*"data"/);
-  assert.match(descriptor, /5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61/);
+  assert.equal(typeof descriptor.enabled, 'boolean');
+  assert.equal(descriptor.component, 'data');
+  assert.equal(descriptor.version, '0.8.0');
+  assert.equal(descriptor.target_sha, '5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61');
+  assert.equal(descriptor.notes_file, 'docs/releases/2026-08-27-nakwol-data-v0.8.md');
 
   for (const branch of ['dev','main','stable']) assert.match(governance, new RegExp(`['\"]${branch}['\"]`));
   assert.match(governance, /required_approving_review_count[^\n]*0/);
