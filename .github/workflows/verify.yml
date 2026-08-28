@@ -3,7 +3,9 @@ name: Verify NAKWOL AUTH
 on:
   pull_request:
     branches:
+      - dev
       - main
+      - stable
     paths:
       - 'src/**'
       - 'tests/**'
@@ -14,6 +16,9 @@ on:
       - 'tsconfig.json'
       - 'wrangler.jsonc'
       - '.github/workflows/verify.yml'
+      - '.github/workflows/repository-governance.yml'
+      - 'BRANCHING.md'
+      - 'CODEX_HANDOFF.md'
 
 permissions:
   contents: read

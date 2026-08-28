@@ -3,13 +3,15 @@ name: Deploy NAKWOL AUTH
 on:
   push:
     branches:
-      - main
+      - stable
     paths:
       - 'src/**'
       - 'tests/**'
+      - '!tests/worker/repository-governance.test.ts'
       - 'packages/**'
       - 'migrations/**'
       - 'scripts/**'
+      - '!scripts/apply-repository-governance.mjs'
       - 'package.json'
       - 'tsconfig.json'
       - 'wrangler.jsonc'
