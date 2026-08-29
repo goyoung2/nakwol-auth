@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 const args = process.argv.slice(2);
 const allowedHeads = [];
 const allowedPrefixes = [];
@@ -42,11 +44,32 @@ if (eventName !== 'push') {
 const repository = process.env.GITHUB_REPOSITORY?.trim();
 const sha = process.env.GITHUB_SHA?.trim();
 const token = process.env.GITHUB_TOKEN?.trim();
+const eventPath = process.env.GITHUB_EVENT_PATH?.trim();
 const apiOrigin = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, '');
 
 if (!repository || !repository.includes('/')) throw new Error('GITHUB_REPOSITORY_REQUIRED');
 if (!/^[0-9a-f]{40}$/i.test(sha || '')) throw new Error('GITHUB_SHA_REQUIRED');
 if (!token) throw new Error('GITHUB_TOKEN_REQUIRED');
+if (!eventPath) throw new Error('GITHUB_EVENT_PATH_REQUIRED');
+
+let pushEvent;
+try {
+  pushEvent = JSON.parse(await readFile(eventPath, 'utf8'));
+} catch (error) {
+  throw new Error(`STABLE_PUSH_EVENT_INVALID:${error instanceof Error ? error.message : String(error)}`);
+}
+
+// Free/private repositories cannot enforce native branch protection. Refuse
+// non-fast-forward replay and malformed/unexpected push context before asking
+// GitHub which PR is associated with the commit.
+if (pushEvent?.forced !== false) throw new Error('STABLE_FORCE_PUSH_REJECTED');
+if (pushEvent?.ref !== 'refs/heads/stable') {
+  throw new Error(`STABLE_PUSH_REF_REQUIRED:${pushEvent?.ref || 'unknown'}`);
+}
+if (pushEvent?.after !== sha) {
+  throw new Error(`STABLE_PUSH_SHA_MISMATCH:${pushEvent?.after || 'unknown'}:${sha}`);
+}
+if (pushEvent?.deleted === true) throw new Error('STABLE_BRANCH_DELETION_REJECTED');
 
 const response = await fetch(`${apiOrigin}/repos/${repository}/commits/${sha}/pulls`, {
   headers: {
