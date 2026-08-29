@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - 2026-08-29
+
+- Add public `GET /openapi.json` with an OpenAPI 3.1 description of every app-facing DATA route.
+- Add exact `x-nakwol-scope` metadata to protected operations and document the existing Bearer + `X-NAKWOL-CLIENT-ID` runtime contract.
+- Add a route-coverage regression test so new app-facing DATA routes cannot ship without OpenAPI coverage.
+- Add `/api/schema` discovery hints for the OpenAPI path/version while keeping DATA schema version 3 and all D1 tables unchanged.
+- Keep internal `/connect/cli/` management routes outside the public OpenAPI contract.
+
 ## 0.8.0 - 2026-08-27
 
 - Promote 180 Korean-client equipment special-option identities into DATA Registry: 106 `equipment_skill` rows and 74 `equipment_effect` rows with zero unresolved localization entries.

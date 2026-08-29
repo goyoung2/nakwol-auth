@@ -67,9 +67,35 @@ jobs:
           grep -q 'nakwol-connect-admin' /tmp/apps.json
           grep -q 'nakwol-connect-cli' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
+      - name: Wait for required DATA v0.9 contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://nakwol-data.sepsd21.workers.dev'
+          for i in {1..24}; do
+            health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/required-data-health.json -w '%{http_code}' "$origin/api/health" || true)
+            schema=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/required-data-schema.json -w '%{http_code}' "$origin/api/schema" || true)
+            openapi=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/required-data-openapi.json -w '%{http_code}' "$origin/openapi.json" || true)
+            echo "attempt=$i health=$health schema=$schema openapi=$openapi"
+            if [ "$health" = '200' ] && [ "$schema" = '200' ] && [ "$openapi" = '200' ] && \
+               grep -q '"service":"nakwol-data"' /tmp/required-data-health.json && \
+               grep -q '"version":"0.9.0"' /tmp/required-data-health.json && \
+               grep -q '"schema_version":3' /tmp/required-data-schema.json && \
+               grep -q '"openapi_path":"/openapi.json"' /tmp/required-data-schema.json && \
+               grep -q '"openapi":"3.1.0"' /tmp/required-data-openapi.json && \
+               grep -q '"version":"0.9.0"' /tmp/required-data-openapi.json; then
+              echo 'NAKWOL_DATA_V09_READY_FOR_AUTH_DEPLOY'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo '::error::NAKWOL DATA v0.9/OpenAPI is not ready; refusing AUTH/Connect deploy.'
+          cat /tmp/required-data-health.json || true
+          cat /tmp/required-data-schema.json || true
+          exit 1
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
-      - name: Verify production AUTH and Connect v0.3 distribution
+      - name: Verify production AUTH and Connect v0.4 distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -87,16 +113,20 @@ jobs:
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
                  grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk && \
                  grep -q 'window.NAKWOL_DATA' /tmp/connect && \
+                 grep -q 'openapi: dataOpenApi' /tmp/connect && \
                  grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
-                 grep -q '"version":"0.3.0"' /tmp/cli-manifest && \
-                 grep -q 'init --scopes roster:read,decks:read' /tmp/llms && \
+                 grep -q '"version":"0.4.0"' /tmp/cli-manifest && \
+                 grep -q 'data describe --json' /tmp/cli-manifest && \
+                 grep -q 'openapi.json' /tmp/cli-manifest && \
+                 grep -q 'data describe --json' /tmp/llms && \
+                 grep -q 'OpenAPI' /tmp/llms && \
                  grep -q 'CLI 연결 승인' /tmp/device && \
                  test -s /tmp/cli-package; then
-                echo 'NAKWOL_CONNECT_V03_DEPLOY_OK'
+                echo 'NAKWOL_CONNECT_V04_DEPLOY_OK'
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo 'NAKWOL Connect v0.3 deployment verification failed.'
+          echo 'NAKWOL Connect v0.4 deployment verification failed.'
           exit 1
