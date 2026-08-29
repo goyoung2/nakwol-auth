@@ -28,7 +28,7 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 
 일반 작업은 반드시 최신 `dev`에서 새 task branch를 만든다. 과거 feature/ops/release 실험 브랜치를 새 작업의 base로 사용하지 않는다.
 
-Repository default branch is now `dev`. GitHub UI와 새 작업의 기준도 `dev`로 맞춰져 있다.
+Repository default branch is now `dev`. GitHub UI와 새 작업의 기준도 `dev`로 맞춰져 있다. `dev`, `main`, `stable`은 모두 long-lived branch이며 항상 보존한다.
 
 ## Current production DATA golden
 
@@ -209,13 +209,20 @@ The following repository-level controls are implemented in committed workflows:
 
 The repository intentionally remains **private on GitHub Free**. Native Branch Protection for private repositories is therefore unavailable and is not active by design.
 
-Current repository settings verified on 2026-08-29:
+Verified live repository state before the final Free/private stable promotion on 2026-08-29:
 
 - default branch: `dev`
-- delete merged head branches: enabled
+- delete merged head branches: currently enabled and **must be switched off before `main -> stable` is merged**
 - `dev` Branch Protection: unavailable / not active
 - `main` Branch Protection: unavailable / not active
 - `stable` Branch Protection: unavailable / not active
+
+Required target setting for this governance model:
+
+- **delete merged head branches: disabled**
+- `dev`, `main`, `stable` are preserved as long-lived branches
+
+The repository-wide automatic head-branch deletion setting is unsafe here because `main` itself is the head branch of normal `main -> stable` promotion PRs. With no paid Branch Protection/Rules available to exempt `main`, do not merge a stable promotion while that repository setting remains enabled. Disposable task branches are cleaned separately when appropriate.
 
 The previous paid-plan branch-protection bootstrap (`scripts/apply-repository-governance.mjs`, `.github/workflows/apply-repository-governance.yml`, `REPO_ADMIN_TOKEN`) is retired. Do not recreate it unless the repository deliberately moves to a plan that supports private-repository Branch Protection.
 
@@ -232,6 +239,7 @@ This is not a substitute for native Branch Protection: it cannot prevent or undo
 - do not develop directly on `main` or `stable`;
 - do not direct-push long-lived branches;
 - do not force-push long-lived branches;
+- do not enable repository-wide automatic merged-head deletion while `dev/main/stable` are unprotected long-lived branches;
 - do not deploy production from `dev` or `main`;
 - do not bypass the stable promotion guard;
 - do not change production golden before smoke evidence;

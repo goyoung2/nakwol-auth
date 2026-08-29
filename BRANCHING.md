@@ -117,11 +117,13 @@ Release는 production smoke 성공 이후에만 만든다. `ops/release.json`은
 
 이 저장소는 **GitHub Free + private repository**로 유지한다. 이 조합에서는 native **Branch Protection**을 사용할 수 없으므로 `dev`, `main`, `stable`에 대한 direct push 자체를 GitHub 서버가 물리적으로 거부해 주지는 않는다.
 
-2026-08-29 기준으로 무료 범위에서 적용된 repository setting은 다음과 같다.
+무료/private 운영에 필요한 repository setting은 다음과 같다.
 
 - default branch: `dev`
-- automatically delete merged head branches: enabled
+- **Automatically delete head branches: OFF / disabled**
 - native Branch Protection: unavailable / not active by design
+
+`Automatically delete head branches`를 켜면 `main -> stable` 승격 PR에서 `main`이 일반 head branch로 취급될 수 있다. 유료 Branch Protection/Rules로 `main`의 삭제를 막을 수 없는 현재 환경에서는 repository-wide 자동 삭제를 사용하지 않는다. `dev`, `main`, `stable`은 장기 브랜치로 항상 보존하고, 병합 완료 task branch 정리는 필요할 때 별도로 수행한다.
 
 따라서 운영 규칙은 다음 방어층으로 구성한다.
 
@@ -130,6 +132,7 @@ Release는 production smoke 성공 이후에만 만든다. `ops/release.json`은
 3. `quality-gate`가 AUTH/Connect와 DATA 전체 검증을 수행한다.
 4. production-capable workflow는 stable promotion guard로 허용된 PR merge provenance를 재검사한다.
 5. component release는 별도 `release/* -> stable` PR provenance까지 요구한다.
+6. repository-wide merged-head 자동 삭제는 사용하지 않아 long-lived branch 삭제 위험을 만들지 않는다.
 
 이 구조는 Branch Protection과 완전히 동일하지 않다. direct push 자체를 되돌리거나 금지할 수는 없지만, 잘못된 stable direct push가 자동으로 운영 배포·npm publish·GitHub Release까지 이어지는 경로는 차단한다.
 
