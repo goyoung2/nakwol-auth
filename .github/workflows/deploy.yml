@@ -12,6 +12,7 @@ on:
       - 'migrations/**'
       - 'scripts/**'
       - '!scripts/apply-repository-governance.mjs'
+      - '!scripts/verify-stable-promotion.mjs'
       - 'package.json'
       - 'tsconfig.json'
       - 'wrangler.jsonc'
@@ -19,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   deploy:
@@ -31,6 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify stable PR promotion or stable manual ref
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-stable-promotion.mjs --allow-head main --allow-prefix hotfix/
       - name: Install dependencies
         run: npm install --legacy-peer-deps
       - name: Unit tests

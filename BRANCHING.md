@@ -73,7 +73,7 @@ stable -> hotfix/* -> stable -> main -> dev
 6. `stable -> main`, `main -> dev` 순으로 동기화한다.
 7. component patch release를 만든다.
 
-Hotfix라는 이름으로 직접 push나 force-push를 허용하지 않는다.
+Hotfix라는 이름으로 direct push나 force-push를 허용하지 않는다.
 
 ## Pull request source policy
 
@@ -93,6 +93,14 @@ Hotfix라는 이름으로 직접 push나 force-push를 허용하지 않는다.
 
 `main`과 `dev`에서 production을 자동 배포하는 workflow를 추가하지 않는다.
 
+Production-capable stable push workflow는 `scripts/verify-stable-promotion.mjs`를 가장 먼저 실행한다. 자동 push에서는 현재 `stable` SHA가 실제 허용된 PR의 `merge_commit_sha`인지 GitHub API로 확인한 뒤에만 다음 단계로 진행한다.
+
+- AUTH/DATA deploy, DATA bootstrap, npm publish: `main -> stable` 또는 `hotfix/* -> stable`만 허용
+- component release: `release/* -> stable`만 허용
+- `workflow_dispatch`: 명시적 운영자 실행은 허용하지만 선택한 ref가 반드시 `stable`이어야 함
+
+따라서 실수로 `stable`에 direct push가 발생하더라도 production deploy/publish/release는 fail-closed로 중단된다.
+
 ## Release naming
 
 이 저장소는 여러 component가 독립 버전을 가지므로 tag에 component prefix를 붙인다.
@@ -105,17 +113,27 @@ Release는 production smoke 성공 이후에만 만든다. `ops/release.json`은
 
 현재 DATA 첫 정식 release 기준은 `data-v0.8.0`이고 exact production deploy commit은 `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`이다.
 
-## Protection policy
+## GitHub Free + private governance boundary
 
-장기 브랜치 `dev`, `main`, `stable`은 다음 정책을 목표로 한다.
+이 저장소는 **GitHub Free + private repository**로 유지한다. 이 조합에서는 native **Branch Protection**을 사용할 수 없으므로 `dev`, `main`, `stable`에 대한 direct push 자체를 GitHub 서버가 물리적으로 거부해 주지는 않는다.
 
-- PR required
-- required CI status checks
-- force-push disabled
-- branch deletion disabled
-- external approval count 0 (solo repository)
+2026-08-29 기준으로 무료 범위에서 적용된 repository setting은 다음과 같다.
 
-관리 설정은 `scripts/apply-repository-governance.mjs`와 수동 GitHub Actions workflow로 재현 가능하게 관리한다. 실제 적용 여부는 `CODEX_HANDOFF.md`에서 반드시 구분해 기록한다.
+- default branch: `dev`
+- automatically delete merged head branches: enabled
+- native Branch Protection: unavailable / not active by design
+
+따라서 운영 규칙은 다음 방어층으로 구성한다.
+
+1. 사람과 Codex/LLM은 long-lived branch에 direct push하지 않는다. 모든 정상 변경은 PR을 사용한다.
+2. `Repository Governance`가 PR의 source/base 승격 경로를 검사한다.
+3. `quality-gate`가 AUTH/Connect와 DATA 전체 검증을 수행한다.
+4. production-capable workflow는 stable promotion guard로 허용된 PR merge provenance를 재검사한다.
+5. component release는 별도 `release/* -> stable` PR provenance까지 요구한다.
+
+이 구조는 Branch Protection과 완전히 동일하지 않다. direct push 자체를 되돌리거나 금지할 수는 없지만, 잘못된 stable direct push가 자동으로 운영 배포·npm publish·GitHub Release까지 이어지는 경로는 차단한다.
+
+유료 플랜으로 전환하는 경우 native Branch Protection을 추가 방어층으로 다시 검토할 수 있지만 현재 운영의 필수 조건으로 취급하지 않는다.
 
 ## Golden rule
 
