@@ -1,12 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const root = (path:string) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+const guardPath = fileURLToPath(new URL('../../scripts/verify-stable-promotion.mjs', import.meta.url));
 
 async function optional(path:string):Promise<string> {
   try { return await root(path); }
   catch { return ''; }
+}
+
+function runGuard(args:string[], env:Record<string,string>):Promise<{code:number|null;stdout:string;stderr:string}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [guardPath, ...args], {
+      env: { ...process.env, ...env },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+async function withPullServer<T>(pulls:unknown[], fn:(apiOrigin:string)=>Promise<T>):Promise<T> {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(pulls));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('TEST_SERVER_ADDRESS_REQUIRED');
+  try {
+    return await fn(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 }
 
 test('repository documents define dev -> main -> stable and current production boundary', async () => {
@@ -86,8 +124,58 @@ test('release automation is release-PR gated and paid protection automation is r
   assert.equal(oldGovernance, '');
   assert.equal(oldApplyWorkflow, '');
   assert.match(stableGuard, /GITHUB_EVENT_NAME/);
+  assert.match(stableGuard, /GITHUB_EVENT_PATH/);
+  assert.match(stableGuard, /forced/);
   assert.match(stableGuard, /merge_commit_sha/);
   assert.match(stableGuard, /base[^\n]*stable/i);
   assert.match(stableGuard, /pulls/);
   assert.match(stableGuard, /NAKWOL_STABLE_PROMOTION_OK/);
+});
+
+test('stable promotion guard permits stable manual dispatch and rejects other manual refs', async () => {
+  const args = ['--allow-head', 'main', '--allow-prefix', 'hotfix/'];
+  const allowed = await runGuard(args, { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'stable' });
+  assert.equal(allowed.code, 0, allowed.stderr);
+  assert.match(allowed.stdout, /NAKWOL_STABLE_PROMOTION_MANUAL_OK:stable/);
+
+  const rejected = await runGuard(args, { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'dev' });
+  assert.notEqual(rejected.code, 0);
+  assert.match(rejected.stderr, /MANUAL_PRODUCTION_REF_MUST_BE_STABLE/);
+});
+
+test('stable promotion guard accepts exact allowed PR merge and rejects forced replay', async () => {
+  const sha = 'a'.repeat(40);
+  const dir = await mkdtemp(join(tmpdir(), 'nakwol-stable-guard-'));
+  const eventPath = join(dir, 'event.json');
+  const pulls = [{
+    number: 123,
+    merge_commit_sha: sha,
+    merged_at: '2026-08-29T00:00:00Z',
+    base: { ref: 'stable' },
+    head: { ref: 'main' },
+  }];
+  try {
+    await withPullServer(pulls, async (apiOrigin) => {
+      const common = {
+        GITHUB_EVENT_NAME: 'push',
+        GITHUB_REF_NAME: 'stable',
+        GITHUB_REPOSITORY: 'goyoung2/nakwol-auth',
+        GITHUB_SHA: sha,
+        GITHUB_TOKEN: 'test-token',
+        GITHUB_API_URL: apiOrigin,
+        GITHUB_EVENT_PATH: eventPath,
+      };
+      await writeFile(eventPath, JSON.stringify({ forced: false, ref: 'refs/heads/stable', after: sha }));
+      const allowed = await runGuard(['--allow-head', 'main', '--allow-prefix', 'hotfix/'], common);
+      assert.equal(allowed.code, 0, allowed.stderr);
+      assert.match(allowed.stdout, /NAKWOL_STABLE_PROMOTION_OK:main->stable:#123/);
+
+      await writeFile(eventPath, JSON.stringify({ forced: true, ref: 'refs/heads/stable', after: sha }));
+      const forced = await runGuard(['--allow-head', 'main', '--allow-prefix', 'hotfix/'], common);
+      assert.notEqual(forced.code, 0);
+      assert.match(forced.stderr, /STABLE_FORCE_PUSH_REJECTED/);
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
