@@ -45,6 +45,13 @@ NAKWOL AUTH UX v1은 이 문제를 해결한다.
 
 즉 UX v1은 **인증 프로토콜 변경 프로젝트가 아니라 presentation / account experience / verification layer 프로젝트**다.
 
+관련 현재 문서:
+
+- `WEB_SDK.md`
+- `CONNECT.md`
+- `CONNECT_CLI.md`
+- `CODEX_HANDOFF.md`
+
 ---
 
 ## 3. Design decision
@@ -164,6 +171,10 @@ NAKWOL Identity UI는 자체 브랜드 스타일을 강제하지 않는다. `inh
 
 로그아웃은 상시 큰 버튼이 아니라 메뉴 안의 보조 기능으로 이동한다.
 
+### 4.6 인증 UX와 authorization 판단을 분리한다
+
+화면에 `낙월 맹원`이라고 예쁘게 보이는 것과 서버가 실제 접근을 허용하는 것은 별개다. 서비스 접근 제어는 기존 verified membership/role/scope 계약을 그대로 사용한다.
+
 ---
 
 ## 5. Component 1 — NAKWOL Compact Identity Menu
@@ -235,14 +246,16 @@ NAKWOL Identity UI는 자체 브랜드 스타일을 강제하지 않는다. `inh
 ```text
 member -> 낙월 맹원
 admin  -> 낙월 관리자
-public / non-member -> 일반 사용자 또는 서비스 정책에 맞는 문구
+public / non-member -> 일반 사용자
 ```
+
+서비스가 비회원 접근을 별도 용어로 표현해야 하면 UI label만 override할 수 있다. authorization 의미 자체는 바꾸지 않는다.
 
 `member` 같은 raw string은 Auth Lab에서는 볼 수 있지만 일반 헤더 메뉴 기본 표현으로 사용하지 않는다.
 
 ### 5.5 Variants
 
-공식 UI API는 최소 세 가지 variant를 목표로 한다.
+공식 UI API는 최소 세 가지 variant를 제공한다.
 
 ```text
 button   로그인 버튼 중심
@@ -262,7 +275,7 @@ light
  dark
 ```
 
-서비스 override용 CSS 변수 예시:
+서비스 override용 CSS 변수:
 
 ```css
 --nakwol-auth-accent
@@ -283,17 +296,26 @@ light
 --nakwol-auth-border: #8b6a2c;
 ```
 
-정확한 색상값은 실제 서비스 CSS에서 최종 조율할 수 있지만, 원칙은 “AUTH가 별도 앱처럼 보이지 않는다”다.
+정확한 색상값은 공성 계산기의 실제 CSS token과 맞춰 구현한다. 원칙은 “AUTH가 별도 SaaS 위젯처럼 보이지 않는다”다.
 
 ### 5.7 Accessibility
 
 - 키보드로 메뉴 열기/닫기 가능
 - ESC로 닫기
-- focus return 보장
-- avatar에는 대체 텍스트 또는 decorative 처리
+- 닫힌 뒤 trigger로 focus return
+- avatar에는 의미에 맞는 대체 텍스트 또는 decorative 처리
 - 메뉴 항목은 실제 button/link semantic 사용
 - 색상만으로 로그인 상태를 전달하지 않음
 - 모바일에서 충분한 touch target 확보
+
+### 5.8 Legacy widget policy
+
+현재 Web SDK의 시험용/기존 위젯을 즉시 삭제하지 않는다.
+
+- 기존 버전 고정 SDK URL의 compatibility를 유지한다.
+- 기존 widget은 demo/legacy integration 용도로 남길 수 있다.
+- 신규 실서비스의 권장 기본값은 Compact Identity Menu로 변경한다.
+- 기존 서비스는 검증 후 단계적으로 전환한다.
 
 ---
 
@@ -303,19 +325,33 @@ light
 
 NAKWOL AUTH를 단순 로그인 버튼이 아니라 독립적인 **낙월 통합 계정 시스템**으로 체감하게 만드는 사용자용 중앙 페이지다.
 
-제안 경로:
+v1 정식 경로:
 
 ```text
 https://nakwol-auth.sepsd21.workers.dev/account
 ```
 
-### 6.2 대상
+### 6.2 인증 전 상태
+
+`/account`는 로그아웃 사용자에게도 접근 가능하다.
+
+로그아웃 상태에서는 계정 정보를 보여주지 않고 중앙 로그인 CTA를 제공한다.
+
+```text
+NAKWOL 계정
+낙월 서비스의 통합 로그인입니다.
+[ Discord로 낙월 로그인 ]
+```
+
+로그인 완료 후 같은 Account Center로 돌아온다.
+
+### 6.3 대상
 
 일반 낙월 사용자.
 
 디버그 도구가 아니다. 기술 용어는 필요한 만큼만 보여준다.
 
-### 6.3 Information architecture
+### 6.4 Information architecture
 
 #### A. Profile summary
 
@@ -332,21 +368,28 @@ NAKWOL ID는 복사 가능하되 기본 강조 요소로 만들지 않는다.
 - Discord guild membership 여부
 - 낙월 member 여부
 - 현재 role
-- 최근 membership 확인 시각 또는 “방금 확인됨” 수준의 사용자 친화 문구
+- 최근 membership 확인 시각 또는 사용자 친화 상태 문구
 
 #### C. Connected services
 
-사용자가 NAKWOL AUTH를 통해 사용한 서비스 목록을 보여주는 방향을 채택한다.
+사용자가 실제로 NAKWOL AUTH를 통해 연결한 근거가 있는 서비스만 표시한다.
+
+source of truth는 AUTH가 이미 보유하거나 구현 단계에서 안전하게 조회할 수 있는 **사용자별 app authorization/session/token 발급 기록**이다.
+
+규칙:
+
+- 단순히 `applications` 테이블에 앱이 등록되어 있다는 이유로 “사용자가 연결했다”고 표시하지 않는다.
+- 사용 기록이 없는 앱을 임의로 `미사용`이라고 추론하지 않는다.
+- 현재 스키마/API가 사용자별 연결 앱 목록을 안전하게 조회하지 못한다면, UX v1 범위에서 read-only account endpoint를 추가해 source of truth를 제공한다.
+- 응답은 서비스 표시명, client ID, 마지막 확인 가능한 연결 시각, 사용자에게 설명할 수 있는 권한 정도만 제공한다.
+- token 원문은 반환하지 않는다.
 
 예:
 
 ```text
 공성 시간 계산기      연결됨
-전투 리포트           미사용
-덱 연구소             미사용
+덱 연구소             연결됨
 ```
-
-단, v1 구현에서 서버 측에 정확한 “최근 사용 앱” 데이터가 없다면 이를 임의로 만들지 않는다. 이 경우 등록 앱/권한 정보로 표현 가능한 범위부터 시작한다.
 
 #### D. Permissions
 
@@ -363,15 +406,15 @@ NAKWOL ID는 복사 가능하되 기본 강조 요소로 만들지 않는다.
 - 내 덱 읽기
 ```
 
-raw scope 이름은 상세 보기에서만 보조적으로 표시할 수 있다.
+raw scope 이름은 상세 보기에서 보조적으로 표시할 수 있다.
 
 #### E. Session / logout
 
-- 현재 계정 상태
+- 현재 중앙 계정 상태
 - 현재 앱 로그아웃과 구분되는 “모든 낙월 서비스에서 로그아웃”
-- global logout은 위험도가 낮지만 영향 범위가 크므로 확인 UI 사용
+- global logout은 영향 범위를 설명한 확인 UI를 사용한다.
 
-### 6.4 Account Center가 하지 않는 것
+### 6.5 Account Center가 하지 않는 것
 
 v1에서는 다음을 한꺼번에 넣지 않는다.
 
@@ -391,7 +434,7 @@ v1에서는 다음을 한꺼번에 넣지 않는다.
 
 공성 계산기 같은 실제 서비스에 디버그 정보를 계속 노출하지 않고, NAKWOL AUTH 자체를 독립적으로 검증하는 공식 테스트 페이지를 제공한다.
 
-제안 경로:
+v1 정식 경로:
 
 ```text
 https://nakwol-auth.sepsd21.workers.dev/lab
@@ -400,15 +443,30 @@ https://nakwol-auth.sepsd21.workers.dev/lab
 ### 7.2 대상
 
 - 플랫폼 운영자
-- AUTH 개발자
-- Codex/LLM 개발 세션
-- 회귀 테스트 시 수동 검증자
+- AUTH 관리자
+- 등록된 개발자/operator
+- Codex/LLM 개발 세션에서 운영자가 검증을 수행할 때
 
-일반 사용자용 페이지가 아니다.
+일반 사용자용 진단 페이지가 아니다.
 
-### 7.3 표시 정보
+### 7.3 Access control
 
-예시:
+로그인 전 `/lab` shell 자체는 접근 가능해야 신규 로그인 흐름을 시험할 수 있다. 그러나 로그인 전에는 다음 정도만 보여준다.
+
+```text
+NAKWOL AUTH LAB
+[ 테스트 로그인 시작 ]
+```
+
+로그인 후 full diagnostics를 보여주기 전에 기존 AUTH의 관리자/개발자 관리 정책으로 권한을 확인한다.
+
+- AUTH admin 또는 등록된 developer/operator만 full diagnostics 접근 허용
+- 일반 member가 로그인하면 “진단 권한 없음” 상태를 보여주고 diagnostic data/actions를 노출하지 않는다.
+- Lab 접근을 위해 새로운 광범위한 public debug permission을 만들지 않는다.
+
+### 7.4 표시 정보
+
+허가된 사용자에게만 다음 정보를 표시한다.
 
 ```text
 NAKWOL AUTH LAB
@@ -426,7 +484,7 @@ Redirect URI           ...
 PKCE                    S256
 ```
 
-### 7.4 보안상 절대 표시하지 않는 것
+### 7.5 보안상 절대 표시하지 않는 것
 
 - access token 원문
 - refresh/CLI token 원문
@@ -437,12 +495,17 @@ PKCE                    S256
 
 Lab은 상태를 보여주지 비밀값을 덤프하지 않는다.
 
-### 7.5 Lab actions
+### 7.6 Lab actions
 
-최소 액션:
+로그인 전:
 
 ```text
-[ 일반 로그인 ]
+[ 테스트 로그인 시작 ]
+```
+
+권한 확인 후 최소 액션:
+
+```text
 [ /me 다시 확인 ]
 [ 앱 로그아웃 ]
 [ SSO 재로그인 테스트 ]
@@ -455,7 +518,7 @@ Lab은 상태를 보여주지 비밀값을 덤프하지 않는다.
 - 현재 app token 만료 상태 확인
 - DATA read probe — 명시된 안전한 read-only endpoint만
 
-### 7.6 결과 표현
+### 7.7 결과 표현
 
 성공/실패를 단순 색상만으로 표현하지 않는다.
 
@@ -537,7 +600,7 @@ Account Center 또는 명시적 global logout 수행.
 
 Discord 또는 낙월 관리 정책에서 사용자의 membership/role이 변경된다.
 
-성공 기준: 새 `/me` 검증 시 정책에 맞는 최신 상태가 반영된다. 캐시가 있다면 허용된 갱신 정책을 따른다.
+성공 기준: 새 `/me` 검증 시 정책에 맞는 최신 상태가 반영된다. 캐시가 있다면 기존 허용된 갱신 정책을 따른다.
 
 ### V9. Multi-app SSO isolation
 
@@ -573,7 +636,7 @@ Desktop/mobile/keyboard 사용 검증.
 성공 기준:
 - 메뉴가 viewport 밖으로 잘리지 않음
 - keyboard-only 사용 가능
-- focus trap/return 정상
+- focus return 정상
 - 서비스 헤더 레이아웃이 과도하게 흔들리지 않음
 
 ---
@@ -665,9 +728,20 @@ Auth Lab이 디버그 역할을 맡으므로 공성 계산기의 실서비스 UI
 
 ---
 
-## 10. Public UI API direction
+## 10. Public UI API contract
 
-정확한 JavaScript API 이름은 구현 계획에서 기존 SDK 구조를 읽고 확정하되, 기능 계약은 다음을 목표로 한다.
+기존 `NakwolAuthClient` headless contract는 그대로 유지한다.
+
+새 Identity UI는 최소한 다음 기능 계약을 제공해야 한다.
+
+- 기존 auth client instance를 받을 수 있음
+- `button | compact | menu` variant 선택
+- `inherit | light | dark` theme 선택
+- 사용자명/role 표시 정책 설정
+- Account Center URL 연결
+- login/logout 상태 변화 자동 반영
+- destroy/unmount 가능
+- CSS custom properties로 service theme override
 
 개념 예시:
 
@@ -681,15 +755,14 @@ mountNakwolIdentityMenu(auth, {
 });
 ```
 
-또는 Connect embed가 선언형 data attributes로 최소 설정을 제공할 수 있다.
+함수/옵션의 정확한 최종 이름은 구현 계획에서 기존 SDK naming convention과 충돌 여부를 확인해 확정할 수 있지만, 위 기능 계약 자체는 변경하지 않는다.
 
-중요한 계약:
+버전 정책:
 
-- 기존 `NakwolAuthClient` headless 사용은 깨지지 않는다.
-- 현재 Web SDK의 기존 버전 고정 URL은 immutable 정책을 지킨다.
-- UX v1을 위해 breaking change가 필요하면 새 SDK version URL을 만든다.
-- 기존 시험 widget이 필요하면 compatibility/demo 용도로 유지할 수 있다.
-- 새로운 Compact Identity Menu가 실서비스 권장 기본 컴포넌트가 된다.
+- 현재 `v0.1.0/...` 고정 SDK 자산은 immutable하게 유지한다.
+- UX v1 구현이 기존 asset 내용을 바꾸어야 한다면 반드시 새 immutable SDK version URL로 배포한다.
+- `/sdk/nakwol-auth-web.js` stable alias는 새 안정 버전을 가리킬 수 있다.
+- 기존 시험 widget compatibility를 깨뜨리지 않는다.
 
 ---
 
@@ -734,6 +807,8 @@ UX 개선 과정에서 기존 보안 경계를 약화시키지 않는다.
 - CORS allowlist를 UX 편의를 이유로 wildcard로 바꾸지 않는다.
 - DATA scope를 UI에서 보이지 않게 했다는 이유로 서버 검증을 생략하지 않는다.
 - role label의 예쁜 표현과 실제 authorization 판단을 분리한다. 서버 authorization은 raw verified role/scope 기준이다.
+- Lab full diagnostics는 일반 member에게 공개하지 않는다.
+- Account Center의 connected services는 실제 server-side evidence에서만 파생한다.
 
 ---
 
@@ -763,18 +838,22 @@ NAKWOL AUTH UX v1에서 하지 않는다.
 - popup menu
 - inherit theme + CSS variables
 - accessibility baseline
+- legacy widget compatibility
 
 ### Phase 2 — Account Center
 
 - `/account`
+- login-before-account flow
 - profile/membership
 - NAKWOL ID
+- evidence-backed connected services
 - app/service permission presentation
 - global logout
 
 ### Phase 3 — Auth Lab
 
 - `/lab`
+- public login shell + restricted diagnostics
 - 상태 진단 panel
 - safe diagnostic actions
 - V1~V10 핵심 수동 회귀 시나리오 지원
@@ -792,7 +871,8 @@ NAKWOL AUTH UX v1에서 하지 않는다.
 - 자동화 가능한 회귀 테스트 추가
 - desktop/mobile/accessibility 수동 점검
 - Web SDK/Connect compatibility 검증
-- AUTH UX의 정식 version/release 정책 확정
+- 새 immutable Web SDK version이 필요한 경우 versioned release
+- AUTH UX의 정식 component release 준비
 
 ---
 
@@ -804,14 +884,17 @@ UX v1은 다음 조건을 만족하면 완료로 본다.
 2. 로그인 전에는 작은 `낙월 로그인` 버튼만 보인다.
 3. 로그인 후에는 기본적으로 avatar + display name만 보인다.
 4. role, account, permissions, logout은 popup/menu로 이동한다.
-5. `/account`에서 일반 사용자가 자신의 NAKWOL 계정 상태를 이해할 수 있다.
-6. `/lab`에서 AUTH 코어를 다른 서비스 없이 독립적으로 검증할 수 있다.
-7. 신규 로그인, SSO, local logout, global logout, token expiry, invalid redirect, invalid state/PKCE, role change, multi-app isolation, DATA scope 검증 시나리오가 문서화되고 반복 검증 가능하다.
-8. raw secret/token이 UI나 diagnostic log에 노출되지 않는다.
-9. 기존 Web SDK headless contract와 Connect v0.3 integration을 깨뜨리지 않는다.
-10. 공성 계산기 내부에 디버그용 raw auth 상태를 상시 표시하지 않는다.
-11. mobile/keyboard 환경에서도 Identity Menu가 사용 가능하다.
-12. 인증 UI 오류가 인증 선택형 서비스의 핵심 기능을 불필요하게 중단시키지 않는다.
+5. `/account`는 로그인 전 중앙 로그인 진입점을 제공하고 로그인 후 일반 사용자가 자신의 NAKWOL 계정 상태를 이해할 수 있다.
+6. Account Center의 연결 서비스 정보는 실제 사용자별 authorization/session/token 근거에서만 표시된다.
+7. `/lab`은 로그인 흐름 자체를 시험할 수 있지만 full diagnostics는 기존 admin/developer/operator 권한이 있는 사용자에게만 제공한다.
+8. `/lab`에서 AUTH 코어를 다른 실제 서비스 없이 독립적으로 검증할 수 있다.
+9. 신규 로그인, SSO, local logout, global logout, token expiry, invalid redirect, invalid state/PKCE, role change, multi-app isolation, DATA scope 검증 시나리오가 반복 검증 가능하다.
+10. raw secret/token이 UI나 diagnostic log에 노출되지 않는다.
+11. 기존 Web SDK headless contract와 Connect v0.3 integration을 깨뜨리지 않는다.
+12. 기존 version-pinned SDK 자산을 뒤에서 변경하지 않는다.
+13. 공성 계산기 내부에 디버그용 raw auth 상태를 상시 표시하지 않는다.
+14. mobile/keyboard 환경에서도 Identity Menu가 사용 가능하다.
+15. 인증 UI 오류가 인증 선택형 서비스의 핵심 기능을 불필요하게 중단시키지 않는다.
 
 ---
 
