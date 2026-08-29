@@ -4,6 +4,7 @@ import { readProjectConfig, writeProjectConfig, removeProjectConfig } from './co
 import { ensureSession, readSession, defaultSessionPath } from './session.mjs';
 import { ConnectApi } from './api.mjs';
 import { ConnectDataApi } from './data-api.mjs';
+import { validateDataOpenApi } from './discovery.mjs';
 import { DEFAULT_DATA_ORIGIN, parseDataScopes, sameScopes } from './scopes.mjs';
 
 export const DEFAULT_AUTH_ORIGIN = 'https://nakwol-auth.sepsd21.workers.dev';
@@ -123,6 +124,8 @@ export async function doctorProject(options = {}) {
           checks.push({ name:'data_scopes', ok:sameScopes(state?.scopes || [], config.dataScopes), detail:(state?.scopes || []).join(',') });
           const available = state?.available_scopes || [];
           checks.push({ name:'data_available_scopes', ok:config.dataScopes.every((scope) => available.includes(scope)), detail:`${available.length} available` });
+          const discovery = validateDataOpenApi(await dataApi.describe(), config.dataScopes);
+          checks.push({ name:'data_openapi', ok:discovery.ok, detail:discovery.detail });
         } catch (error) { checks.push({ name:'data_registered', ok:false, detail:error.message }); }
       }
     }
