@@ -59,15 +59,17 @@ test('repository documents define dev -> main -> stable and current production b
   assert.match(handoff, /2bea00a2-c4b1-4f8c-a521-8c64f18f10be/);
 });
 
-test('free private repository boundary is explicit instead of pretending branch protection is active', async () => {
+test('free private repository boundary preserves long-lived branches without native protection', async () => {
   const branching = await optional('BRANCHING.md');
   const handoff = await optional('CODEX_HANDOFF.md');
   assert.match(branching, /GitHub Free/i);
   assert.match(branching, /private/i);
   assert.match(branching, /Branch Protection/i);
   assert.match(branching, /direct push/i);
+  assert.match(branching, /Automatically delete head branches[^\n]*(OFF|disabled)/i);
   assert.match(handoff, /default branch[^\n]*dev/i);
-  assert.match(handoff, /delete[^\n]*merged[^\n]*branch/i);
+  assert.match(handoff, /delete merged head branches[^\n]*disabled/i);
+  assert.match(handoff, /dev[^\n]*main[^\n]*stable[^\n]*(preserv|보존)/i);
   assert.match(handoff, /Branch Protection[^\n]*(unavailable|not active|disabled|사용하지)/i);
 });
 
