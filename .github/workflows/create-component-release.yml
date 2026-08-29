@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -17,6 +18,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Verify release PR promotion
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-stable-promotion.mjs --allow-prefix release/
       - name: Validate release descriptor
         shell: bash
         run: |
