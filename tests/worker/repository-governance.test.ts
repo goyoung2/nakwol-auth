@@ -9,7 +9,7 @@ async function optional(path:string):Promise<string> {
   catch { return ''; }
 }
 
-test('repository documents define dev -> main -> stable and Codex production boundary', async () => {
+test('repository documents define dev -> main -> stable and current production boundary', async () => {
   const branching = await optional('BRANCHING.md');
   const handoff = await optional('CODEX_HANDOFF.md');
   assert.match(branching, /dev\s*[-=]+>\s*main\s*[-=]+>\s*stable/i);
@@ -19,6 +19,18 @@ test('repository documents define dev -> main -> stable and Codex production bou
   assert.match(handoff, /schema\s+3/i);
   assert.match(handoff, /canonical applicability[^\n]*0/i);
   assert.match(handoff, /2bea00a2-c4b1-4f8c-a521-8c64f18f10be/);
+});
+
+test('free private repository boundary is explicit instead of pretending branch protection is active', async () => {
+  const branching = await optional('BRANCHING.md');
+  const handoff = await optional('CODEX_HANDOFF.md');
+  assert.match(branching, /GitHub Free/i);
+  assert.match(branching, /private/i);
+  assert.match(branching, /Branch Protection/i);
+  assert.match(branching, /direct push/i);
+  assert.match(handoff, /default branch[^\n]*dev/i);
+  assert.match(handoff, /delete[^\n]*merged[^\n]*branch/i);
+  assert.match(handoff, /Branch Protection[^\n]*(unavailable|not active|disabled|사용하지)/i);
 });
 
 test('verification workflows cover all long-lived branches', async () => {
@@ -31,30 +43,38 @@ test('verification workflows cover all long-lived branches', async () => {
   }
 });
 
-test('production-capable push workflows target stable instead of main', async () => {
+test('production-capable stable push workflows fail closed behind a PR promotion guard', async () => {
   for (const path of ['.github/workflows/deploy.yml','.github/workflows/deploy-data.yml','.github/workflows/bootstrap-data.yml','.github/workflows/publish-npm.yml']) {
     const workflow = await optional(path);
     assert.match(workflow, /stable/, path);
     const pushBlock = workflow.match(/push:\s*\n([\s\S]*?)(?=\n\S|$)/)?.[1] ?? '';
     assert.doesNotMatch(pushBlock, /\bmain\b/, path);
+    assert.match(workflow, /pull-requests:\s*read/, path);
+    assert.match(workflow, /verify-stable-promotion\.mjs/, path);
+    assert.match(workflow, /--allow-head\s+main/, path);
+    assert.match(workflow, /--allow-prefix\s+hotfix\//, path);
   }
   const deploy = await optional('.github/workflows/deploy.yml');
   assert.match(deploy, /!tests\/worker\/repository-governance\.test\.ts/);
-  assert.match(deploy, /!scripts\/apply-repository-governance\.mjs/);
+  assert.match(deploy, /!scripts\/verify-stable-promotion\.mjs/);
   const smoke = await optional('.github/workflows/production-smoke.yml');
   assert.match(smoke, /pull_request:[\s\S]*stable/, 'production-smoke.yml');
 });
 
-test('release and protection automation are explicit and fail closed', async () => {
+test('release automation is release-PR gated and paid protection automation is retired', async () => {
   const release = await optional('.github/workflows/create-component-release.yml');
   const descriptorText = await optional('ops/release.json');
   const descriptor = JSON.parse(descriptorText || '{}') as Record<string,unknown>;
-  const governance = await optional('scripts/apply-repository-governance.mjs');
-  const applyWorkflow = await optional('.github/workflows/apply-repository-governance.yml');
+  const oldGovernance = await optional('scripts/apply-repository-governance.mjs');
+  const oldApplyWorkflow = await optional('.github/workflows/apply-repository-governance.yml');
+  const stableGuard = await optional('scripts/verify-stable-promotion.mjs');
 
   assert.match(release, /branches:[\s\S]*stable/);
   assert.match(release, /ops\/release\.json/);
   assert.match(release, /contents:\s*write/);
+  assert.match(release, /pull-requests:\s*read/);
+  assert.match(release, /verify-stable-promotion\.mjs/);
+  assert.match(release, /--allow-prefix\s+release\//);
   assert.match(release, /gh release create/);
   assert.match(release, /merge-base --is-ancestor/);
   assert.equal(typeof descriptor.enabled, 'boolean');
@@ -63,10 +83,11 @@ test('release and protection automation are explicit and fail closed', async () 
   assert.equal(descriptor.target_sha, '5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61');
   assert.equal(descriptor.notes_file, 'docs/releases/2026-08-27-nakwol-data-v0.8.md');
 
-  for (const branch of ['dev','main','stable']) assert.match(governance, new RegExp(`['\"]${branch}['\"]`));
-  assert.match(governance, /required_approving_review_count[^\n]*0/);
-  assert.match(governance, /allow_force_pushes[^\n]*false/);
-  assert.match(governance, /allow_deletions[^\n]*false/);
-  assert.match(applyWorkflow, /workflow_dispatch:/);
-  assert.match(applyWorkflow, /REPO_ADMIN_TOKEN/);
+  assert.equal(oldGovernance, '');
+  assert.equal(oldApplyWorkflow, '');
+  assert.match(stableGuard, /GITHUB_EVENT_NAME/);
+  assert.match(stableGuard, /merge_commit_sha/);
+  assert.match(stableGuard, /base[^\n]*stable/i);
+  assert.match(stableGuard, /pulls/);
+  assert.match(stableGuard, /NAKWOL_STABLE_PROMOTION_OK/);
 });
