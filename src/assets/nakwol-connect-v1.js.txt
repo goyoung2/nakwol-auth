@@ -42,10 +42,19 @@
         }
         return payload;
       };
+      const dataOpenApi = async () => {
+        const response = await fetch(`${dataOrigin}/openapi.json`, { headers: { 'Cache-Control': 'no-cache' } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = payload?.error || {};
+          throw new NakwolDataError(error.code || 'NAKWOL_DATA_DISCOVERY_ERROR', error.message || `DATA HTTP ${response.status}`, response.status, payload);
+        }
+        return payload;
+      };
       const data = {
-        version: '0.3.0', origin: dataOrigin, scopes: dataScopes,
+        version: '0.4.0', origin: dataOrigin, scopes: dataScopes,
         hasScope: (scope) => dataScopes.includes(scope),
-        fetch: dataFetch, request: dataRequest,
+        fetch: dataFetch, request: dataRequest, openapi: dataOpenApi, describe: dataOpenApi,
         registry: {
           summary: () => dataRequest('/v1/registry/summary'),
           generals: (options = {}) => dataRequest(`/v1/registry/generals${options.includeHidden ? '?include_hidden=1' : ''}`),
@@ -57,7 +66,7 @@
         },
       };
       const api = {
-        version: '1.1.0', clientId, redirectUri, authOrigin, client, data, user: null,
+        version: '1.2.0', clientId, redirectUri, authOrigin, client, data, user: null,
         login: () => client.login(), logout: (options = {}) => client.logout(options), getMe: () => client.getMe(),
         isAuthenticated: () => client.isAuthenticated(), isMember: () => client.isMember(),
       };

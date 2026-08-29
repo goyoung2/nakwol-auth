@@ -9,7 +9,7 @@ export class DataAccessError extends Error {
   constructor(code:string,status:number,message:string){ super(message); this.name='DataAccessError'; this.code=code; this.status=status; }
 }
 export function publicHealthResponse():Response { return Response.json({ ok:true, service:'nakwol-data', version:DATA_SERVICE_VERSION, schema_version:DATA_SCHEMA_VERSION }); }
-export function publicSchemaResponse():Response { return Response.json({ ok:true, service:'nakwol-data', version:DATA_SERVICE_VERSION, schema_version:DATA_SCHEMA_VERSION, scopes:DATA_SCOPES }); }
+export function publicSchemaResponse():Response { return Response.json({ ok:true, service:'nakwol-data', version:DATA_SERVICE_VERSION, schema_version:DATA_SCHEMA_VERSION, scopes:DATA_SCOPES, openapi_path:'/openapi.json', openapi_version:'3.1.0' }); }
 export function preflightResponse(request:Request):Response {
   const origin=request.headers.get('Origin')??'*';
   return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-NAKWOL-CLIENT-ID','Access-Control-Max-Age':'600',Vary:'Origin'}});
