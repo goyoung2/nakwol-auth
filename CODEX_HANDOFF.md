@@ -1,6 +1,6 @@
 # CODEX HANDOFF — NAKWOL AUTH / CONNECT / DATA
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 Repository: `goyoung2/nakwol-auth`
 
 ## Read this first
@@ -28,7 +28,7 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 
 일반 작업은 반드시 최신 `dev`에서 새 task branch를 만든다. 과거 feature/ops/release 실험 브랜치를 새 작업의 base로 사용하지 않는다.
 
-**Important GitHub UI note:** repository default branch is still `main` until admin checkpoint issue #24 is completed. Codex must explicitly check out/start from `dev` even if GitHub UI initially presents `main`.
+Repository default branch is now `dev`. GitHub UI와 새 작업의 기준도 `dev`로 맞춰져 있다.
 
 ## Current production DATA golden
 
@@ -153,6 +153,8 @@ Before claiming any release complete, run the full relevant suite on the exact f
 - `ops/release.json` is the auditable release descriptor.
 - DATA production golden docs are changed only after actual production evidence is green.
 - After a release has been created, the descriptor should return to `enabled:false` during normal branch synchronization; never leave a new release request armed accidentally.
+- Automatic production-capable stable workflows must pass `scripts/verify-stable-promotion.mjs` before any deploy/publish/release action.
+- Manual production workflow dispatch is an explicit operator override but must select the `stable` ref.
 
 ## Hotfix rule
 
@@ -189,9 +191,9 @@ They are **non-authoritative historical refs** after governance migration. Do no
 
 Stale PR #5 was explicitly renamed `[ARCHIVED]` and closed. It is historical evidence only.
 
-## Repository governance already active in code/CI
+## Repository governance active in code/CI
 
-The following repository-level controls are implemented and verified in committed workflows:
+The following repository-level controls are implemented in committed workflows:
 
 - `Repository Governance` validates PR source/base promotion paths.
 - `quality-gate` runs full AUTH/Connect and DATA verification on PRs to `dev`, `main`, and `stable`.
@@ -199,32 +201,39 @@ The following repository-level controls are implemented and verified in committe
 - DATA production deploy/bootstrap triggers from `stable` only.
 - npm publish trigger uses `stable` only.
 - production-smoke PR path targets `stable` only.
-- governance-only test/admin-script changes are excluded from AUTH production deployment path filtering.
+- governance-only test/guard changes are excluded from AUTH production deployment path filtering.
 - component release creation is stable-only and requires an explicit audited release descriptor.
+- production-capable stable push workflows fail closed unless the current SHA is the exact merge commit of an allowed PR.
 
-## GitHub Settings admin checkpoint
+## GitHub Free/private governance checkpoint
 
-Target policy is PR required + CI required + no force-push + no deletion for `dev`, `main`, `stable`, with 0 mandatory external approvals for this solo repository.
+The repository intentionally remains **private on GitHub Free**. Native Branch Protection for private repositories is therefore unavailable and is not active by design.
 
-As of this handoff, GitHub Settings themselves are **not yet active**:
+Current repository settings verified on 2026-08-29:
 
-- repository default branch: `main` (target: `dev`)
-- automatic deletion of merged head branches: disabled (target: enabled)
-- `dev` branch protection: disabled
-- `main` branch protection: disabled
-- `stable` branch protection: disabled
+- default branch: `dev`
+- delete merged head branches: enabled
+- `dev` Branch Protection: unavailable / not active
+- `main` Branch Protection: unavailable / not active
+- `stable` Branch Protection: unavailable / not active
 
-The connected ChatGPT GitHub action surface cannot write these repository settings directly. The desired protection payload is codified in `scripts/apply-repository-governance.mjs`, and `.github/workflows/apply-repository-governance.yml` is a manual admin workflow requiring `REPO_ADMIN_TOKEN` with repository Administration write permission.
+The previous paid-plan branch-protection bootstrap (`scripts/apply-repository-governance.mjs`, `.github/workflows/apply-repository-governance.yml`, `REPO_ADMIN_TOKEN`) is retired. Do not recreate it unless the repository deliberately moves to a plan that supports private-repository Branch Protection.
 
-Open tracking issue: **#24 — `Repository admin checkpoint: activate dev default and branch protections`**.
+Because GitHub Free cannot reject a direct push to a long-lived private branch, the operational rule remains strict: humans and agents must not direct-push `dev`, `main`, or `stable`. The production blast radius is additionally reduced by the stable promotion guard:
 
-Do not claim repository protections are active until issue #24 is completed and the actual branch metadata reports protection enabled.
+- deploy/bootstrap/npm: only exact `main -> stable` or `hotfix/* -> stable` PR merge commits are accepted on automatic push;
+- component release: only exact `release/* -> stable` PR merge commits are accepted;
+- manual production workflow dispatch requires ref `stable`.
+
+This is not a substitute for native Branch Protection: it cannot prevent or undo a bad direct push. It does prevent an accidental stable direct push from automatically becoming a production deploy, npm publish, or component release.
 
 ## Do not do these
 
 - do not develop directly on `main` or `stable`;
+- do not direct-push long-lived branches;
 - do not force-push long-lived branches;
 - do not deploy production from `dev` or `main`;
+- do not bypass the stable promotion guard;
 - do not change production golden before smoke evidence;
 - do not delete/truncate Registry or user-owned data during reseed;
 - do not invent game rules or equipment applicability;
