@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { handleMe, preflightResponse, publicHealthResponse, publicSchemaResponse } from './http';
+import { openApiResponse } from './openapi';
 import { handleCreateGameAccount, handleListGameAccounts } from './routes/accounts';
 import { handleCreateDeck, handleDeleteDeck, handleGetDeck, handleListDecks, handlePatchDeck, handlePutDeckComposition } from './routes/decks';
 import { handleCreateEquipment, handleDeleteEquipment, handleListEquipment, handlePatchEquipment } from './routes/equipment';
@@ -14,6 +15,7 @@ const app = new Hono<{ Bindings:DataEnv }>();
 app.options('*', (c) => preflightResponse(c.req.raw));
 app.get('/api/health', () => publicHealthResponse());
 app.get('/api/schema', () => publicSchemaResponse());
+app.get('/openapi.json', (c) => openApiResponse(c.req.raw));
 app.get('/v1/me', (c) => handleMe(c.req.raw, c.env));
 app.get('/v1/game-accounts', (c) => handleListGameAccounts(c.req.raw, c.env));
 app.post('/v1/game-accounts', (c) => handleCreateGameAccount(c.req.raw, c.env));
