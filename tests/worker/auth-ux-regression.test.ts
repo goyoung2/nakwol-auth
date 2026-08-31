@@ -87,3 +87,13 @@ test('production smoke covers AUTH 0.2, Connect 0.4 and DATA 0.9 without mutatin
   assert.doesNotMatch(workflow, /connect\/cli\/device\/start/);
   assert.doesNotMatch(workflow, /curl[^\n]*\s-d\s/);
 });
+
+test('production deploy ignores test-only changes while keeping runtime triggers', async () => {
+  const workflow = await root('.github/workflows/deploy.yml');
+
+  assert.doesNotMatch(workflow, /^\s*-\s*'tests\/\*\*'\s*$/m);
+  assert.doesNotMatch(workflow, /^\s*-\s*'!tests\//m);
+  for (const runtimePath of ['src/**', 'packages/**', 'migrations/**', 'scripts/**', 'package.json', 'wrangler.jsonc']) {
+    assert.ok(workflow.includes(`'${runtimePath}'`), `AUTH deploy must still watch ${runtimePath}`);
+  }
+});
