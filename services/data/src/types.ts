@@ -1,6 +1,6 @@
 import type { DataScope } from './domain.ts';
 
-export interface DataEnv { DB: D1Database; AUTH_ORIGIN: string; }
+export interface DataEnv { DB: D1Database; AUTH_ORIGIN: string; AUTH_SERVICE: Fetcher; }
 export interface DataPrincipal {
   userId: string;
   clientId: string;
