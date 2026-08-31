@@ -7,15 +7,16 @@
 ### NAKWOL AUTH
 
 - 현재 production runtime: **AUTH 0.2.0**
-- formal component release/tag: **아직 생성하지 않음 — Auth Lab V1–V12 완료 후 생성**
-- deployed stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
+- formal component release/tag: **아직 생성하지 않음 — final stable promotion·production deployment 검증 후 생성**
+- deployed stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5` (초기 AUTH 0.2 production deployment 기준; 후속 verified fixes는 정식 release 전 final stable target으로 다시 고정)
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
 - Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
 - Web SDK v0.2.0은 Compact Identity Menu를 추가합니다.
 - `/account`: 일반 사용자의 NAKWOL Account Center
 - `/lab`: 권한이 있는 운영자/개발자를 위한 안전한 Auth Lab
-- production deploy와 통합 smoke는 성공했으며, formal `auth-v0.2.0` release는 실제 로그인/SSO/브라우저 V1–V12 검증을 마칠 때까지 보류합니다.
+- Auth Lab **V1–V12 release matrix는 completed** 상태이며, V8-B 실제 Discord 역할 변경만 외부 역할관리 권한 의존 항목으로 release **waiver**가 승인되었습니다. V8-A는 fresh membership refresh와 접근정책 변화를 자동 검증합니다.
+- formal `auth-v0.2.0` release는 **pending final stable promotion, production deployment verification, and release-PR provenance gate** 상태입니다.
 
 ### NAKWOL Connect
 
