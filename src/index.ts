@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { randomToken } from './crypto';
-import { buildDiscordAuthorizeUrl, exchangeDiscordCode, fetchDiscordIdentity, resolveNakwolRole } from './discord';
+import { buildDiscordAuthorizeUrl, exchangeDiscordCode } from './discord';
 import { registerDemoRoutes } from './demo';
 import {
   clearSessionCookie,
@@ -24,10 +24,9 @@ import {
   findSessionUser,
   getUserWithMembership,
   logAuthEvent,
+  refreshDiscordMembership,
   revokeAccessToken,
   revokeAccessTokensForUser,
-  upsertDiscordUser,
-  upsertMembership,
 } from './store';
 import { isApplicationAccessAllowed } from './policy';
 import type { Env, OAuthRequestRow } from './types';
@@ -151,11 +150,7 @@ app.get('/auth/discord/callback', async (c) => {
 
   try {
     const discordAccessToken = await exchangeDiscordCode(c.env, discordCode);
-    const { user: discordUser, member } = await fetchDiscordIdentity(c.env, discordAccessToken);
-    const role = resolveNakwolRole(c.env, member);
-    const displayName = member?.nick ?? discordUser.global_name ?? discordUser.username;
-    const userId = await upsertDiscordUser(c.env, discordUser, displayName);
-    await upsertMembership(c.env, userId, Boolean(member), role);
+    const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken);
     const session = await createSession(c.env, userId);
     const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
 
