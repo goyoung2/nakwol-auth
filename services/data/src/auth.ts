@@ -17,16 +17,21 @@ function bearerToken(request: Request): string | null {
   return header.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
 }
 
-export async function verifyPrincipal(request: Request, env: Pick<DataEnv,'AUTH_ORIGIN'>, fetcher: Fetcher = fetch): Promise<DataPrincipal> {
+export async function verifyPrincipal(request: Request, env: Pick<DataEnv,'AUTH_ORIGIN'|'AUTH_SERVICE'>, fetcher: Fetcher = fetch): Promise<DataPrincipal> {
   const token = bearerToken(request);
   const clientId = request.headers.get('X-NAKWOL-CLIENT-ID')?.trim() ?? '';
   if (!token || !clientId) throw new DataAuthError('UNAUTHORIZED',401,'NAKWOL access token과 client id가 필요합니다.');
   const authOrigin = env.AUTH_ORIGIN.replace(/\/$/,'');
+  const authUrl = `${authOrigin}/me?client_id=${encodeURIComponent(clientId)}`;
   const headers = new Headers({ Authorization:`Bearer ${token}` });
   const origin = request.headers.get('Origin');
   if (origin) headers.set('Origin',origin);
   let response: Response;
-  try { response = await fetcher(`${authOrigin}/me?client_id=${encodeURIComponent(clientId)}`, { headers }); }
+  try {
+    response = env.AUTH_SERVICE
+      ? await env.AUTH_SERVICE.fetch(new Request(authUrl, { headers }))
+      : await fetcher(authUrl, { headers });
+  }
   catch { throw new DataAuthError('AUTH_UNAVAILABLE',503,'NAKWOL AUTH에 연결할 수 없습니다.'); }
   if (!response.ok) throw new DataAuthError('AUTH_REJECTED',response.status,'NAKWOL AUTH가 요청을 거부했습니다.');
   let payload: any;

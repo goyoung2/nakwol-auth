@@ -6,6 +6,12 @@
   "vars": {
     "AUTH_ORIGIN": "https://nakwol-auth.sepsd21.workers.dev"
   },
+  "services": [
+    {
+      "binding": "AUTH_SERVICE",
+      "service": "nakwol-auth"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
