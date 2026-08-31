@@ -53,3 +53,48 @@ test('account summary API requires an Account Center-bound access token and stay
   assert.match(source, /404/);
   assert.doesNotMatch(source, /Access-Control-Allow-Origin|withCorsHeaders/);
 });
+
+test('Account Center UI uses pinned SDK v0.2 and explicit account states/actions', async () => {
+  const { accountPageHtml } = await import('../../src/account');
+  const html = accountPageHtml();
+
+  for (const text of [
+    '/sdk/v0.2.0/nakwol-auth-web.js',
+    'nakwol-account-center',
+    'Discord로 낙월 로그인',
+    'NAKWOL ID',
+    '연결된 서비스',
+    '서비스 권한',
+    '모든 낙월 서비스에서 로그아웃',
+    '아직 표시할 연결 서비스 기록이 없습니다.',
+  ]) {
+    assert.ok(html.includes(text), `Account Center HTML must include: ${text}`);
+  }
+
+  for (const id of [
+    'account-identity',
+    'logged-out',
+    'login',
+    'account-content',
+    'profile-card',
+    'membership-card',
+    'services-card',
+    'services',
+    'permissions',
+    'permission-detail',
+    'global-logout',
+    'account-error',
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
+  }
+
+  assert.match(html, /new NakwolAuthClient\(\{\s*clientId:\s*ACCOUNT_CLIENT_ID/);
+  assert.match(html, /redirectUri:\s*location\.origin\s*\+\s*'\/account'/);
+  assert.match(html, /fetch\('\/account\/api\/summary'/);
+  assert.match(html, /auth\.getAccessToken\(\)/);
+  assert.match(html, /textContent/);
+  assert.match(html, /new URLSearchParams\(location\.search\).*client_id/s);
+  assert.match(html, /location\.hash\s*===\s*'#permissions'/);
+  assert.match(html, /confirm\(/);
+  assert.match(html, /auth\.logout\(\{\s*global:\s*true,\s*returnTo:\s*location\.origin\s*\+\s*'\/account'\s*\}\)/);
+});
