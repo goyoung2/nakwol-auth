@@ -25,6 +25,7 @@ import {
   getUserWithMembership,
   logAuthEvent,
   revokeAccessToken,
+  revokeAccessTokensForUser,
   upsertDiscordUser,
   upsertMembership,
 } from './store';
@@ -285,6 +286,8 @@ app.get('/session/logout', async (c) => {
   if (!allowedReturn) return jsonError(c, 400, 'INVALID_RETURN_TO', '허용되지 않은 return_to입니다.');
 
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
+  const sessionUserId = await findSessionUser(c.env, sid);
+  if (sessionUserId) await revokeAccessTokensForUser(c.env, sessionUserId);
   await deleteSession(c.env, sid);
   const response = c.redirect(returnTo, 302);
   response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
