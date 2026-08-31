@@ -149,6 +149,10 @@ export async function revokeAccessToken(env: Env, rawToken: string): Promise<voi
   await env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`).bind(Date.now(), hash).run();
 }
 
+export async function revokeAccessTokensForUser(env: Env, userId: string): Promise<void> {
+  await env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(Date.now(), userId).run();
+}
+
 export async function getUserWithMembership(env: Env, userId: string) {
   const user = await env.DB.prepare(`SELECT id, display_name, avatar_url, status FROM users WHERE id = ?`).bind(userId).first<UserRow>();
   if (!user) return null;
