@@ -1,30 +1,54 @@
 # NAKWOL Platform Core
 
-낙월(落月) 서비스들의 중앙 인증·SSO와 공통 게임 데이터 기반입니다.
+낙월(落月) 서비스들의 중앙 인증·SSO와 공통 게임 데이터 기반입니다. AUTH와 DATA는 같은 저장소에서 계약을 함께 관리하지만 Worker, D1, migration, deployment lifecycle은 분리합니다.
 
-## NAKWOL AUTH
+## 현재 구성
 
-Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE, 앱별 access token/`/me`, SSO, Web SDK와 NAKWOL Connect를 담당합니다.
+### NAKWOL AUTH
 
-Auth origin: `https://nakwol-auth.sepsd21.workers.dev`
+- source release candidate: **AUTH 0.2.0**
+- production은 `dev -> main -> stable` 승격과 stable production smoke가 끝나기 전까지 기존 배포 상태를 유지합니다.
+- origin: `https://nakwol-auth.sepsd21.workers.dev`
+- Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
+- Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
+- Web SDK v0.2.0은 Compact Identity Menu를 추가합니다.
+- `/account`: 일반 사용자의 NAKWOL Account Center
+- `/lab`: 권한이 있는 운영자/개발자를 위한 안전한 Auth Lab
 
-## NAKWOL DATA
+### NAKWOL Connect
 
-`services/data/`는 AUTH와 런타임이 분리된 공통 게임 데이터 서비스입니다.
-
-- Worker/D1: `nakwol-data`
-- Foundation `0.1.0`, schema `1`
-- 게임 계정, Registry, 사용자 영구 자산, 장비, 덱/스냅샷 스키마
-- AUTH `/me`를 통한 NAKWOL ID 검증
-- 앱별 DATA scope는 기본 거부 후 명시적 grant
-
-상세 설계/API는 [DATA.md](./DATA.md)를 참고합니다.
-
-## NAKWOL Connect
+- 현재 CLI/distribution: **Connect 0.4.0**
+- `nakwol-connect@0.4.0`은 npm에 게시된 상태입니다.
+- 앱 등록, AUTH/DATA 자동 연동, doctor, DATA OpenAPI discovery를 담당합니다.
 
 ```bash
 npx nakwol-connect init
 npx nakwol-connect doctor --json
+npx nakwol-connect data describe --json
 ```
 
-AUTH와 DATA는 같은 저장소에서 플랫폼 계약을 함께 버전 관리하지만 Worker/D1, migrations, deployment lifecycle은 분리합니다. 앱은 공개 API/SDK만 사용하며 AUTH/DATA D1에 직접 접근하지 않습니다.
+### NAKWOL DATA
+
+- 현재 production runtime: **DATA 0.9.0**
+- schema **3**
+- origin: `https://nakwol-data.sepsd21.workers.dev`
+- OpenAPI 3.1 discovery: `/openapi.json`
+- 사용자 영구 자산(장수/전법/장비), 덱/스냅샷 및 Registry를 담당합니다.
+- DATA는 NAKWOL AUTH `/me`로 caller identity를 검증하며 AUTH D1을 직접 읽지 않습니다.
+
+DATA scopes:
+
+- `profile:read`, `profile:write`
+- `roster:read`, `roster:write`
+- `equipment:read`, `equipment:write`
+- `decks:read`, `decks:write`
+
+## 경계 원칙
+
+- 앱은 AUTH/DATA 공개 API와 SDK만 사용하며 D1에 직접 접근하지 않습니다.
+- AUTH D1과 DATA D1은 분리합니다.
+- AUTH는 DATA scope를 추측하거나 복제하지 않습니다.
+- DATA Registry reseed는 UPSERT 중심이며 사용자 소유 데이터를 DELETE/TRUNCATE하지 않습니다.
+- 게임 규칙이나 장비 적용 가능성을 근거 없이 추론하지 않습니다.
+
+상세 인증 계약은 [WEB_SDK.md](./WEB_SDK.md), DATA 구조는 [DATA.md](./DATA.md), Connect 운영은 [CONNECT.md](./CONNECT.md)를 참고합니다. 오래된 개별 문서의 버전 표기가 이 README 또는 실제 package/runtime 계약과 충돌하면 현재 package/CI/production evidence를 우선 확인합니다.

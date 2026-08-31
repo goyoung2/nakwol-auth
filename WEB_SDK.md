@@ -1,68 +1,108 @@
-# NAKWOL AUTH Web SDK v0.1.0
+# NAKWOL AUTH Web SDK v0.2.0
 
-낙월 서비스용 브라우저 인증 SDK입니다. 각 서비스가 Discord OAuth를 직접 구현하지 않고 중앙 `NAKWOL AUTH`를 사용하도록 합니다.
+낙월 서비스용 브라우저 인증 SDK입니다. 각 서비스는 Discord OAuth를 직접 구현하지 않고 중앙 `NAKWOL AUTH`의 Authorization Code + PKCE(S256) 흐름을 사용합니다.
 
-## 배포 URL
+## 버전과 배포 URL
 
-버전 고정(권장):
+운영 서비스는 버전 고정 URL을 사용합니다.
 
 ```text
+# 기존 호환 버전 — immutable
 https://nakwol-auth.sepsd21.workers.dev/sdk/v0.1.0/nakwol-auth-web.js
-```
 
-stable 별칭(개발/실험용):
+# UX v1 버전 — immutable
+https://nakwol-auth.sepsd21.workers.dev/sdk/v0.2.0/nakwol-auth-web.js
 
-```text
+# stable alias — 안정 버전 승격 시 대상이 이동할 수 있음
 https://nakwol-auth.sepsd21.workers.dev/sdk/nakwol-auth-web.js
-```
 
-manifest:
-
-```text
+# manifest
 https://nakwol-auth.sepsd21.workers.dev/sdk/manifest.json
 ```
 
-운영 서비스는 버전 고정 URL을 사용합니다. stable 별칭은 향후 SDK 업데이트 때 내용이 바뀔 수 있습니다.
+`v0.1.0`은 immutable이며 기존 소비자를 위해 계속 유지합니다. v0.2.0은 v0.1의 headless 인증 계약과 `mountNakwolAuthWidget`을 그대로 포함하면서 새 `mountNakwolIdentityMenu`를 추가합니다.
 
 ## 사전 조건
 
-NAKWOL AUTH의 `applications` 테이블에 다음이 등록되어 있어야 합니다.
+NAKWOL AUTH의 `applications`에 다음이 등록되어 있어야 합니다.
 
-- `client_id`: 앱의 고유 ID
-- `redirect_uris`: callback으로 허용할 정확한 URL 목록
-- `status`: `active`
+- 고유 `client_id`
+- 정확한 callback URL 목록인 `redirect_uris`
+- `active` 상태
 
-브라우저 앱에는 Discord Client Secret이나 NAKWOL AUTH 비밀값을 넣지 않습니다.
+브라우저 코드에는 Discord Client Secret, Cloudflare secret, 중앙 세션 쿠키 같은 비밀값을 넣지 않습니다.
 
-## 가장 빠른 연결
+## 권장 연결 — Identity Menu
 
 ```html
 <script type="module">
   import {
     NakwolAuthClient,
-    mountNakwolAuthWidget,
-  } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.1.0/nakwol-auth-web.js';
+    mountNakwolIdentityMenu,
+  } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.2.0/nakwol-auth-web.js';
 
   const auth = new NakwolAuthClient({
     clientId: 'my-app',
     redirectUri: 'https://my-app.pages.dev/',
   });
 
-  const widget = mountNakwolAuthWidget(auth);
-  const user = await widget.ready;
+  const identity = mountNakwolIdentityMenu(auth, {
+    variant: 'compact',
+    theme: 'inherit',
+  });
 
-  if (user?.membership?.is_member) {
-    console.log('낙월 맹원', user.id);
-  }
+  const user = await identity.ready;
 </script>
 ```
 
-## Headless 사용
+`mountNakwolIdentityMenu(client, options)`는 `{ element, ready, refresh, destroy }`를 반환합니다.
 
-UI를 앱에서 직접 만들 경우 widget을 사용하지 않습니다.
+옵션:
+
+- `variant`: `button` | `compact` | `menu`
+- `theme`: `inherit` | `light` | `dark`
+- `container`: 기존 DOM 컨테이너
+- `accountUrl`: Account Center URL 재정의
+- `showName`: 표시 이름 노출 여부
+- `showRole`: 역할 표시 여부
+
+로그인 사용자는 메뉴에서 `내 낙월 계정`, `이 서비스 권한`, 로그아웃 동작을 사용할 수 있습니다. 메뉴는 `aria-haspopup`, `aria-expanded`를 사용하며 Escape/외부 클릭 닫기와 포커스 복귀를 지원합니다.
+
+## 테마 변수
+
+`theme: 'inherit'`에서는 호스트가 아래 공식 CSS 변수를 직접 지정할 수 있습니다. 지정하지 않은 값에는 SDK 기본값이 적용됩니다.
+
+```css
+--nakwol-auth-accent
+--nakwol-auth-bg
+--nakwol-auth-text
+--nakwol-auth-muted
+--nakwol-auth-border
+--nakwol-auth-radius
+--nakwol-auth-shadow
+```
+
+별도의 `--nakwol-host-*` shadow alias는 사용하지 않습니다.
+
+## 기존 v0.1 Widget 호환
+
+`mountNakwolAuthWidget`은 v0.1.0과 v0.2.0 모두에서 유지됩니다. 기존 서비스가 즉시 UI를 마이그레이션할 필요는 없습니다.
 
 ```js
-import { NakwolAuthClient } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.1.0/nakwol-auth-web.js';
+import {
+  NakwolAuthClient,
+  mountNakwolAuthWidget,
+} from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.1.0/nakwol-auth-web.js';
+```
+
+신규 연동은 `mountNakwolIdentityMenu`를 권장합니다.
+
+## Headless 사용
+
+UI를 서비스가 직접 만들 경우에도 `NakwolAuthClient` 계약은 v0.1과 동일합니다.
+
+```js
+import { NakwolAuthClient } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.2.0/nakwol-auth-web.js';
 
 const auth = new NakwolAuthClient({
   clientId: 'my-app',
@@ -70,126 +110,47 @@ const auth = new NakwolAuthClient({
 });
 
 const user = await auth.bootstrap();
-
-if (!user) {
-  loginButton.onclick = () => auth.login();
-} else {
-  console.log(user.id, user.display_name, user.membership.role);
-}
+if (!user) loginButton.onclick = () => auth.login();
 ```
 
-## 주요 API
+주요 API:
 
-### `new NakwolAuthClient(options)`
+- `await auth.bootstrap()` — callback 처리, state/PKCE 검증, token 교환, `/me` 조회
+- `await auth.login()` — PKCE verifier/challenge와 state 생성 후 `/authorize` 이동
+- `await auth.getMe()` — 현재 앱에 묶인 access token으로 `/me` 조회
+- `auth.getAccessToken()` — 현재 앱의 유효한 access token 또는 `null`
+- `auth.isAuthenticated()` — 현재 앱 token 존재 여부
+- `auth.isMember()` — 마지막 사용자 정보 기준 member/admin 여부
+- `await auth.logout()` — 현재 앱 token만 폐기
+- `await auth.logout({ global: true, returnTo })` — 현재 앱 token과 중앙 SSO 세션 로그아웃
 
-필수:
+`NakwolAuthClient`는 `loading`, `loginstart`, `token`, `user`, `ready`, `logout`, `error` 이벤트를 발생시키는 `EventTarget`입니다.
 
-- `clientId`
+## Account Center와 Auth Lab
 
-선택:
+- `/account`: 일반 사용자를 위한 Account Center. NAKWOL ID, membership, 실제 성공 인증 기록이 있는 연결 서비스와 AUTH 수준 권한을 보여줍니다.
+- `/lab`: AUTH 검증용 Auth Lab. NAKWOL 관리자 또는 활성 Connect developer/operator만 diagnostics를 사용할 수 있습니다.
 
-- `redirectUri`: 기본값은 현재 `origin + pathname`
-- `authOrigin`: 기본값은 운영 NAKWOL AUTH Worker
-- `storage`: 기본값은 `sessionStorage`
-- `fetchImpl`: 테스트/특수 환경에서 fetch 교체용
-
-### `await auth.bootstrap()`
-
-한 번에 다음을 처리합니다.
-
-1. OAuth callback 여부 확인
-2. `state`와 PKCE verifier 검증
-3. authorization code를 access token으로 교환
-4. 기존 access token이 있으면 `/me` 조회
-5. 현재 NAKWOL 사용자 또는 `null` 반환
-
-### `await auth.login()`
-
-PKCE verifier/challenge와 state를 생성한 뒤 `/authorize`로 이동합니다. 중앙 AUTH 세션이 이미 있으면 Discord 화면 없이 SSO로 앱에 돌아올 수 있습니다.
-
-### `await auth.getMe()`
-
-현재 앱 access token으로 `/me`를 조회합니다.
-
-### `auth.getAccessToken()`
-
-현재 유효한 앱 access token을 반환합니다. 만료되었으면 `null`입니다.
-
-### `auth.isAuthenticated()`
-
-현재 앱 access token 존재 여부를 반환합니다.
-
-### `auth.isMember()`
-
-마지막 `/me` 결과가 `member` 또는 `admin`인지 반환합니다.
-
-### `await auth.logout()`
-
-현재 앱의 access token만 폐기합니다. 중앙 SSO 세션은 유지되므로 다시 로그인하면 Discord 화면 없이 돌아올 수 있습니다.
-
-### `await auth.logout({ global: true })`
-
-현재 앱 token을 폐기한 뒤 중앙 `nakwol_sid` 세션까지 로그아웃합니다.
-
-## 이벤트
-
-`NakwolAuthClient`는 `EventTarget`입니다.
-
-```js
-auth.addEventListener('ready', (event) => console.log(event.detail));
-auth.addEventListener('user', (event) => console.log(event.detail));
-auth.addEventListener('logout', () => {});
-auth.addEventListener('error', (event) => console.error(event.detail));
-```
-
-이벤트:
-
-- `loading`
-- `loginstart`
-- `token`
-- `user`
-- `ready`
-- `logout`
-- `error`
-
-## 사용자 객체
-
-```json
-{
-  "id": "usr_...",
-  "display_name": "Discord 표시명",
-  "avatar_url": "https://cdn.discordapp.com/...",
-  "status": "active",
-  "membership": {
-    "is_guild_member": true,
-    "is_member": true,
-    "role": "member",
-    "checked_at": 0
-  }
-}
-```
-
-앱의 데이터 소유권/외래키는 Discord ID가 아니라 `user.id` (`usr_...`)를 사용합니다.
+두 내부 페이지 모두 별도 app-bound OAuth client를 사용합니다. `/account/api/summary`와 `/lab/api/diagnostics`는 다른 앱에서 발급된 access token을 허용하지 않습니다.
 
 ## 보안 기준
 
 - Authorization Code + PKCE(S256)
-- state 검증
-- access token은 기본적으로 `sessionStorage`에만 저장
+- OAuth `state` 검증
+- callback URL exact allowlist
+- access token의 client binding
+- 기본 브라우저 token 저장소는 `sessionStorage`
+- `/token`, `/me`, `/logout` CORS는 등록 redirect origin 기준 제한
 - Discord Client Secret은 중앙 Worker에만 존재
-- 앱은 D1에 직접 접근하지 않음
-- callback URL은 서버에 등록된 정확한 URI만 허용
-- `/token`, `/me`, `/logout`의 CORS origin은 등록 앱의 redirect origin 기준으로 제한
-- 사용자 표시명/프로필 데이터는 SDK widget에서 `textContent`/DOM API로 렌더링
+- 서비스는 AUTH/DATA D1에 직접 접근하지 않음
+- UI의 사용자/서비스 데이터는 DOM API와 `textContent`로 렌더링
+- Auth Lab은 raw access token, token hash, session cookie, PKCE verifier, client secret을 표시하지 않음
 
 ## 버전 정책
 
-- `v0.1.0/...`: immutable. 기존 앱이 계속 같은 SDK를 사용해야 할 때 사용
-- `/sdk/nakwol-auth-web.js`: stable alias. 다음 안정 버전으로 이동 가능
-- breaking change는 major/minor 버전 URL을 새로 생성하고 기존 버전 URL은 유지
+- `/sdk/v0.1.0/...`: immutable legacy contract
+- `/sdk/v0.2.0/...`: immutable UX v1 contract
+- `/sdk/nakwol-auth-web.js`: stable alias, 안정 버전 승격에 따라 이동 가능
+- 새 breaking/minor 계약은 새 pinned URL을 만들고 기존 pinned URL은 유지
 
-## 현재 레퍼런스 앱
-
-`siege-calculator.pages.dev`가 첫 외부 연동 검증 앱입니다.
-
-해당 앱은 향후 테스트용 자체 인증 구현을 제거하고 이 SDK의 버전 고정 URL을 소비하도록 전환합니다.
+첫 외부 레퍼런스 통합은 별도 계획에 따라 `siege-calculator.pages.dev`에서 진행하며, AUTH v0.2.0의 stable production smoke가 끝나기 전에는 소비자 전환을 진행하지 않습니다.
