@@ -95,7 +95,8 @@ test('production-capable stable push workflows fail closed behind a PR promotion
     assert.match(workflow, /--allow-prefix\s+hotfix\//, path);
   }
   const deploy = await optional('.github/workflows/deploy.yml');
-  assert.match(deploy, /!tests\/worker\/repository-governance\.test\.ts/);
+  assert.doesNotMatch(deploy, /^\s*-\s*'tests\/\*\*'\s*$/m);
+  assert.doesNotMatch(deploy, /^\s*-\s*'!tests\//m);
   assert.match(deploy, /!scripts\/verify-stable-promotion\.mjs/);
   const smoke = await optional('.github/workflows/production-smoke.yml');
   assert.match(smoke, /pull_request:[\s\S]*stable/, 'production-smoke.yml');
