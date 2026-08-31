@@ -1,6 +1,6 @@
 import { randomToken, safeEqual, sha256Base64Url } from './crypto';
 import type { DiscordUser, Env, MembershipRow, SessionRow, UserRow } from './types';
-import { discordAvatarUrl } from './discord';
+import { discordAvatarUrl, fetchDiscordIdentity, resolveNakwolRole } from './discord';
 
 const SESSION_TTL_MS = 60 * 60 * 1000;
 const AUTH_CODE_TTL_MS = 2 * 60 * 1000;
@@ -84,6 +84,18 @@ export async function upsertMembership(env: Env, userId: string, isGuildMember: 
        status = excluded.status,
        checked_at = excluded.checked_at`
   ).bind(userId, env.NAKWOL_GUILD_ID, isGuildMember ? 1 : 0, role, active ? 'active' : 'inactive', now).run();
+}
+
+export async function refreshDiscordMembership(
+  env: Env,
+  discordAccessToken: string,
+): Promise<{ userId: string; role: 'user' | 'member' | 'admin' }> {
+  const { user: discordUser, member } = await fetchDiscordIdentity(env, discordAccessToken);
+  const role = resolveNakwolRole(env, member);
+  const displayName = member?.nick ?? discordUser.global_name ?? discordUser.username;
+  const userId = await upsertDiscordUser(env, discordUser, displayName);
+  await upsertMembership(env, userId, Boolean(member), role);
+  return { userId, role };
 }
 
 export async function createAuthorizationCode(env: Env, userId: string, clientId: string, redirectUri: string, codeChallenge: string): Promise<string> {

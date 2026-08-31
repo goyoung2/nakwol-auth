@@ -29,7 +29,7 @@ test('AUTH runtime contract is version 0.2.0 across package, health and landing 
   assert.match(index, /href="\/lab"/);
 });
 
-test('public docs describe deployed AUTH 0.2 while keeping formal release gated by V1-V12', async () => {
+test('public docs describe the verified AUTH 0.2 release candidate and gate formal release on final stable promotion', async () => {
   const sdkDoc = await root('WEB_SDK.md');
   const readme = await root('README.md');
   const handoff = await root('CODEX_HANDOFF.md');
@@ -47,7 +47,9 @@ test('public docs describe deployed AUTH 0.2 while keeping formal release gated 
   assert.match(readme, /DATA.*0\.9\.0/is);
   assert.match(readme, /\/account/);
   assert.match(readme, /\/lab/);
-  assert.match(readme, /formal.*release.*V1.*V12/is);
+  assert.match(readme, /V1.*V12.*completed/is);
+  assert.match(readme, /V8-B.*waiver/is);
+  assert.match(readme, /formal.*release.*pending.*final.*stable/is);
 
   assert.match(handoff, /current production runtime:\s*\*\*AUTH 0\.2\.0\*\*/i);
   assert.match(handoff, /2ea002dca18cbb064be089167326cd311b315dd5/);
@@ -55,13 +57,15 @@ test('public docs describe deployed AUTH 0.2 while keeping formal release gated 
   assert.match(handoff, /33351486056/);
   assert.match(handoff, /Connect.*0\.4\.0/is);
   assert.match(handoff, /DATA 0\.9\.0/);
-  assert.match(handoff, /formal.*release.*pending.*V1.*V12/is);
+  assert.match(handoff, /V1.*V12.*completed/is);
+  assert.match(handoff, /V8-B.*waiver/is);
+  assert.match(handoff, /formal.*release.*pending.*final.*stable/is);
 });
 
-test('AUTH v0.2 production notes record deployment evidence but keep formal release blocked', async () => {
+test('AUTH v0.2 release notes retain deployment evidence and gate formal release on the verified stable target', async () => {
   const notes = await root('docs/releases/2026-08-29-nakwol-auth-v0.2.md');
 
-  assert.match(notes, /production deployed.*formal.*release pending.*V1.*V12/i);
+  assert.match(notes, /release candidate verified.*formal.*release.*pending.*final stable/is);
   assert.match(notes, /SDK v0\.2/i);
   assert.match(notes, /Account Center/i);
   assert.match(notes, /Auth Lab/i);
@@ -71,6 +75,8 @@ test('AUTH v0.2 production notes record deployment evidence but keep formal rele
   assert.match(notes, /f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4/);
   assert.match(notes, /33351486056/);
   assert.match(notes, /V1.*V12/s);
+  assert.match(notes, /V8-B.*waiver/is);
+  assert.match(notes, /target_sha.*stable/is);
 });
 
 test('production smoke covers AUTH 0.2, Connect 0.4 and DATA 0.9 without mutating device state', async () => {
