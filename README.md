@@ -6,14 +6,16 @@
 
 ### NAKWOL AUTH
 
-- source release candidate: **AUTH 0.2.0**
-- production은 `dev -> main -> stable` 승격과 stable production smoke가 끝나기 전까지 기존 배포 상태를 유지합니다.
+- 현재 production runtime: **AUTH 0.2.0**
+- formal component release/tag: **아직 생성하지 않음 — Auth Lab V1–V12 완료 후 생성**
+- deployed stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
 - Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
 - Web SDK v0.2.0은 Compact Identity Menu를 추가합니다.
 - `/account`: 일반 사용자의 NAKWOL Account Center
 - `/lab`: 권한이 있는 운영자/개발자를 위한 안전한 Auth Lab
+- production deploy와 통합 smoke는 성공했으며, formal `auth-v0.2.0` release는 실제 로그인/SSO/브라우저 V1–V12 검증을 마칠 때까지 보류합니다.
 
 ### NAKWOL Connect
 
@@ -50,5 +52,6 @@ DATA scopes:
 - AUTH는 DATA scope를 추측하거나 복제하지 않습니다.
 - DATA Registry reseed는 UPSERT 중심이며 사용자 소유 데이터를 DELETE/TRUNCATE하지 않습니다.
 - 게임 규칙이나 장비 적용 가능성을 근거 없이 추론하지 않습니다.
+- production smoke는 D1 read-only 조회와 HTTP/패키지 실행 검증만 수행하며 테스트용 device request를 production에 생성하지 않습니다.
 
-상세 인증 계약은 [WEB_SDK.md](./WEB_SDK.md), DATA 구조는 [DATA.md](./DATA.md), Connect 운영은 [CONNECT.md](./CONNECT.md)를 참고합니다. 오래된 개별 문서의 버전 표기가 이 README 또는 실제 package/runtime 계약과 충돌하면 현재 package/CI/production evidence를 우선 확인합니다.
+상세 인증 계약은 [WEB_SDK.md](./WEB_SDK.md), DATA 구조는 [DATA.md](./DATA.md), Connect 운영은 [CONNECT.md](./CONNECT.md)를 참고합니다. 오래된 개별 문서의 버전 표기가 이 README 또는 실제 package/CI/production evidence와 충돌하면 현재 package/CI/production evidence를 우선 확인합니다.

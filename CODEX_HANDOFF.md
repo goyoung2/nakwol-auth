@@ -36,12 +36,29 @@ Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름�
 
 ### AUTH
 
-- source candidate: **AUTH 0.2.0 release candidate**
-- status: production 아님. `dev -> main -> stable` 승격과 stable production smoke 전까지 release candidate이다.
+- current production runtime: **AUTH 0.2.0**
+- production stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
+- production Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
+- production deploy workflow: `33350989974` — success
+- production platform smoke workflow: `33351486056` — success
+- formal component release/tag: **pending Auth Lab V1–V12 completion**
 - production origin: `https://nakwol-auth.sepsd21.workers.dev`
-- candidate scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
-- pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0은 immutable compatibility boundary다.
+- deployed scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
+- pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0 remains the immutable compatibility boundary.
 - OAuth security boundary: Authorization Code + PKCE(S256), state validation, exact redirect allowlist, app-bound access token, restricted CORS.
+
+Production smoke evidence on run `33351486056`:
+
+- production AUTH D1 schema and internal apps `nakwol-account-center`, `nakwol-auth-lab` verified read-only;
+- AUTH health/SDK manifest/v0.1/v0.2/stable alias/account/lab all returned expected production responses;
+- unauthenticated Account/Lab APIs returned 401;
+- production v0.1 SDK was byte-equal to the pinned repository v0.1 asset;
+- production v0.2 SDK and stable alias were byte-equal to the repository v0.2 asset;
+- Connect manifest/package/admin/developer/device-verify/llms surfaces were green as Connect 0.4;
+- production Connect package executed and reported `NAKWOL Connect CLI v0.4`;
+- DATA OpenAPI remained 3.1.0 / DATA 0.9.0.
+
+The smoke workflow is intentionally read-only against production D1 and must not create test device requests.
 
 ### Connect
 
@@ -58,7 +75,8 @@ Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름�
 - OpenAPI 3.1 discovery: `/openapi.json`
 - stable PR #43 release path deployed DATA first, then allowed AUTH deployment only after live DATA v0.9 contract verification.
 - DATA deploy workflow evidence: `33255315017`.
-- AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
+- earlier AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
+- AUTH 0.2 production deploy `33350989974` also passed the live DATA 0.9 gate before Worker mutation.
 
 DATA scopes:
 
@@ -69,21 +87,37 @@ DATA scopes:
 
 AUTH D1 and DATA D1 are separate. AUTH must not read DATA D1 or invent/mirror DATA scopes. DATA verifies caller identity through AUTH `/me` rather than AUTH D1 access.
 
-## AUTH UX v1 work surface
+## AUTH UX v1 release history
 
-- branch: `feature/nakwol-auth-ux-v1`
-- draft PR: #45
+- recovery/design history: closed draft PR #45
+- feature -> dev promotion: PR #46, exact feature head `b959ce2242c9394a7d7cbdd56a396cc637c8d25e`
+- dev -> main: PR #47
+- main -> stable: PR #48
+- deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
+- deploy workflow: `33350989974`
+- temporary no-merge production smoke probe: PR #49
+- combined production smoke evidence: `33351486056`
 - recovery handoff: `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md`
 - design: `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
 - plan: `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
 
-Implemented candidate boundaries:
+Implemented boundaries:
 
 - SDK v0.2.0 is a new immutable asset; v0.1.0 remains untouched.
 - `mountNakwolIdentityMenu` is the new integration UI; legacy `mountNakwolAuthWidget` remains.
 - `/account` uses `nakwol-account-center` app-bound tokens and user-specific successful AUTH evidence for connected services.
 - `/lab` uses `nakwol-auth-lab` app-bound tokens and permits diagnostics only for NAKWOL admins or active Connect developer/operator users.
 - Lab diagnostics return safe metadata only; never raw token/hash/session cookie/PKCE verifier/client secret.
+
+## Formal AUTH v0.2.0 release blocker
+
+Do **not** create the formal `auth-v0.2.0` component release yet.
+
+Production deployment and HTTP/platform smoke are green, but the design-spec Auth Lab matrix **V1–V12** still requires completion. Scenarios involving real Discord login, central SSO, local/global logout, role changes, multi-app isolation and desktop/mobile/keyboard behavior require real browser/user interaction and must not be marked PASS from source tests alone.
+
+Automated tests already cover important fail-closed portions such as invalid redirect URI, invalid state/PKCE, app-bound token checks and DATA scope enforcement, but they do not replace the required live/browser matrix.
+
+After V1–V12 is recorded green, create `release/auth-v0.2.0` from the exact verified stable production commit and use the normal release-PR provenance guard.
 
 ## DATA safety boundary
 
@@ -134,7 +168,7 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 - Production-capable deployment/publish automation belongs to `stable` only.
 - Normal promotion is `dev -> main -> stable` by PR.
 - Component tags: `data-vX.Y.Z`, `connect-vX.Y.Z`, `auth-vX.Y.Z`.
-- Formal component release is created only after production smoke succeeds.
+- Formal component release is created only after the release-specific production smoke/manual verification contract is satisfied.
 - `ops/release.json` is the audited release descriptor and must not be left armed accidentally.
 - production workflows must pass `scripts/verify-stable-promotion.mjs`.
 - DATA-first production ordering must remain fail-closed.
@@ -145,19 +179,16 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 - do not develop/direct-push on `main` or `stable`;
 - do not direct-push or force-push `dev`;
 - do not bypass stable promotion or DATA-first gates;
-- do not call AUTH 0.2.0 production before stable smoke evidence exists;
+- do not claim formal AUTH v0.2.0 release before V1–V12 is completed;
 - do not expose raw authentication secrets in `/lab` or docs;
 - do not merge AUTH and DATA D1 responsibilities;
 - do not delete/truncate Registry or user-owned data during reseed;
 - do not invent game rules or canonical equipment applicability;
 - do not branch from historical feature/ops refs without fresh comparison against `dev`.
 
-## Next after AUTH v0.2 candidate verification
+## Next
 
-1. Exact-final-head Task 8 review and full CI.
-2. PR #45 -> `dev` only after exact head verification.
-3. `dev -> main` promotion PR.
-4. `main -> stable` promotion PR and production deploy.
-5. Production route smoke + Auth Lab V1–V12 matrix.
-6. Only then create formal `auth-v0.2.0` release.
-7. After production v0.2 is green, execute the separate `siege-calculator` integration plan.
+1. Persist this verified post-deploy evidence and production smoke workflow through normal `chore -> dev -> main -> stable` promotion.
+2. Run and record Auth Lab V1–V12 with real browser identities/sessions where required.
+3. Only after V1–V12 is green, create formal `auth-v0.2.0` release.
+4. Then execute the separate `siege-calculator` Identity Menu integration plan.
