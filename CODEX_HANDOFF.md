@@ -37,11 +37,12 @@ Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름�
 ### AUTH
 
 - current production runtime: **AUTH 0.2.0**
-- production stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
-- production Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
-- production deploy workflow: `33350989974` — success
+- initial AUTH 0.2 production stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
+- initial AUTH 0.2 production Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
+- initial AUTH 0.2 production deploy workflow: `33350989974` — success
 - production platform smoke workflow: `33351486056` — success
-- formal component release/tag: **pending Auth Lab V1–V12 completion**
+- formal component release/tag: **pending final stable promotion, production deployment verification, and release-PR provenance gate**
+- Auth Lab **V1–V12 release matrix is completed**. V8-B live Discord role mutation has an approved release **waiver** because it requires controlled external guild role-management authority; V8-A automatically verifies the fresh Discord refresh, membership persistence, and member-policy allow/deny/allow path.
 - production origin: `https://nakwol-auth.sepsd21.workers.dev`
 - deployed scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
 - pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0 remains the immutable compatibility boundary.
@@ -77,6 +78,7 @@ The smoke workflow is intentionally read-only against production D1 and must not
 - DATA deploy workflow evidence: `33255315017`.
 - earlier AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
 - AUTH 0.2 production deploy `33350989974` also passed the live DATA 0.9 gate before Worker mutation.
+- DATA-to-AUTH Service Binding hotfix was later promoted to stable and production-verified without changing AUTH D1/DATA D1 separation.
 
 DATA scopes:
 
@@ -93,13 +95,16 @@ AUTH D1 and DATA D1 are separate. AUTH must not read DATA D1 or invent/mirror DA
 - feature -> dev promotion: PR #46, exact feature head `b959ce2242c9394a7d7cbdd56a396cc637c8d25e`
 - dev -> main: PR #47
 - main -> stable: PR #48
-- deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
-- deploy workflow: `33350989974`
+- initial deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
+- initial deploy workflow: `33350989974`
 - temporary no-merge production smoke probe: PR #49
 - combined production smoke evidence: `33351486056`
-- recovery handoff: `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md`
+- V8-A fresh membership refresh regression: PR #61 -> `dev`
+- recovery handoff: `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md` (historical recovery context; its old release-readiness status is superseded)
+- release evidence: `docs/releases/2026-08-29-nakwol-auth-v0.2.md`
+- formal release execution plan: `docs/superpowers/plans/2026-08-31-auth-v0.2.0-formal-release.md`
 - design: `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
-- plan: `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
+- implementation plan: `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
 
 Implemented boundaries:
 
@@ -109,15 +114,22 @@ Implemented boundaries:
 - `/lab` uses `nakwol-auth-lab` app-bound tokens and permits diagnostics only for NAKWOL admins or active Connect developer/operator users.
 - Lab diagnostics return safe metadata only; never raw token/hash/session cookie/PKCE verifier/client secret.
 
-## Formal AUTH v0.2.0 release blocker
+## Formal AUTH v0.2.0 release gate
 
-Do **not** create the formal `auth-v0.2.0` component release yet.
+Do **not** create the formal `auth-v0.2.0` component release until the final stable promotion and production deployment are freshly verified.
 
-Production deployment and HTTP/platform smoke are green, but the design-spec Auth Lab matrix **V1–V12** still requires completion. Scenarios involving real Discord login, central SSO, local/global logout, role changes, multi-app isolation and desktop/mobile/keyboard behavior require real browser/user interaction and must not be marked PASS from source tests alone.
+The Auth Lab **V1–V12 matrix is completed**. Evidence nuances are intentionally preserved:
 
-Automated tests already cover important fail-closed portions such as invalid redirect URI, invalid state/PKCE, app-bound token checks and DATA scope enforcement, but they do not replace the required live/browser matrix.
+- V5 verifies client-side expiry/recovery and is not represented as a literal one-hour wall-clock wait.
+- V7 has live callback/state mismatch evidence; PKCE verifier mismatch remains automated/server-side evidence.
+- V8-A is automated PASS for fresh Discord membership refresh and member-policy allow -> deny -> allow behavior.
+- V8-B live Discord role mutation has an approved release **waiver** because a controlled guild role mutation requires external server-admin/test-account authority.
+- V10 live production proof is AUTH `/me` 200, DATA `/v1/me` 200, and registry 403 `SCOPE_DENIED` without `roster:read`.
+- V11 and V12 live browser recovery/responsive/accessibility checks are PASS.
 
-After V1–V12 is recorded green, create `release/auth-v0.2.0` from the exact verified stable production commit and use the normal release-PR provenance guard.
+The remaining blocker is lifecycle/provenance rather than functional verification: promote the V8-A/refined release contract through `dev -> main -> stable`, verify the stable-triggered AUTH deployment and DATA-first gate, capture the exact final stable release target, then create the release only through `release/auth-v0.2.0 -> stable` and the guarded component-release workflow.
+
+Because promotions are squash merges, never point `ops/release.json.target_sha` at a `dev` or `main` SHA. It must point at the exact final verified **stable** commit.
 
 ## DATA safety boundary
 
@@ -179,7 +191,7 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 - do not develop/direct-push on `main` or `stable`;
 - do not direct-push or force-push `dev`;
 - do not bypass stable promotion or DATA-first gates;
-- do not claim formal AUTH v0.2.0 release before V1–V12 is completed;
+- do not create formal AUTH v0.2.0 before final stable promotion, production deployment verification, exact target capture, and release-PR provenance validation;
 - do not expose raw authentication secrets in `/lab` or docs;
 - do not merge AUTH and DATA D1 responsibilities;
 - do not delete/truncate Registry or user-owned data during reseed;
@@ -188,7 +200,9 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 
 ## Next
 
-1. Persist this verified post-deploy evidence and production smoke workflow through normal `chore -> dev -> main -> stable` promotion.
-2. Run and record Auth Lab V1–V12 with real browser identities/sessions where required.
-3. Only after V1–V12 is green, create formal `auth-v0.2.0` release.
-4. Then execute the separate `siege-calculator` Identity Menu integration plan.
+1. Finish the release-evidence PR to `dev` with the updated V1–V12/V8 waiver contract and fresh full quality gates.
+2. Promote `dev -> main -> stable` with exact diff review and pinned PR heads.
+3. Verify the stable-triggered AUTH production deployment, DATA-first live contract gate and combined production smoke.
+4. Capture the exact final verified stable release target and final deployment evidence.
+5. Create `release/auth-v0.2.0` from that exact stable target, change only `ops/release.json`, and let the guarded component-release workflow create `auth-v0.2.0`.
+6. After formal release, execute the separate `siege-calculator` Identity Menu/seamless-SSO follow-up plan as appropriate.

@@ -1,8 +1,8 @@
-# NAKWOL AUTH v0.2.0 — Production Evidence / Formal Release Pending
+# NAKWOL AUTH v0.2.0 — Release Candidate Evidence
 
-Status: **production deployed; formal `auth-v0.2.0` release pending Auth Lab V1–V12 completion**
+Status: **release candidate verified; formal `auth-v0.2.0` tag/Release pending final stable promotion, production deployment verification, and release-PR provenance gate**
 
-AUTH v0.2.0 is deployed to the stable production Worker and has passed automated production smoke. This file is evidence of the deployed candidate, but it is deliberately **not** a formal component release record yet.
+This record supersedes the release-readiness status in `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md`. That handoff remains historical recovery context; the verification and release state below is authoritative for AUTH v0.2.0.
 
 ## Scope
 
@@ -12,60 +12,106 @@ AUTH v0.2.0 is deployed to the stable production Worker and has passed automated
 - `/account` Account Center with NAKWOL ID, membership and evidence-backed connected services.
 - `/lab` Auth Lab with privileged access and safe diagnostics.
 - Internal OAuth clients `nakwol-account-center` and `nakwol-auth-lab`.
+- Global logout revokes all app-bound access tokens for the central-session user while local logout remains app-local.
+- DATA-to-AUTH production verification uses Cloudflare Service Binding `AUTH_SERVICE -> nakwol-auth`.
 
 ## Compatibility and security
 
 AUTH v0.2.0 preserves the existing security model:
 
-- Authorization Code + PKCE(S256)
+- Authorization Code + PKCE (S256)
 - OAuth state validation
 - exact redirect URI allowlists
 - app-bound access tokens
 - registered-origin CORS restrictions for `/token`, `/me`, `/logout`
 - central SSO session isolation
+- AUTH D1 and DATA D1 remain separate
+- AUTH does not read DATA D1 or invent/mirror DATA scopes
 
-The pinned v0.1 Web SDK remains byte-for-byte unchanged in production. Auth Lab diagnostics never return raw access tokens, token hashes, session cookies, PKCE verifiers or client secrets.
+The pinned v0.1 Web SDK remains immutable. Auth Lab diagnostics never return raw access tokens, token hashes, session cookies, PKCE verifiers or client secrets.
 
-## Verified production deployment
+## Verified initial AUTH v0.2 production deployment baseline
+
+The first production deployment of the AUTH v0.2 UX candidate remains preserved as historical release evidence:
 
 ```text
 stable SHA: 2ea002dca18cbb064be089167326cd311b315dd5
-AUTH deploy workflow ID: 33350989974
+AUTH deploy workflow: 33350989974
 Worker Version ID: f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4
-combined production smoke workflow ID: 33351486056
+combined production smoke workflow: 33351486056
 ```
 
-Deployment workflow `33350989974` completed successfully in this order:
+That deployment completed the stable promotion provenance guard, root verification, D1 migration/required-app checks, DATA-first live DATA 0.9 contract gate, AUTH Worker deployment, and production AUTH/Connect checks. The combined smoke then verified the AUTH 0.2 / Connect 0.4 / DATA 0.9 platform surfaces. Later verified fixes do not erase this evidence; the formal release target will be a newer exact stable commit selected only after the final promotion/deployment cycle below.
 
-1. stable PR provenance guard;
-2. unit tests;
-3. typecheck;
-4. Worker dry-run bundle;
-5. Cloudflare credential validation;
-6. existing AUTH D1 resolution;
-7. migration 0005 application;
-8. required application verification;
-9. live DATA 0.9 contract gate;
-10. AUTH Worker deployment;
-11. production AUTH/Connect verification.
+## Automated release-candidate verification
 
-The DATA-first gate completed before Worker mutation.
+V8-A was added through PR #61 and merged to `dev` as `7c3d207f9d31b2171e6d8dcf90b10877263c7b8f`.
 
-## Production smoke evidence
+The GREEN verification head passed:
 
-A temporary no-merge PR based directly on deployed stable was used to validate the live system from a GitHub runner. The combined smoke definition was then selected as the permanent workflow candidate.
+- 71/71 AUTH tests
+- TypeScript typecheck
+- Worker dry-run bundle
+- Connect static checks
+- Repository Governance quality gate including AUTH/Connect and DATA
 
-Combined smoke run `33351486056` completed successfully.
+V8-A exercises the same `refreshDiscordMembership()` orchestration used by the production Discord OAuth callback and proves:
 
-D1 verification was read-only and confirmed the platform schema plus these application registrations:
+```text
+Discord roles: member -> user -> member
+persisted membership: active member -> inactive user -> active member
+member-policy access: allow -> deny -> allow
+```
 
-- `nakwol-connect-admin`
-- `nakwol-connect-cli`
-- `siege-calculator`
-- `nakwol-account-center`
-- `nakwol-auth-lab`
+No AUTH schema/migration, DATA schema/migration, SDK contract, deployment flag, or production data mutation was introduced by the V8-A change.
 
-Live production surface results on the first attempt:
+## Auth Lab V1–V12 release matrix
+
+The release matrix was completed on 2026-08-31. Scenarios that require a real browser/identity were verified manually; server-only negative paths retain automated coverage where noted.
+
+| Check | Result | Release evidence / nuance |
+| --- | --- | --- |
+| V1 New-user login | PASS | Live browser + Discord OAuth flow verified. |
+| V2 Existing SSO user | PASS | Existing central SSO session reused as expected. |
+| V3 Local logout | PASS | App-local token/session behavior remains isolated from central SSO. |
+| V4 Global logout | PASS | Global logout revokes all app-bound tokens for the user and terminates central-session reuse. |
+| V5 Token expiry | PASS* | Client-side expiry/recovery behavior was verified by forcing the Lab session expiry state. This is not a literal one-hour wall-clock wait and must not be represented as one. |
+| V6 Invalid redirect URI | PASS | Fail-closed redirect allowlist regression covered and verified. |
+| V7 Invalid state / PKCE | PASS* | Live browser evidence covers callback/state mismatch; PKCE verifier mismatch is covered by automated/server-side regression. |
+| V8 Membership/role change | PASS WITH WAIVER | V8-A automated end-to-end refresh/persistence/policy path is green. V8-B live Discord role mutation is deferred because a controlled guild role mutation requires external server-admin/test-account authority. Release waiver approved 2026-08-31. |
+| V9 Multi-app SSO isolation | PASS | Live multi-app behavior verified. |
+| V10 DATA scope enforcement | PASS | Production browser proof: AUTH `/me` = 200, DATA `/v1/me` = 200, DATA `/v1/registry/generals` = 403 `SCOPE_DENIED` for Lab without `roster:read`. |
+| V11 UI recovery | PASS | DevTools Offline induced network failure without white-screen/permanent breakage; returning online allowed normal recovery. |
+| V12 Responsive/accessibility | PASS | Desktop/mobile responsive behavior plus keyboard navigation, Escape handling, focus return and Account Center interaction verified. |
+
+### V8-B release waiver
+
+V8-B is not waived because the code path is untested. The fresh Discord membership refresh path is automated and drives the same persisted membership and existing application access policy used by production.
+
+The deferred item is specifically a real Discord guild mutation (`member role removed -> OAuth refresh -> role restored -> OAuth refresh`) requiring controlled role-management authority. The live mutation should be executed later when a test account or server-admin assistance is available; its absence does not block AUTH v0.2.0.
+
+## Production integration evidence before final promotion
+
+The DATA-to-AUTH Service Binding production hotfix is deployed and was verified with a newly authenticated Lab token:
+
+```text
+AUTH /me
+200
+
+DATA /v1/me
+200
+
+DATA /v1/registry/generals
+403 SCOPE_DENIED
+```
+
+This is the intended boundary: DATA accepts the valid AUTH principal, `/v1/me` needs no DATA scope, and registry access remains denied when `roster:read` is absent.
+
+The production DATA deployment at stable `87199e9adaf8513097a7cac76fb7a1235ea82272` completed with no migrations to apply. The existing idempotent Registry seed workflow ran and registry counts remained validated. The fix itself did not change migration/schema/registry seed code.
+
+## Existing production smoke baseline
+
+The combined production smoke verifies AUTH 0.2, Connect 0.4 and DATA 0.9 surfaces together. Prior successful smoke evidence includes:
 
 ```text
 /api/health                                      200
@@ -86,55 +132,43 @@ Live production surface results on the first attempt:
 DATA /openapi.json                               200
 ```
 
-Additional assertions passed:
+Assertions include immutable v0.1 SDK parity, v0.2/stable SDK parity, Account/Lab fail-closed unauthenticated APIs, Connect 0.4 package execution, and DATA 0.9 OpenAPI contract.
 
-- health reports service `nakwol-auth`, version `0.2.0`;
-- SDK manifest reports stable `0.2.0` and module `/sdk/v0.2.0/nakwol-auth-web.js`;
-- production v0.1 SDK is byte-equal to the pinned repository v0.1 asset;
-- production v0.2 SDK and stable alias are byte-equal to the repository v0.2 asset;
-- v0.2 contains `mountNakwolIdentityMenu`;
-- Account Center and Auth Lab expected client/page markers exist;
-- unauthenticated APIs fail closed with `ACCOUNT_AUTH_REQUIRED` / `LAB_AUTH_REQUIRED`;
-- Connect manifest reports `nakwol-connect` version `0.4.0`;
-- production Connect package executes and reports `NAKWOL Connect CLI v0.4`;
-- DATA OpenAPI remains 3.1.0 / DATA 0.9.0.
+## Non-blocking follow-up UX
 
-Smoke markers:
+The following is intentionally deferred beyond AUTH v0.2.0:
 
-```text
-NAKWOL_PLATFORM_D1_SMOKE_OK
-NAKWOL_PLATFORM_PRODUCTION_SURFACES_OK
-NAKWOL_CONNECT_V04_PACKAGE_OK
-```
+**Account Center -> service open seamless SSO handoff.**
 
-## Auth Lab V1–V12 matrix — still required
+A newly opened destination tab has no app-specific `sessionStorage` token by design. A future consumer integration can detect the missing destination token, automatically begin destination-app PKCE SSO, reuse the existing central AUTH session, and return immediately. This improves ergonomics without changing the current security boundary and is not a v0.2.0 release blocker.
 
-Do not infer PASS from source tests for scenarios that require a real identity, browser or SSO session.
+## Final release procedure
 
-- **V1 신규 사용자 로그인** — pending live browser/Discord verification.
-- **V2 기존 SSO 사용자** — pending live multi-app SSO verification.
-- **V3 Local logout** — pending live app-token vs central-session verification.
-- **V4 Global logout** — pending live central-session termination verification.
-- **V5 Token expiry** — automated fail-closed behavior exists; official live/UI matrix still pending.
-- **V6 Invalid redirect URI** — automated fail-closed regression covered; may be additionally live-probed.
-- **V7 Invalid state / PKCE** — automated regression covered; official live-session matrix remains to be recorded.
-- **V8 Membership/role change** — pending real identity/policy refresh verification.
-- **V9 Multi-app SSO isolation** — pending live two-app verification.
-- **V10 DATA scope enforcement** — automated DATA scope tests exist; official live user-scope matrix remains to be recorded.
-- **V11 UI recovery** — automated UI/error contracts exist; browser experience verification pending.
-- **V12 Responsive/accessibility** — pending desktop/mobile/keyboard verification.
+The formal release must follow this order:
 
-Important membership behavior: the system does not persist a Discord bearer token for background polling. `/me` reflects the latest stored verified membership; a new full Discord OAuth callback refreshes membership/role state.
+1. promote the V8-A helper/test and this release evidence from `dev -> main` with fresh AUTH/DATA/governance checks;
+2. promote `main -> stable` with fresh checks and exact diff review;
+3. allow the stable `src/**` change to trigger the fail-closed AUTH production deployment;
+4. verify deployment success, DATA-first gate, production smoke, and a short authenticated sanity check;
+5. record the final deployment evidence if needed without changing AUTH runtime;
+6. select the final verified stable commit SHA as the immutable release target;
+7. create `release/auth-v0.2.0` from that verified stable state;
+8. change only `ops/release.json` to an enabled AUTH 0.2.0 descriptor pointing `target_sha` at the verified stable target and `notes_file` at this file;
+9. merge that release PR only after its fresh gates pass;
+10. require the component-release workflow to create and verify `auth-v0.2.0`.
 
-## Formal release condition
+`target_sha` must be the final verified **stable** commit, not a `dev` or `main` SHA, because promotion uses squash merges.
 
-Only after all of the following are green:
+## Formal release gate
 
-1. deployed stable SHA verified;
-2. AUTH and DATA CI green;
-3. production platform smoke green;
-4. Auth Lab V1–V12 matrix recorded green;
-5. v0.1 pinned asset unchanged;
-6. OAuth/CORS security regression guards green;
+AUTH v0.2.0 is eligible for formal release when all of the following remain green at the final stable target:
 
-create `release/auth-v0.2.0` from the exact verified stable production commit, point `ops/release.json.target_sha` at that exact release target, and create the formal `auth-v0.2.0` release through the release-PR provenance guard.
+- AUTH and DATA verification suites;
+- repository governance quality gate;
+- stable promotion provenance;
+- production AUTH deployment and DATA-first contract gate;
+- combined production smoke;
+- Auth Lab V1–V12 matrix above, including the approved V8-B waiver;
+- immutable v0.1 SDK guard;
+- OAuth/PKCE/state/CORS/logout regression guards;
+- no pre-existing `auth-v0.2.0` tag or GitHub Release.
