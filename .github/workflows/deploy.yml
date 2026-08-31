@@ -6,8 +6,6 @@ on:
       - stable
     paths:
       - 'src/**'
-      - 'tests/**'
-      - '!tests/worker/repository-governance.test.ts'
       - 'packages/**'
       - 'migrations/**'
       - 'scripts/**'

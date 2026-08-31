@@ -6,6 +6,7 @@ on:
       - stable
     paths:
       - 'ops/production-smoke.flag'
+      - '.github/workflows/production-smoke.yml'
 
 permissions:
   contents: read
@@ -21,60 +22,105 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-      - name: Resolve production D1
+
+      - name: Resolve production AUTH D1
         run: node scripts/ensure-d1.mjs
-      - name: Verify NAKWOL Connect v0.2 schema and registrations
+
+      - name: Verify production platform schema and internal applications
         shell: bash
         run: |
           set -euo pipefail
           npx wrangler d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_operators','application_settings','connect_developers','application_owners','connect_device_requests','connect_cli_tokens') ORDER BY name;" > /tmp/schema.json
-          cat /tmp/schema.json
           for table in auth_operators application_settings connect_developers application_owners connect_device_requests connect_cli_tokens; do grep -q "$table" /tmp/schema.json; done
-          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id; SELECT client_id,framework,access_policy FROM application_settings WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
-          cat /tmp/apps.json
-          grep -q 'nakwol-connect-admin' /tmp/apps.json
-          grep -q 'nakwol-connect-cli' /tmp/apps.json
-          grep -q 'siege-calculator' /tmp/apps.json
+
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator','nakwol-account-center','nakwol-auth-lab') ORDER BY client_id; SELECT client_id,framework,access_policy FROM application_settings WHERE client_id IN ('nakwol-connect-admin','nakwol-connect-cli','siege-calculator','nakwol-account-center','nakwol-auth-lab') ORDER BY client_id;" > /tmp/apps.json
+          for app in nakwol-connect-admin nakwol-connect-cli siege-calculator nakwol-account-center nakwol-auth-lab; do grep -q "$app" /tmp/apps.json; done
+          grep -q 'internal' /tmp/apps.json
           grep -q 'public' /tmp/apps.json
-          echo 'NAKWOL_CONNECT_V02_D1_OK'
-      - name: Verify production routes and device start
+          echo 'NAKWOL_PLATFORM_D1_SMOKE_OK'
+
+      - name: Verify AUTH v0.2, Connect v0.4 and DATA v0.9 production surfaces
         shell: bash
         run: |
           set -euo pipefail
           origin='https://nakwol-auth.sepsd21.workers.dev'
+          data_origin='https://nakwol-data.sepsd21.workers.dev'
+
+          ok=0
           for i in {1..18}; do
-            admin=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/admin.html -w '%{http_code}' "$origin/admin/apps" || true)
-            devs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/developers.html -w '%{http_code}' "$origin/admin/developers" || true)
-            manifest=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-manifest.json -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
-            package=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-cli.tgz -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
-            device=$(curl -sS -H 'Content-Type: application/json' -d '{}' -o /tmp/device.json -w '%{http_code}' "$origin/connect/cli/device/start" || true)
-            verify=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device.html -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
-            llms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/llms.txt -w '%{http_code}' "$origin/llms.txt" || true)
             health=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health.json -w '%{http_code}' "$origin/api/health" || true)
-            echo "attempt=$i admin=$admin devs=$devs manifest=$manifest package=$package device=$device verify=$verify llms=$llms health=$health"
-            if [ "$admin" = '200' ] && [ "$devs" = '200' ] && [ "$manifest" = '200' ] && [ "$package" = '200' ] && [ "$device" = '200' ] && [ "$verify" = '200' ] && [ "$llms" = '200' ] && [ "$health" = '200' ]; then
-              grep -q 'NAKWOL Connect' /tmp/admin.html
-              grep -q '개발자 권한' /tmp/developers.html
-              grep -q '"name":"nakwol-connect"' /tmp/cli-manifest.json
-              grep -q '"device_code"' /tmp/device.json
-              grep -q '"user_code"' /tmp/device.json
-              grep -q 'CLI 연결 승인' /tmp/device.html
-              grep -q 'npx --yes nakwol-connect init' /tmp/llms.txt
-              grep -q '"service":"nakwol-auth"' /tmp/health.json
-              test -s /tmp/connect-cli.tgz
-              echo 'NAKWOL_CONNECT_V02_ROUTES_OK'
+            sdk_manifest=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk-manifest.json -w '%{http_code}' "$origin/sdk/manifest.json" || true)
+            v01=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk-v01.js -w '%{http_code}' "$origin/sdk/v0.1.0/nakwol-auth-web.js" || true)
+            v02=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk-v02.js -w '%{http_code}' "$origin/sdk/v0.2.0/nakwol-auth-web.js" || true)
+            alias=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk-alias.js -w '%{http_code}' "$origin/sdk/nakwol-auth-web.js" || true)
+            account=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/account.html -w '%{http_code}' "$origin/account" || true)
+            lab=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/lab.html -w '%{http_code}' "$origin/lab" || true)
+            account_api=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/account-api.json -w '%{http_code}' "$origin/account/api/summary" || true)
+            lab_api=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/lab-api.json -w '%{http_code}' "$origin/lab/api/diagnostics" || true)
+
+            admin=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/admin.html -w '%{http_code}' "$origin/admin/apps" || true)
+            developers=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/developers.html -w '%{http_code}' "$origin/admin/developers" || true)
+            connect_manifest=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-manifest.json -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
+            connect_package=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-cli.tgz -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
+            device_verify=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device-verify.html -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
+            llms=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/llms.txt -w '%{http_code}' "$origin/llms.txt" || true)
+            data_openapi=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/data-openapi.json -w '%{http_code}' "$data_origin/openapi.json" || true)
+
+            echo "attempt=$i health=$health sdk_manifest=$sdk_manifest v01=$v01 v02=$v02 alias=$alias account=$account lab=$lab account_api=$account_api lab_api=$lab_api admin=$admin developers=$developers connect_manifest=$connect_manifest connect_package=$connect_package device_verify=$device_verify llms=$llms data_openapi=$data_openapi"
+
+            if [ "$health" = '200' ] && [ "$sdk_manifest" = '200' ] && [ "$v01" = '200' ] && [ "$v02" = '200' ] && [ "$alias" = '200' ] && [ "$account" = '200' ] && [ "$lab" = '200' ] && [ "$account_api" = '401' ] && [ "$lab_api" = '401' ] && [ "$admin" = '200' ] && [ "$developers" = '200' ] && [ "$connect_manifest" = '200' ] && [ "$connect_package" = '200' ] && [ "$device_verify" = '200' ] && [ "$llms" = '200' ] && [ "$data_openapi" = '200' ]; then
+              ok=1
               break
             fi
             sleep 5
           done
+
+          [ "$ok" = '1' ]
+
+          grep -q '"service":"nakwol-auth"' /tmp/health.json
+          grep -q '"version":"0.2.0"' /tmp/health.json
+
+          grep -q '"stable":"0.2.0"' /tmp/sdk-manifest.json
+          grep -q '"module":"/sdk/v0.2.0/nakwol-auth-web.js"' /tmp/sdk-manifest.json
+          grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk-v01.js
+          grep -q "NAKWOL_AUTH_SDK_VERSION = '0.2.0'" /tmp/sdk-v02.js
+          grep -q 'mountNakwolIdentityMenu' /tmp/sdk-v02.js
+          grep -q "NAKWOL_AUTH_SDK_VERSION = '0.2.0'" /tmp/sdk-alias.js
+          cmp -s src/assets/nakwol-auth-web.js.txt /tmp/sdk-v01.js
+          cmp -s src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-v02.js
+          cmp -s src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-alias.js
+
+          grep -q 'Account Center' /tmp/account.html
+          grep -q 'nakwol-account-center' /tmp/account.html
+          grep -q '내 낙월 계정' /tmp/account.html
+          grep -q 'AUTH LAB' /tmp/lab.html
+          grep -q 'nakwol-auth-lab' /tmp/lab.html
+          grep -q '진단 권한 없음' /tmp/lab.html
+          grep -q 'ACCOUNT_AUTH_REQUIRED' /tmp/account-api.json
+          grep -q 'LAB_AUTH_REQUIRED' /tmp/lab-api.json
+
           grep -q 'NAKWOL Connect' /tmp/admin.html
-      - name: Execute production CLI package
+          grep -q '개발자 권한' /tmp/developers.html
+          grep -q '"name":"nakwol-connect"' /tmp/connect-manifest.json
+          grep -q '"version":"0.4.0"' /tmp/connect-manifest.json
+          grep -q 'CLI 연결 승인' /tmp/device-verify.html
+          grep -q 'nakwol-connect data describe --json' /tmp/llms.txt
+          test -s /tmp/connect-cli.tgz
+
+          grep -q '"openapi":"3.1.0"' /tmp/data-openapi.json
+          grep -q '"version":"0.9.0"' /tmp/data-openapi.json
+
+          echo 'NAKWOL_PLATFORM_PRODUCTION_SURFACES_OK'
+
+      - name: Execute production Connect v0.4 package
         shell: bash
         run: |
           set -euo pipefail
           npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect help | tee /tmp/cli-help.txt
-          grep -q 'NAKWOL Connect CLI v0.2' /tmp/cli-help.txt
+          grep -q 'NAKWOL Connect CLI v0.4' /tmp/cli-help.txt
           grep -q 'doctor' /tmp/cli-help.txt
-          echo 'NAKWOL_CONNECT_V02_PACKAGE_OK'
+          grep -q 'data' /tmp/cli-help.txt
+          echo 'NAKWOL_CONNECT_V04_PACKAGE_OK'
