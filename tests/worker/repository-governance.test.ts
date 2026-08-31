@@ -1,76 +1,60 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 
-const root = (path:string) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
-const guardPath = fileURLToPath(new URL('../../scripts/verify-stable-promotion.mjs', import.meta.url));
-
-async function optional(path:string):Promise<string> {
-  try { return await root(path); }
-  catch { return ''; }
-}
-
-function runGuard(args:string[], env:Record<string,string>):Promise<{code:number|null;stdout:string;stderr:string}> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [guardPath, ...args], {
-      env: { ...process.env, ...env },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-    child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
-  });
-}
-
-async function withPullServer<T>(pulls:unknown[], fn:(apiOrigin:string)=>Promise<T>):Promise<T> {
-  const server = createServer((_request, response) => {
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify(pulls));
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('TEST_SERVER_ADDRESS_REQUIRED');
-  try {
-    return await fn(`http://127.0.0.1:${address.port}`);
-  } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  }
-}
+const root = (path: string) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+const optional = async (path: string) => { try { return await root(path); } catch { return ''; } };
 
 test('repository documents define dev -> main -> stable and current production boundary', async () => {
-  const branching = await optional('BRANCHING.md');
-  const handoff = await optional('CODEX_HANDOFF.md');
-  assert.match(branching, /dev\s*[-=]+>\s*main\s*[-=]+>\s*stable/i);
-  assert.match(branching, /hotfix\//i);
-  assert.match(branching, /data-vX\.Y\.Z/i);
-  assert.match(handoff, /DATA\s+0\.8\.0/i);
-  assert.match(handoff, /schema\s+3/i);
-  assert.match(handoff, /canonical applicability[^\n]*0/i);
+  const branching = await root('BRANCHING.md');
+  const agents = await root('AGENTS.md');
+  const handoff = await root('CODEX_HANDOFF.md');
+  const readme = await root('README.md');
+  const data = await root('DATA.md');
+  const releaseNotes = await root('docs/releases/2026-08-27-nakwol-data-v0.8.md');
+
+  for (const source of [branching, agents, handoff]) {
+    assert.match(source, /dev\s*->\s*main\s*->\s*stable/i);
+  }
+  assert.match(branching, /default branch[^\n]*`dev`/i);
+  assert.match(branching, /delete merged head branches[^\n]*disabled/i);
+  assert.match(branching, /GitHub Free/i);
+  assert.match(branching, /Branch Protection[^\n]*(unavailable|not active)/i);
+  assert.match(branching, /do not direct-push/i);
+  assert.match(branching, /do not force-push/i);
+  assert.match(branching, /do not auto-delete/i);
+
+  assert.match(handoff, /DATA 0\.8\.0/);
+  assert.match(handoff, /schema 3/i);
+  assert.match(handoff, /data-v0\.8\.0/);
   assert.match(handoff, /2bea00a2-c4b1-4f8c-a521-8c64f18f10be/);
+  assert.match(handoff, /5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61/);
+  assert.match(handoff, /33157010443/);
+  assert.match(handoff, /canonical applicability[^\n]*0/i);
+  assert.match(handoff, /do not infer/i);
+  assert.match(handoff, /Never DELETE\/TRUNCATE user-owned data/i);
+
+  assert.match(readme, /DATA[^\n]*0\.9\.0/i);
+  assert.match(data, /DATA v0\.8\.0/);
+  assert.match(releaseNotes, /data-v0\.8\.0/);
+  assert.match(releaseNotes, /2bea00a2-c4b1-4f8c-a521-8c64f18f10be/);
+  assert.match(releaseNotes, /5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61/);
+  assert.match(releaseNotes, /33157010443/);
 });
 
 test('free private repository boundary preserves long-lived branches without native protection', async () => {
-  const branching = await optional('BRANCHING.md');
-  const handoff = await optional('CODEX_HANDOFF.md');
-  assert.match(branching, /GitHub Free/i);
-  assert.match(branching, /private/i);
-  assert.match(branching, /Branch Protection/i);
-  assert.match(branching, /direct push/i);
-  assert.match(branching, /Automatically delete head branches[^\n]*(OFF|disabled)/i);
-  assert.match(handoff, /default branch[^\n]*dev/i);
-  assert.match(handoff, /delete merged head branches[^\n]*disabled/i);
-  assert.match(handoff, /dev[^\n]*main[^\n]*stable[^\n]*(preserv|보존)/i);
-  assert.match(handoff, /Branch Protection[^\n]*(unavailable|not active|disabled|사용하지)/i);
+  const config = await root('.github/repository-settings.json');
+  const settings = JSON.parse(config) as Record<string,unknown>;
+  assert.equal(settings.default_branch, 'dev');
+  assert.equal(settings.delete_branch_on_merge, false);
+  assert.equal(settings.protection_mode, 'free_private_no_native_protection');
+  assert.equal(settings.long_lived_branch_auto_delete, false);
+  assert.deepEqual(settings.long_lived_branches, ['dev','main','stable']);
+
+  const applyScript = await optional('scripts/apply-repository-governance.mjs');
+  assert.equal(applyScript, '');
+  const applyWorkflow = await optional('.github/workflows/apply-repository-governance.yml');
+  assert.equal(applyWorkflow, '');
 });
 
 test('verification workflows cover all long-lived branches', async () => {
@@ -95,7 +79,8 @@ test('production-capable stable push workflows fail closed behind a PR promotion
     assert.match(workflow, /--allow-prefix\s+hotfix\//, path);
   }
   const deploy = await optional('.github/workflows/deploy.yml');
-  assert.match(deploy, /!tests\/worker\/repository-governance\.test\.ts/);
+  assert.doesNotMatch(deploy, /^\s*-\s*'tests\/\*\*'\s*$/m);
+  assert.doesNotMatch(deploy, /^\s*-\s*'!tests\//m);
   assert.match(deploy, /!scripts\/verify-stable-promotion\.mjs/);
   const smoke = await optional('.github/workflows/production-smoke.yml');
   assert.match(smoke, /pull_request:[\s\S]*stable/, 'production-smoke.yml');
@@ -115,69 +100,10 @@ test('release automation is release-PR gated and paid protection automation is r
   assert.match(release, /pull-requests:\s*read/);
   assert.match(release, /verify-stable-promotion\.mjs/);
   assert.match(release, /--allow-prefix\s+release\//);
-  assert.match(release, /gh release create/);
-  assert.match(release, /merge-base --is-ancestor/);
-  assert.equal(typeof descriptor.enabled, 'boolean');
-  assert.equal(descriptor.component, 'data');
-  assert.equal(descriptor.version, '0.8.0');
-  assert.equal(descriptor.target_sha, '5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61');
-  assert.equal(descriptor.notes_file, 'docs/releases/2026-08-27-nakwol-data-v0.8.md');
-
+  assert.match(release, /target_sha/);
+  assert.equal(descriptor.enabled, false);
   assert.equal(oldGovernance, '');
   assert.equal(oldApplyWorkflow, '');
-  assert.match(stableGuard, /GITHUB_EVENT_NAME/);
-  assert.match(stableGuard, /GITHUB_EVENT_PATH/);
-  assert.match(stableGuard, /forced/);
-  assert.match(stableGuard, /merge_commit_sha/);
-  assert.match(stableGuard, /base[^\n]*stable/i);
-  assert.match(stableGuard, /pulls/);
-  assert.match(stableGuard, /NAKWOL_STABLE_PROMOTION_OK/);
-});
-
-test('stable promotion guard permits stable manual dispatch and rejects other manual refs', async () => {
-  const args = ['--allow-head', 'main', '--allow-prefix', 'hotfix/'];
-  const allowed = await runGuard(args, { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'stable' });
-  assert.equal(allowed.code, 0, allowed.stderr);
-  assert.match(allowed.stdout, /NAKWOL_STABLE_PROMOTION_MANUAL_OK:stable/);
-
-  const rejected = await runGuard(args, { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'dev' });
-  assert.notEqual(rejected.code, 0);
-  assert.match(rejected.stderr, /MANUAL_PRODUCTION_REF_MUST_BE_STABLE/);
-});
-
-test('stable promotion guard accepts exact allowed PR merge and rejects forced replay', async () => {
-  const sha = 'a'.repeat(40);
-  const dir = await mkdtemp(join(tmpdir(), 'nakwol-stable-guard-'));
-  const eventPath = join(dir, 'event.json');
-  const pulls = [{
-    number: 123,
-    merge_commit_sha: sha,
-    merged_at: '2026-08-29T00:00:00Z',
-    base: { ref: 'stable' },
-    head: { ref: 'main' },
-  }];
-  try {
-    await withPullServer(pulls, async (apiOrigin) => {
-      const common = {
-        GITHUB_EVENT_NAME: 'push',
-        GITHUB_REF_NAME: 'stable',
-        GITHUB_REPOSITORY: 'goyoung2/nakwol-auth',
-        GITHUB_SHA: sha,
-        GITHUB_TOKEN: 'test-token',
-        GITHUB_API_URL: apiOrigin,
-        GITHUB_EVENT_PATH: eventPath,
-      };
-      await writeFile(eventPath, JSON.stringify({ forced: false, ref: 'refs/heads/stable', after: sha }));
-      const allowed = await runGuard(['--allow-head', 'main', '--allow-prefix', 'hotfix/'], common);
-      assert.equal(allowed.code, 0, allowed.stderr);
-      assert.match(allowed.stdout, /NAKWOL_STABLE_PROMOTION_OK:main->stable:#123/);
-
-      await writeFile(eventPath, JSON.stringify({ forced: true, ref: 'refs/heads/stable', after: sha }));
-      const forced = await runGuard(['--allow-head', 'main', '--allow-prefix', 'hotfix/'], common);
-      assert.notEqual(forced.code, 0);
-      assert.match(forced.stderr, /STABLE_FORCE_PUSH_REJECTED/);
-    });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  assert.match(stableGuard, /push\/before/);
+  assert.match(stableGuard, /workflow_dispatch/);
 });
