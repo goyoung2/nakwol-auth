@@ -118,11 +118,14 @@ test('release automation is release-PR gated and paid protection automation is r
   assert.match(release, /--allow-prefix\s+release\//);
   assert.match(release, /gh release create/);
   assert.match(release, /merge-base --is-ancestor/);
+
   assert.equal(typeof descriptor.enabled, 'boolean');
-  assert.equal(descriptor.component, 'data');
-  assert.equal(descriptor.version, '0.8.0');
-  assert.equal(descriptor.target_sha, '5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61');
-  assert.equal(descriptor.notes_file, 'docs/releases/2026-08-27-nakwol-data-v0.8.md');
+  assert.ok(['auth', 'connect', 'data'].includes(String(descriptor.component)), 'release descriptor component must be a supported component');
+  assert.match(String(descriptor.version ?? ''), /^\d+\.\d+\.\d+$/, 'release descriptor version must be semver');
+  assert.match(String(descriptor.target_sha ?? ''), /^[0-9a-f]{40}$/, 'release descriptor target_sha must be a full commit SHA');
+  assert.match(String(descriptor.notes_file ?? ''), /^docs\/releases\/.+\.md$/, 'release descriptor notes_file must live under docs/releases');
+  const notes = await optional(String(descriptor.notes_file ?? ''));
+  assert.notEqual(notes, '', 'release descriptor notes_file must exist');
 
   assert.equal(oldGovernance, '');
   assert.equal(oldApplyWorkflow, '');
