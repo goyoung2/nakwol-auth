@@ -1,108 +1,64 @@
 # CODEX HANDOFF — NAKWOL AUTH / CONNECT / DATA
 
-Last updated: 2026-08-29
+Last updated: 2026-08-31
 Repository: `goyoung2/nakwol-auth`
 
 ## Read this first
 
-Codex가 이 저장소에서 작업을 시작할 때 다음 순서로 읽는다.
+새 작업은 다음 순서로 문맥을 복구한다.
 
 1. `CODEX_HANDOFF.md`
 2. `BRANCHING.md`
-3. `DATA.md`
-4. `CONNECT.md`
-5. 가장 최신 `docs/releases/*`
-6. 현재 작업과 관련된 `docs/superpowers/specs/*` 및 `docs/superpowers/plans/*`
+3. 현재 작업의 `docs/handoffs/*`
+4. 관련 `docs/superpowers/specs/*` 및 `docs/superpowers/plans/*`
+5. 실제 component `package.json`, CI, production evidence
+6. `DATA.md`, `CONNECT.md`, `WEB_SDK.md`
+
+개별 문서의 오래된 버전 제목보다 실제 package/CI/production evidence를 우선한다.
 
 ## Authoritative branch model
 
-정상 개발 흐름은 다음 하나다.
+정상 흐름은 다음 하나다.
 
 ```text
 feature/fix/chore/docs -> dev -> main -> stable -> component release
 ```
 
-- `dev`: 개발 통합
-- `main`: release candidate
-- `stable`: production
+- Repository default branch: `dev`
+- `dev`, `main`, `stable` are preserved long-lived branches.
+- delete merged head branches: disabled
+- GitHub Free private repository이므로 native Branch Protection은 unavailable / not active.
+- 따라서 long-lived branch에 direct push/force-push하지 않고 PR promotion만 사용한다.
 
-일반 작업은 반드시 최신 `dev`에서 새 task branch를 만든다. 과거 feature/ops/release 실험 브랜치를 새 작업의 base로 사용하지 않는다.
+Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름을 사용한다.
 
-Repository default branch is now `dev`. GitHub UI와 새 작업의 기준도 `dev`로 맞춰져 있다. `dev`, `main`, `stable`은 모두 long-lived branch이며 항상 보존한다.
+## Current component state
 
-## Current production DATA golden
+### AUTH
 
-- DATA 0.8.0
+- source candidate: **AUTH 0.2.0 release candidate**
+- status: production 아님. `dev -> main -> stable` 승격과 stable production smoke 전까지 release candidate이다.
+- production origin: `https://nakwol-auth.sepsd21.workers.dev`
+- candidate scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
+- pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0은 immutable compatibility boundary다.
+- OAuth security boundary: Authorization Code + PKCE(S256), state validation, exact redirect allowlist, app-bound access token, restricted CORS.
+
+### Connect
+
+- **Connect 0.4.0**
+- npm `nakwol-connect@0.4.0` publish succeeded after stable PR #44.
+- publish workflow evidence: `33255544407`.
+- Connect v0.4 includes DATA OpenAPI discovery and `data describe --json`.
+
+### DATA
+
+- current production runtime: **DATA 0.9.0**
 - schema 3
 - production origin: `https://nakwol-data.sepsd21.workers.dev`
-- Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
-- v0.8 release merge commit: `509b74259891a54adf81cef29a0a3d84f2d01b43`
-- exact deploy trigger commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
-- production workflow: `33051511909`
-- golden documentation commit: `4af1635b08c0b69c1f952ae58618c506cb747855`
-- finalized release record commit: `ec9405872b9fe4d60c763260bb23b724d31b6c56`
-- release record: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
-
-Production verification for v0.8:
-
-- 70/70 tests
-- typecheck green
-- Worker bundle green
-- existing exact D1 confirmed
-- migration `0003_equipment_options_v08.sql` applied
-- Registry UPSERT/count gate green
-- health HTTP 200 / schema HTTP 200 on first smoke attempt
-- marker `NAKWOL_DATA_DEPLOY_OK`
-
-Registry production counts:
-
-- generals 209 / enabled 140
-- tactics 1077
-- equipment templates 134
-- generic stat types 281
-- formations 8
-- warbooks 442
-- canonical equipment skill traits 106
-- canonical equipment effect traits 74
-- canonical applicability 0
-
-## Formal GitHub Release baseline
-
-The first formal component-prefixed release exists:
-
-- tag/name: `data-v0.8.0`
-- GitHub Release ID: `378361577`
-- exact target commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
-- release workflow: `33157010443`
-- release job: `98802084828`
-- draft: false
-- prerelease: false
-- notes source: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
-
-The release target is intentionally the exact commit that performed the verified production deployment, not a later documentation-only commit.
-
-## Important v0.8 safety boundary
-
-`canonical applicability` is intentionally **0**.
-
-The user will provide authoritative weapon/mount trait applicability data later. Until then:
-
-- do not infer weapon/mount applicability from names, descriptions, native ID ranges, or missing observations;
-- do not convert observed runtime combinations into a complete possibility rule;
-- equipment trait mutation remains evidence-gated and safely closed in production without canonical applicability rows;
-- generic `game_stat_types` 281 rows are not an equipment base-stat option catalog;
-- do not open `user_equipment_stats` writes until authoritative option subset/ranges exist.
-
-## Permanent data principles
-
-- User-owned generals and tactics are permanent account assets.
-- Equipment instances are account-owned; template is immutable after creation.
-- Decks may contain planned/unowned general/tactic Registry references.
-- Deck snapshots are immutable historical JSON.
-- Registry reseeding is UPSERT-only; never DELETE/TRUNCATE user data.
-- Never invent unsourced combat/game legality rules to make validation look complete.
-
-## Current API/runtime boundaries
+- OpenAPI 3.1 discovery: `/openapi.json`
+- stable PR #43 release path deployed DATA first, then allowed AUTH deployment only after live DATA v0.9 contract verification.
+- DATA deploy workflow evidence: `33255315017`.
+- AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
 
 DATA scopes:
 
@@ -111,19 +67,48 @@ DATA scopes:
 - `equipment:read`, `equipment:write`
 - `decks:read`, `decks:write`
 
-DATA verifies caller identity through NAKWOL AUTH `/me` and must not directly depend on AUTH D1.
+AUTH D1 and DATA D1 are separate. AUTH must not read DATA D1 or invent/mirror DATA scopes. DATA verifies caller identity through AUTH `/me` rather than AUTH D1 access.
 
-AUTH origin:
+## AUTH UX v1 work surface
 
-`https://nakwol-auth.sepsd21.workers.dev`
+- branch: `feature/nakwol-auth-ux-v1`
+- draft PR: #45
+- recovery handoff: `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md`
+- design: `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
+- plan: `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
 
-DATA origin:
+Implemented candidate boundaries:
 
-`https://nakwol-data.sepsd21.workers.dev`
+- SDK v0.2.0 is a new immutable asset; v0.1.0 remains untouched.
+- `mountNakwolIdentityMenu` is the new integration UI; legacy `mountNakwolAuthWidget` remains.
+- `/account` uses `nakwol-account-center` app-bound tokens and user-specific successful AUTH evidence for connected services.
+- `/lab` uses `nakwol-auth-lab` app-bound tokens and permits diagnostics only for NAKWOL admins or active Connect developer/operator users.
+- Lab diagnostics return safe metadata only; never raw token/hash/session cookie/PKCE verifier/client secret.
+
+## DATA safety boundary
+
+User-owned generals, tactics, equipment and decks are permanent account assets. Registry reseeding is UPSERT-only; never DELETE/TRUNCATE user-owned data.
+
+`canonical applicability` is intentionally 0 until authoritative applicability evidence is supplied. Do not infer weapon/mount applicability from names, descriptions, ID ranges or observed combinations. Generic `game_stat_types` are not automatically an equipment option catalog.
+
+## Historical formal DATA v0.8 release baseline
+
+This section is historical release evidence, not the current DATA runtime.
+
+- DATA 0.8.0
+- schema 3
+- formal tag/name: `data-v0.8.0`
+- historical Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
+- exact verified deployment target: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- formal release workflow: `33157010443`
+- notes: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
+- canonical applicability remains 0 until authoritative data arrives.
+
+The existence of this formal v0.8 release does not downgrade the current production runtime, which is DATA 0.9.0.
 
 ## Verification commands
 
-Repository root (AUTH / Connect):
+Repository root:
 
 ```bash
 npm install --legacy-peer-deps
@@ -142,113 +127,37 @@ npm run typecheck
 npm run bundle
 ```
 
-Before claiming any release complete, run the full relevant suite on the exact final commit and inspect workflow logs rather than relying on an earlier run.
+Before a completion/release claim, verify the exact final SHA. A DATA verification failure is a stop condition for AUTH stable promotion even when DATA source is unchanged.
 
-## Release and deployment rules
+## Release / production rules
 
-- Production deploy/publish automation belongs to `stable` only.
-- Normal promotion: `dev -> main -> stable` by PR.
-- Release tags use component prefixes: `data-vX.Y.Z`, `connect-vX.Y.Z`, `auth-vX.Y.Z`.
-- Release is created only after production smoke succeeds.
-- `ops/release.json` is the auditable release descriptor.
-- DATA production golden docs are changed only after actual production evidence is green.
-- After a release has been created, the descriptor should return to `enabled:false` during normal branch synchronization; never leave a new release request armed accidentally.
-- Automatic production-capable stable workflows must pass `scripts/verify-stable-promotion.mjs` before any deploy/publish/release action.
-- Manual production workflow dispatch is an explicit operator override but must select the `stable` ref.
-
-## Hotfix rule
-
-Emergency only:
-
-```text
-stable -> hotfix/* -> stable -> main -> dev
-```
-
-A hotfix requires a regression test, full verification, production smoke, then synchronization back to main/dev.
-
-## Historical branch warning
-
-The repository currently contains historical branches such as:
-
-- `feature/nakwol-connect-v0.1`
-- `feature/nakwol-connect-v0.2`
-- `feature/nakwol-connect-v0.2-agent-cli`
-- `feature/nakwol-connect-v0.3-data-auto`
-- `feature/nakwol-data-v0.1-foundation`
-- `feature/nakwol-data-v0.2-registry`
-- `feature/nakwol-data-v0.4-generals-roster`
-- `feature/nakwol-data-v0.5-tactics-roster`
-- `feature/nakwol-data-v0.6-equipment-instances`
-- `feature/nakwol-data-v0.7-decks`
-- `feature/nakwol-data-v0.8-equipment-options`
-- `handoff/verify-independent-auth`
-- `ops/production-smoke-v02-final`
-- `ops/verify-cloudflare-token-ci`
-- `ops/verify-connect-production`
-- `release/npm-nakwol-connect`
-
-They are **non-authoritative historical refs** after governance migration. Do not branch from them, merge them, or treat their unmerged commits as required work without a fresh comparison against `dev` and an explicit new plan.
-
-Stale PR #5 was explicitly renamed `[ARCHIVED]` and closed. It is historical evidence only.
-
-## Repository governance active in code/CI
-
-The following repository-level controls are implemented in committed workflows:
-
-- `Repository Governance` validates PR source/base promotion paths.
-- `quality-gate` runs full AUTH/Connect and DATA verification on PRs to `dev`, `main`, and `stable`.
-- AUTH/Connect production deploy triggers from `stable` only.
-- DATA production deploy/bootstrap triggers from `stable` only.
-- npm publish trigger uses `stable` only.
-- production-smoke PR path targets `stable` only.
-- governance-only test/guard changes are excluded from AUTH production deployment path filtering.
-- component release creation is stable-only and requires an explicit audited release descriptor.
-- production-capable stable push workflows fail closed unless the current SHA is the exact merge commit of an allowed PR.
-
-## GitHub Free/private governance checkpoint
-
-The repository intentionally remains **private on GitHub Free**. Native Branch Protection for private repositories is therefore unavailable and is not active by design.
-
-Verified live repository state before the final Free/private stable promotion on 2026-08-29:
-
-- default branch: `dev`
-- **delete merged head branches: disabled** (`delete_branch_on_merge:false` verified through live repository metadata)
-- `dev` Branch Protection: unavailable / not active
-- `main` Branch Protection: unavailable / not active
-- `stable` Branch Protection: unavailable / not active
-- `dev`, `main`, `stable` are preserved as long-lived branches
-
-The repository-wide automatic head-branch deletion setting is intentionally disabled because `main` itself is the head branch of normal `main -> stable` promotion PRs. With no paid Branch Protection/Rules available to exempt `main`, do not re-enable repository-wide automatic merged-head deletion. Disposable task branches are cleaned separately when appropriate.
-
-The previous paid-plan branch-protection bootstrap (`scripts/apply-repository-governance.mjs`, `.github/workflows/apply-repository-governance.yml`, `REPO_ADMIN_TOKEN`) is retired. Do not recreate it unless the repository deliberately moves to a plan that supports private-repository Branch Protection.
-
-Because GitHub Free cannot reject a direct push to a long-lived private branch, the operational rule remains strict: humans and agents must not direct-push `dev`, `main`, or `stable`. The production blast radius is additionally reduced by the stable promotion guard:
-
-- deploy/bootstrap/npm: only exact `main -> stable` or `hotfix/* -> stable` PR merge commits are accepted on automatic push;
-- component release: only exact `release/* -> stable` PR merge commits are accepted;
-- manual production workflow dispatch requires ref `stable`.
-
-This is not a substitute for native Branch Protection: it cannot prevent or undo a bad direct push. It does prevent an accidental stable direct push from automatically becoming a production deploy, npm publish, or component release.
+- Production-capable deployment/publish automation belongs to `stable` only.
+- Normal promotion is `dev -> main -> stable` by PR.
+- Component tags: `data-vX.Y.Z`, `connect-vX.Y.Z`, `auth-vX.Y.Z`.
+- Formal component release is created only after production smoke succeeds.
+- `ops/release.json` is the audited release descriptor and must not be left armed accidentally.
+- production workflows must pass `scripts/verify-stable-promotion.mjs`.
+- DATA-first production ordering must remain fail-closed.
 
 ## Do not do these
 
-- do not develop directly on `main` or `stable`;
-- do not direct-push long-lived branches;
-- do not force-push long-lived branches;
-- do not enable repository-wide automatic merged-head deletion while `dev/main/stable` are unprotected long-lived branches;
-- do not deploy production from `dev` or `main`;
-- do not bypass the stable promotion guard;
-- do not change production golden before smoke evidence;
+- do not edit the pinned v0.1 Web SDK asset;
+- do not develop/direct-push on `main` or `stable`;
+- do not direct-push or force-push `dev`;
+- do not bypass stable promotion or DATA-first gates;
+- do not call AUTH 0.2.0 production before stable smoke evidence exists;
+- do not expose raw authentication secrets in `/lab` or docs;
+- do not merge AUTH and DATA D1 responsibilities;
 - do not delete/truncate Registry or user-owned data during reseed;
-- do not invent game rules or equipment applicability;
-- do not silently reuse a stale feature branch because its name looks relevant;
-- do not bypass failing CI by weakening tests or removing safety gates.
+- do not invent game rules or canonical equipment applicability;
+- do not branch from historical feature/ops refs without fresh comparison against `dev`.
 
-## Next DATA work when evidence arrives
+## Next after AUTH v0.2 candidate verification
 
-1. Import authoritative weapon/mount canonical applicability supplied by the user.
-2. Recover authoritative equipment base-stat option subset and numeric ranges.
-3. Promotion-item Registry.
-4. `deck_settings` formation/warbook model and public API.
-
-Until step 1 evidence is supplied, move to other work rather than guessing applicability.
+1. Exact-final-head Task 8 review and full CI.
+2. PR #45 -> `dev` only after exact head verification.
+3. `dev -> main` promotion PR.
+4. `main -> stable` promotion PR and production deploy.
+5. Production route smoke + Auth Lab V1–V12 matrix.
+6. Only then create formal `auth-v0.2.0` release.
+7. After production v0.2 is green, execute the separate `siege-calculator` integration plan.

@@ -58,12 +58,12 @@ app.get('/', (c) => c.html(`<!doctype html>
 body{font-family:system-ui,sans-serif;background:#111827;color:#f9fafb;display:grid;place-items:center;min-height:100vh;margin:0}
 main{width:min(680px,calc(100% - 40px));background:#1f2937;border:1px solid #374151;border-radius:18px;padding:32px}
 small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{color:#a5b4fc}.links{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
-</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.1</p><p><code>GET /api/health</code></p><div class="links"><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
+</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.2</p><p><code>GET /api/health</code></p><div class="links"><a href="/account">내 낙월 계정</a><a href="/lab">AUTH Lab</a><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
 
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.1.0',
+  version: '0.2.0',
   now: new Date().toISOString(),
 }));
 

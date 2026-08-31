@@ -134,6 +134,16 @@ export async function authenticateAccessToken(env: Env, rawToken: string, client
   return row.user_id;
 }
 
+export async function inspectAccessToken(env: Env, rawToken: string, clientId: string): Promise<{ userId: string; clientId: string; expiresAt: number } | null> {
+  const hash = await sha256Base64Url(rawToken);
+  const now = Date.now();
+  const row = await env.DB.prepare(
+    `SELECT user_id, client_id, expires_at, revoked_at FROM access_tokens WHERE token_hash = ?`
+  ).bind(hash).first<{ user_id: string; client_id: string; expires_at: number; revoked_at: number | null }>();
+  if (!row || row.revoked_at || row.expires_at <= now || row.client_id !== clientId) return null;
+  return { userId: row.user_id, clientId: row.client_id, expiresAt: Number(row.expires_at) };
+}
+
 export async function revokeAccessToken(env: Env, rawToken: string): Promise<void> {
   const hash = await sha256Base64Url(rawToken);
   await env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`).bind(Date.now(), hash).run();
