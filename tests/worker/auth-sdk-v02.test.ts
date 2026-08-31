@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 
 const root = (path: string) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -11,6 +12,15 @@ test('v0.1 stays pinned and v0.2 adds the Identity Menu contract', async () => {
 
   assert.match(oldSdk, /NAKWOL_AUTH_SDK_VERSION\s*=\s*'0\.1\.0'/);
   assert.doesNotMatch(oldSdk, /mountNakwolIdentityMenu/);
+
+  const upgradedV01 = oldSdk.replace(
+    "export const NAKWOL_AUTH_SDK_VERSION = '0.1.0';",
+    "export const NAKWOL_AUTH_SDK_VERSION = '0.2.0';"
+  );
+  assert.ok(
+    nextSdk.startsWith(upgradedV01),
+    'v0.2 must preserve the complete v0.1 implementation and extend only the new immutable asset'
+  );
 
   assert.match(nextSdk, /NAKWOL_AUTH_SDK_VERSION\s*=\s*'0\.2\.0'/);
   assert.match(nextSdk, /export function mountNakwolIdentityMenu/);
@@ -33,7 +43,14 @@ test('v0.1 stays pinned and v0.2 adds the Identity Menu contract', async () => {
   assert.match(nextSdk, /이 서비스 권한/);
   assert.match(nextSdk, /Escape/);
 
+  const syntax = spawnSync(process.execPath, ['--input-type=module', '--check'], {
+    input: nextSdk,
+    encoding: 'utf8',
+  });
+  assert.equal(syntax.status, 0, syntax.stderr || syntax.stdout || 'v0.2 SDK syntax check failed');
+
   assert.match(routes, /\/sdk\/v0\.1\.0\/nakwol-auth-web\.js/);
   assert.match(routes, /\/sdk\/v0\.2\.0\/nakwol-auth-web\.js/);
   assert.match(routes, /NAKWOL_AUTH_WEB_SDK_VERSION\s*=\s*'0\.2\.0'/);
+  assert.match(routes, /module:\s*'\/sdk\/v0\.2\.0\/nakwol-auth-web\.js'/);
 });
