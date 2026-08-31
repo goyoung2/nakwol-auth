@@ -87,3 +87,47 @@ test('Lab diagnostics endpoint requires a Lab-bound token, privilege, and report
   assert.match(source, /https:\/\/nakwol-auth\.sepsd21\.workers\.dev\/lab/);
   assert.doesNotMatch(source, /Access-Control-Allow-Origin|withCorsHeaders/);
 });
+
+test('Auth Lab UI uses pinned SDK v0.2, explicit states, safe diagnostics, and test actions', async () => {
+  const source = await root('src/lab.ts');
+
+  for (const expected of [
+    '/sdk/v0.2.0/nakwol-auth-web.js',
+    'nakwol-auth-lab',
+    '테스트 로그인 시작',
+    '/me 다시 확인',
+    '앱 로그아웃',
+    'SSO 재로그인 테스트',
+    '전체 로그아웃',
+    '진단 권한 없음',
+    'id="lab-login"',
+    'id="lab-forbidden"',
+    'id="lab-panel"',
+    'id="diagnostics"',
+    'id="lab-error"',
+  ]) {
+    assert.ok(source.includes(expected), `Auth Lab UI must include: ${expected}`);
+  }
+
+  assert.match(source, /new NakwolAuthClient\(\{\s*clientId:\s*LAB_CLIENT_ID,\s*redirectUri:\s*location\.origin\s*\+\s*'\/lab'/s);
+  assert.match(source, /fetch\('\/lab\/api\/diagnostics'/);
+  assert.match(source, /Authorization:\s*'Bearer '\s*\+\s*auth\.getAccessToken\(\)/);
+  assert.match(source, /response\.status\s*===\s*403/);
+  assert.match(source, /await auth\.getMe\(\);\s*await loadDiagnostics\(\);/s);
+  assert.match(source, /await auth\.logout\(\);\s*location\.reload\(\);/s);
+  assert.match(source, /auth\.login\(\)/);
+  assert.match(source, /auth\.logout\(\{\s*global:\s*true,\s*returnTo:\s*location\.origin\s*\+\s*'\/lab'\s*\}\)/s);
+  assert.match(source, /textContent/);
+
+  for (const forbidden of [
+    'token_hash',
+    'session_cookie',
+    'pkce_verifier',
+    'client_secret',
+    '원본 access token',
+    'Raw Access Token',
+  ]) {
+    assert.ok(!source.includes(forbidden), `Auth Lab UI must not render secret label: ${forbidden}`);
+  }
+  assert.doesNotMatch(source, /textContent\s*=\s*auth\.getAccessToken\(\)/);
+});
