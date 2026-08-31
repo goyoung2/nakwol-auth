@@ -5,6 +5,16 @@ import { spawnSync } from 'node:child_process';
 
 const root = (path: string) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
+const THEME_VARIABLES = [
+  '--nakwol-auth-accent',
+  '--nakwol-auth-bg',
+  '--nakwol-auth-text',
+  '--nakwol-auth-muted',
+  '--nakwol-auth-border',
+  '--nakwol-auth-radius',
+  '--nakwol-auth-shadow',
+];
+
 test('v0.1 stays pinned and v0.2 adds the Identity Menu contract', async () => {
   const oldSdk = await root('src/assets/nakwol-auth-web.js.txt');
   const nextSdk = await root('src/assets/nakwol-auth-web-v0.2.0.js.txt');
@@ -27,15 +37,7 @@ test('v0.1 stays pinned and v0.2 adds the Identity Menu contract', async () => {
   assert.match(nextSdk, /button.*compact.*menu/s);
   assert.match(nextSdk, /inherit.*light.*dark/s);
 
-  for (const variable of [
-    '--nakwol-auth-accent',
-    '--nakwol-auth-bg',
-    '--nakwol-auth-text',
-    '--nakwol-auth-muted',
-    '--nakwol-auth-border',
-    '--nakwol-auth-radius',
-    '--nakwol-auth-shadow',
-  ]) {
+  for (const variable of THEME_VARIABLES) {
     assert.ok(nextSdk.includes(variable), `${variable} must be part of the v0.2 theming contract`);
   }
 
@@ -53,4 +55,22 @@ test('v0.1 stays pinned and v0.2 adds the Identity Menu contract', async () => {
   assert.match(routes, /\/sdk\/v0\.2\.0\/nakwol-auth-web\.js/);
   assert.match(routes, /NAKWOL_AUTH_WEB_SDK_VERSION\s*=\s*'0\.2\.0'/);
   assert.match(routes, /module:\s*'\/sdk\/v0\.2\.0\/nakwol-auth-web\.js'/);
+});
+
+test('inherit theme consumes the documented host CSS variables without shadow aliases', async () => {
+  const nextSdk = await root('src/assets/nakwol-auth-web-v0.2.0.js.txt');
+
+  assert.doesNotMatch(
+    nextSdk,
+    /--nakwol-host-auth-/,
+    'inherit must use the documented --nakwol-auth-* variables directly'
+  );
+
+  const baseRule = nextSdk.match(/\.nakwol-identity\{([\s\S]*?)position:relative/)?.[1] || '';
+  for (const variable of THEME_VARIABLES) {
+    assert.ok(
+      !baseRule.includes(`${variable}:`),
+      `${variable} must remain inheritable from the host when theme=inherit`
+    );
+  }
 });
