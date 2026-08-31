@@ -30,6 +30,19 @@ AUTH v0.2.0 preserves the existing security model:
 
 The pinned v0.1 Web SDK remains immutable. Auth Lab diagnostics never return raw access tokens, token hashes, session cookies, PKCE verifiers or client secrets.
 
+## Verified initial AUTH v0.2 production deployment baseline
+
+The first production deployment of the AUTH v0.2 UX candidate remains preserved as historical release evidence:
+
+```text
+stable SHA: 2ea002dca18cbb064be089167326cd311b315dd5
+AUTH deploy workflow: 33350989974
+Worker Version ID: f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4
+combined production smoke workflow: 33351486056
+```
+
+That deployment completed the stable promotion provenance guard, root verification, D1 migration/required-app checks, DATA-first live DATA 0.9 contract gate, AUTH Worker deployment, and production AUTH/Connect checks. The combined smoke then verified the AUTH 0.2 / Connect 0.4 / DATA 0.9 platform surfaces. Later verified fixes do not erase this evidence; the formal release target will be a newer exact stable commit selected only after the final promotion/deployment cycle below.
+
 ## Automated release-candidate verification
 
 V8-A was added through PR #61 and merged to `dev` as `7c3d207f9d31b2171e6d8dcf90b10877263c7b8f`.
