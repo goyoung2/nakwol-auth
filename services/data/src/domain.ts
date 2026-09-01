@@ -36,11 +36,16 @@ export function normalizeOwnedTacticInput(input:{breakthrough?:unknown;favorite?
   return {breakthrough:Number(breakthrough),favorite:input.favorite===true,note};
 }
 export function isCanonicalOwnableTacticMetadata(metadata:Record<string,unknown>):boolean{
-  return metadata.class===5
-    && metadata.learn===1
-    && metadata.get===3
-    && (metadata.copy??0)===0
-    && Number(metadata.chip??0)>0;
+  const skillClass=metadata.skill_class_raw??metadata.class;
+  const learnTimes=metadata.learn_times??metadata.learn;
+  const getType=metadata.get_type??metadata.get;
+  const isCopy=metadata.is_copy??metadata.copy??0;
+  const chipId=metadata.chip_id??metadata.chip??0;
+  return Number(skillClass)===5
+    && Number(learnTimes)===1
+    && Number(getType)===3
+    && Number(isCopy)===0
+    && Number(chipId)>0;
 }
 
 function normalizeOptionalNickname(value:unknown):string|null {
