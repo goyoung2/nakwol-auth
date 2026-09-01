@@ -9,9 +9,15 @@ Repository: `goyoung2/nakwol-auth`
 
 1. `CODEX_HANDOFF.md`
 2. `BRANCHING.md`
-3. 현재 작업의 `docs/superpowers/specs/*` / `docs/superpowers/plans/*`
+3. 현재 작업의 단일 authoritative development SSOT
 4. 실제 component code/package/CI/production evidence
 5. `DATA.md`, `CONNECT.md`, `CONNECT_CLI.md`, `WEB_SDK.md`
+
+현재 My Data Hardening v1의 유일한 개발 기준 문서:
+
+```text
+docs/superpowers/2026-09-01-nakwol-my-data-hardening-v1.md
+```
 
 오래된 release/handoff 문구보다 실제 branch tree, package, CI, production evidence를 우선한다.
 
@@ -47,11 +53,11 @@ stable -> hotfix/* -> stable -> main -> dev
 
 2026-09-01 My Data CRUD + browser async-form fix 기준:
 
-- `dev`: `655a1e4689999d565e2b2b99e40a19d13191586d`
-- `main`: `f37365d54435a954f9e5e70ef22f8c74389b885a`
-- `stable`: `e0e85541e10ffde2125efd4d0874acb9bb2a693b`
+- `dev`: My Data CRUD baseline + hardening documentation
+- `main`: My Data CRUD production candidate history
+- `stable`: My Data CRUD production
 
-long-lived branches는 동일한 My Data CRUD runtime content를 의도한다. SHA 차이는 merge history 때문이다.
+long-lived branches는 동일 runtime content를 의도하며 SHA 차이는 merge history 때문에 발생할 수 있다.
 
 ---
 
@@ -80,8 +86,6 @@ long-lived branches는 동일한 My Data CRUD runtime content를 의도한다. S
 - immutable SDK v0.2 asset
 
 My Data용 `nakwol-my-data` AUTH app도 production에 등록되어 있다.
-
-현재 My Data foundation 당시 AUTH production Worker Version ID는 `ba2e1140-40e5-4d1d-8da8-56efdc78c504`다.
 
 AUTH Lab V1 through V12 completed. V8-B live Discord role mutation remains an approved external-authority waiver and is not an AUTH v0.2 release blocker.
 
@@ -236,13 +240,10 @@ client_id: nakwol-my-data
 - deck composition editor
 - research/deck-first Registry selection
 
-사용자가 실제 브라우저에서 foundation 화면과 persistence를 확인했다.
-
-My Data CRUD production deploy 이후 브라우저 async submit form reference 위험도 추가 fix했다.
+My Data CRUD production deploy 이후 browser async submit form reference 위험도 추가 fix했다.
 
 Latest production DATA evidence:
 
-- stable: `e0e85541e10ffde2125efd4d0874acb9bb2a693b`
 - deploy workflow: `33478274558`
 - DATA Worker Version ID: `7d6e4d94-6656-4739-bd1e-c86377b3811a`
 - DATA tests in deploy: 91/91 PASS
@@ -256,37 +257,36 @@ Latest production DATA evidence:
 
 공통 DeckPicker를 만들기 전에 My Data/DATA storage를 한 번 더 단단히 한다.
 
-Authoritative design:
+**Single authoritative development SSOT:**
 
 ```text
-docs/superpowers/specs/2026-09-01-nakwol-my-data-hardening-v1-design.md
+docs/superpowers/2026-09-01-nakwol-my-data-hardening-v1.md
 ```
 
-Implementation plan:
+이전 split hardening spec/plan은 폐기하고 위 한 문서만 구현 기준으로 사용한다.
+
+고정 구현 순서:
 
 ```text
-docs/superpowers/plans/2026-09-01-nakwol-my-data-hardening-v1.md
+Stage 1  Composition invariant RED tests
+Stage 2  DATA server validation
+Stage 3  Production duplicate preflight
+Stage 4  D1 unique constraints
+Stage 5  My Data owned-first UX + UI duplicate guard
+Stage 6  Persistence confirmation contract
+Stage 7  DATA Ops read-only foundation
+Stage 8  DATA Ops audit
+Stage 9  Production manual hardening matrix
+Stage 10 Hardening close -> DeckPicker
 ```
 
-핵심 목표:
+첫 구현 branch:
 
-1. same-deck duplicate general 저장 차단
-2. same-deck duplicate equipment instance 저장 차단
-3. invalid composition replacement atomicity 회귀 테스트
-4. 가능하면 D1 unique indexes로 defense-in-depth
-5. My Data deck editor 기본값을 owned-first로 변경
-6. 전체 Registry는 명시적 research mode로 유지
-7. write 뒤 authoritative read-back으로 `저장 확인됨` contract
-8. admin-only read-only **NAKWOL DATA Ops** 구축
-9. Ops arbitrary-user inspection audit log
+```text
+fix/data-deck-composition-integrity
+```
 
-중요:
-
-- Data Lab은 arbitrary-user admin viewer가 아니다.
-- Connect Admin도 user DATA inspection tool이 아니다.
-- DATA Ops는 별도 `nakwol-data-ops` internal admin app으로 설계한다.
-- `lab` access policy를 재사용하지 않는다. `admin` 경계를 사용한다.
-- Ops v1은 read-only다. 사용자 대신 mutate/impersonate하지 않는다.
+첫 PR에는 Stage 1 + Stage 2만 넣는다. DB migration은 넣지 않는다.
 
 ---
 
@@ -294,7 +294,7 @@ docs/superpowers/plans/2026-09-01-nakwol-my-data-hardening-v1.md
 
 현재 `deck_general_slots`는 `(deck_id, position)`만 primary key이고 same-deck `general_id`, `weapon_instance_id`, `mount_instance_id` uniqueness를 DB가 강제하지 않는다.
 
-server도 equipment ownership/type은 확인하지만 same-deck duplicate instance/general은 별도 hardening 대상이다.
+server도 equipment ownership/type은 확인하지만 same-deck duplicate instance/general은 hardening 대상이다.
 
 DB index migration 전에 production duplicate preflight를 수행하고 bad row가 있으면 자동 삭제하지 않는다.
 
@@ -325,22 +325,6 @@ npx wrangler d1 execute DB --remote --command "SELECT ..."
 으로 `game_accounts`, `user_generals`, `user_tactics`, `user_equipment`, `decks`, `deck_general_slots`, `deck_tactic_slots` persisted rows를 직접 확인한다.
 
 manual SQL UPDATE/DELETE를 정상 운영 흐름으로 사용하지 않는다.
-
----
-
-## After hardening
-
-Hardening acceptance가 production에서 PASS한 뒤 원래 User Data Platform 계획으로 복귀한다.
-
-다음 제품 단계:
-
-```text
-AccountPicker
-DeckPicker
-My Data launcher
-```
-
-그 후 서로 다른 두 consumer app이 같은 `deck.id`를 재사용하는 production E2E를 수행한다.
 
 ---
 
