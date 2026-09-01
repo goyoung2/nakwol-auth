@@ -97,6 +97,8 @@ export function normalizePatchDeckInput(input:Record<string,unknown>):PatchDeckI
 export function normalizeReplaceCompositionInput(input:Record<string,unknown>):ReplaceCompositionInput {
   if(!Array.isArray(input.generals)) throw new Error('INVALID_COMPOSITION');
   const positions=new Set<number>();
+  const generalIds=new Set<string>();
+  const equipmentIds=new Set<string>();
   const generals:CompositionGeneralInput[]=[];
   for(const rawGeneral of input.generals){
     const general=asRecord(rawGeneral);
@@ -105,9 +107,19 @@ export function normalizeReplaceCompositionInput(input:Record<string,unknown>):R
     const pos=Number(position);
     if(positions.has(pos)) throw new Error('DUPLICATE_GENERAL_POSITION');
     positions.add(pos);
+
     const generalId=normalizeRequiredString(general.general_id,'INVALID_COMPOSITION');
+    if(generalIds.has(generalId)) throw new Error('DUPLICATE_GENERAL_IN_DECK');
+    generalIds.add(generalId);
+
     const weaponInstanceId=normalizeNullableString(general.weapon_instance_id,'INVALID_COMPOSITION');
     const mountInstanceId=normalizeNullableString(general.mount_instance_id,'INVALID_COMPOSITION');
+    for(const equipmentId of [weaponInstanceId,mountInstanceId]){
+      if(!equipmentId) continue;
+      if(equipmentIds.has(equipmentId)) throw new Error('DUPLICATE_EQUIPMENT_IN_DECK');
+      equipmentIds.add(equipmentId);
+    }
+
     const rawTactics=general.tactics===undefined?[]:general.tactics;
     if(!Array.isArray(rawTactics)) throw new Error('INVALID_COMPOSITION');
     const tacticSlots=new Set<number>();
