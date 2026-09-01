@@ -11,235 +11,341 @@ Repository: `goyoung2/nakwol-auth`
 2. `BRANCHING.md`
 3. 현재 작업의 `docs/handoffs/*`
 4. 관련 `docs/superpowers/specs/*` 및 `docs/superpowers/plans/*`
-5. 실제 component `package.json`, CI, production evidence
-6. `DATA.md`, `CONNECT.md`, `WEB_SDK.md`
+5. 실제 component code/package/CI/production evidence
+6. `DATA.md`, `CONNECT.md`, `CONNECT_CLI.md`, `WEB_SDK.md`
 
-개별 문서의 오래된 상태 문구보다 실제 package/CI/production evidence를 우선한다.
+오래된 release/handoff 문구보다 실제 branch tree, package, CI, production evidence를 우선한다.
+
+---
 
 ## Authoritative branch model
 
-정상 흐름은 다음 하나다.
+정상 흐름:
 
 ```text
 feature/fix/chore/docs -> dev -> main -> stable -> component release
 ```
 
-- Repository default branch: `dev`
-- `dev`, `main`, `stable` are preserved long-lived branches.
-- delete merged head branches: disabled
-- GitHub Free private repository이므로 native Branch Protection은 unavailable / not active.
-- 따라서 long-lived branch에 direct push/force-push하지 않고 PR promotion만 사용한다.
+- default branch: `dev`
+- `dev`, `main`, `stable`은 유지되는 long-lived branch
+- long-lived branch direct push/force-push 금지
+- GitHub Free private repository 특성상 native Branch Protection 대신 Repository Governance CI 계약을 사용
 
-Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름을 사용한다.
-
-## Current repository state
-
-AUTH v0.2.0 formal release, release-control cleanup, and back-propagation are all completed.
-
-Current long-lived branch heads:
-
-- `dev`: `4c4337a2ef8146b34f579d12773bf43c33464401`
-- `main`: `598c05f371f328494c565a7f7d463ef09271320f`
-- `stable`: `5fa4a0365462519089ddeae1d49ff2de3c5d4452`
-
-All three currently resolve to the same tree:
+Hotfix:
 
 ```text
-444fd9a5ec963d5970d560de90e3782314881fe7
+stable -> hotfix/* -> stable -> main -> dev
 ```
 
-The commit SHAs differ because of squash/promotion ancestry. Treat the current content as synchronized. Do not interpret GitHub compare `diverged` by itself as a content mismatch; inspect tree/blob/content differences.
+과거 squash promotion 때문에 ancestry가 끊겨 GitHub가 실제 content보다 큰 divergence를 보일 수 있다. content/tree를 먼저 확인하고, 필요하면 content-zero ancestry reconciliation을 사용한다. runtime 변경을 ancestry 문제 해결에 섞지 않는다.
 
-Current open PR count at this handoff point: **0**.
+---
 
-`ops/release.json` is **disabled** after the AUTH release descriptor was disarmed.
+## Current long-lived branch state
 
-## Current component state
+2026-09-01 User Data Platform 문서 작업 시작 직전 기준:
 
-### AUTH
+- `dev`: `acdf3924616c2b779f580c146848606c347640ec`
+- `main`: `266c8dbaabbb4511c8afa27c62e15e149bd206d0`
+- `stable`: `6aef40adf903ec32f35dd7e5553c110ce397f557`
 
-- current production runtime: **AUTH 0.2.0**
-- formal component tag / GitHub Release: **`auth-v0.2.0` — released**
-- exact formal release target: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
-- final production deploy workflow: `33373705515` — success
-- final production Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
-- final production smoke workflow: `33373908231` — success
-- component-release workflow: `33374685878` — success
-- release PR: `#67`
-- descriptor disarm PR: `#68`
-- stable -> main post-release back-propagation: `#69`
-- main -> dev post-release back-propagation: `#70`
-- production origin: `https://nakwol-auth.sepsd21.workers.dev`
-- deployed scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
-- pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0 remains the immutable compatibility boundary.
-- OAuth security boundary: Authorization Code + PKCE(S256), state validation, exact redirect allowlist, app-bound access token, restricted CORS.
+`dev/main`은 현재 DATA tactic write projection fix의 같은 runtime tree를 포함한다.
+`stable`은 같은 runtime fix + production deploy trigger flag 변경을 포함한다.
 
-Initial AUTH 0.2 production baseline remains historical evidence:
+기능 차이와 deploy-only flag 차이를 구분한다.
 
-- stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
-- deploy workflow: `33350989974`
-- Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
-- combined production smoke workflow: `33351486056`
+---
 
-Do not confuse this historical first deployment with the formal release target. The formal release target is `154baf448ee45a7b2bcf6e320f09a65866e1f8af`.
+## AUTH current state
 
-### Auth Lab release matrix
+- runtime version: **AUTH 0.2.0**
+- formal component release: **`auth-v0.2.0` released**
+- formal release target: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
+- formal release deploy evidence: workflow `33373705515`
+- formal release Worker version evidence: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- formal final smoke: `33373908231`
+- component release workflow: `33374685878`
 
-Auth Lab **V1–V12 release matrix is completed**.
+AUTH v0.2 formal release 이후 DATA Lab용 OAuth app/client 등록을 위해 AUTH가 추가 production deploy되었다.
 
-Evidence nuances:
+현재 AUTH 제품 경계:
 
-- V5 verifies client-side expiry/recovery and is not represented as a literal one-hour wall-clock wait.
-- V7 has live callback/state mismatch evidence; PKCE verifier mismatch remains automated/server-side evidence.
-- V8-A is automated PASS for fresh Discord membership refresh and member-policy allow -> deny -> allow behavior.
-- V8-B live Discord role mutation has an approved release **waiver** because a controlled guild role mutation requires external server-admin/test-account authority.
-- V10 live production proof is AUTH `/me` 200, DATA `/v1/me` 200, and registry 403 `SCOPE_DENIED` without `roster:read`.
-- V11 and V12 live browser recovery/responsive/accessibility checks are PASS.
+- Discord OAuth
+- central SSO
+- Authorization Code + PKCE(S256)
+- exact redirect allowlist
+- app-bound access token
+- `/me`
+- Compact Identity Menu
+- `/account`
+- privileged AUTH `/lab`
+- pinned Web SDK v0.1 compatibility asset 유지
+- immutable SDK v0.2 asset 유지
 
-The V8-B waiver did not block `auth-v0.2.0` formal release.
+AUTH Lab V1–V12 release matrix는 완료 상태다. V8-B live Discord role mutation만 approved external-authority waiver이며 AUTH v0.2 release blocker가 아니다.
 
-### Final AUTH v0.2 deployment evidence
+AUTH protocol/release work를 User Data Platform 작업과 섞지 않는다.
 
-Stable candidate `154baf448ee45a7b2bcf6e320f09a65866e1f8af` was deployed by workflow `33373705515`.
+---
 
-Verified in the deployment job:
+## Connect current state
 
-- stable provenance: `NAKWOL_STABLE_PROMOTION_OK:main->stable:#65`
-- AUTH tests: 71/71 PASS
-- typecheck: PASS
-- Wrangler dry-run: PASS
-- remote D1 migrations: no migrations to apply
-- required applications: verified
-- live DATA gate: `NAKWOL_DATA_V09_READY_FOR_AUTH_DEPLOY`
-- Worker deployment: success
-- Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
-- Connect v0.4 verification: `NAKWOL_CONNECT_V04_DEPLOY_OK`
+- **NAKWOL Connect 0.4.0**
+- npm publish 완료
+- Universal Embed
+- app registration / device authorization
+- DATA scope automation
+- `data describe --json`
+- DATA OpenAPI 3.1 discovery
+- browser runtime `window.NAKWOL_CONNECT.data`
+- low-level `data.request()` / `data.fetch()`
+- Registry convenience helpers
 
-No-merge final production smoke PR #66 produced workflow `33373908231` — success.
+현재 개발자 UX의 가장 큰 다음 gap은 user-owned CRUD가 여전히 REST path 기반이라는 점이다.
 
-### Formal AUTH v0.2 release evidence
+다음 product phase에서 high-level Data SDK를 추가한다.
 
-PR #67 created the release descriptor against exact target:
+---
+
+## DATA current state
+
+- runtime version: **DATA 0.9.0**
+- schema: **3**
+- origin: `https://nakwol-data.sepsd21.workers.dev`
+- OpenAPI: `/openapi.json`
+- AUTH verification: Worker Service Binding `AUTH_SERVICE -> nakwol-auth`
+- AUTH D1 / DATA D1 직접 결합 없음
+
+Current DATA scopes:
 
 ```text
-154baf448ee45a7b2bcf6e320f09a65866e1f8af
+profile:read
+profile:write
+roster:read
+roster:write
+equipment:read
+equipment:write
+decks:read
+decks:write
 ```
 
-Release-head verification:
+Current user-data support:
 
-- Verify NAKWOL AUTH `33374520124` — success
-- Repository Governance `33374520113` — success, including AUTH/Connect and DATA quality gate
+- game account: Create / Read
+- owned generals: C/R/U/D
+- owned tactics: C/R/U/D
+- equipment instances: C/R/U/D
+- live decks: C/R/U/D
+- deck composition replace
+- immutable snapshots: Create / Read
+- Registry: generals/tactics/equipment/stats/formations/warbooks/equipment traits
 
-`Create Component Release` workflow `33374685878` completed successfully and published `auth-v0.2.0`.
+Current known API gaps relevant to user-facing My Data:
 
-PR #68 then disarmed the descriptor. `ops/release.json` must remain disabled unless a future audited component release is intentionally being created.
+- game account Update/Delete 없음
+- snapshot Update/Delete 없음 (Update 부재는 immutable design과 일치)
+- snapshot alliance/public metadata는 있으나 current list/detail은 owner-only
+- equipment trait canonical applicability는 authoritative evidence가 없어 0 유지
 
-### Connect
+Generic stats/equipment applicability를 추측하여 쓰기 허용하지 않는다.
 
-- **Connect 0.4.0**
-- npm `nakwol-connect@0.4.0` publish succeeded after stable PR #44.
-- publish workflow evidence: `33255544407`.
-- Connect v0.4 includes DATA OpenAPI discovery and `data describe --json`.
+---
 
-### DATA
+## DATA Lab production E2E — completed
 
-- current production runtime: **DATA 0.9.0**
-- schema 3
-- production origin: `https://nakwol-data.sepsd21.workers.dev`
-- OpenAPI 3.1 discovery: `/openapi.json`
-- stable PR #43 release path deployed DATA first, then allowed AUTH deployment only after live DATA v0.9 contract verification.
-- DATA deploy workflow evidence: `33255315017`.
-- earlier AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
-- final AUTH v0.2 deploy `33373705515` also passed the live DATA 0.9 gate before Worker mutation.
-- DATA-to-AUTH Service Binding hotfix is deployed and production-verified without changing AUTH D1/DATA D1 separation.
+2026-09-01 사용자가 실제 production DATA Lab에서 CRUD smoke를 수동 실행했고 최종:
 
-DATA scopes:
+```text
+CRUD smoke 완료
+장수·전법·장비·덱 C/R/U/D와 덱 composition PUT을 실제 DATA API에서 확인
+```
 
-- `profile:read`, `profile:write`
-- `roster:read`, `roster:write`
-- `equipment:read`, `equipment:write`
-- `decks:read`, `decks:write`
+까지 PASS했다.
 
-AUTH D1 and DATA D1 are separate. AUTH must not read DATA D1 or invent/mirror DATA scopes. DATA verifies caller identity through AUTH `/me` rather than AUTH D1 access.
+실제 검증 범위:
 
-## AUTH UX v1 implementation history
+- AUTH + DATA principal
+- game account C/R
+- Registry general/tactic/equipment reads
+- general Create/Read/Update/Delete + read-back
+- tactic Create/Read/Update/Delete + read-back
+- equipment Create/Read/Update/Delete + read-back
+- deck Create/Read/Update/Delete + read-back
+- deck composition PUT
+- cleanup
 
-Historical implementation path:
+수동 E2E는 코드/단위테스트가 잡지 못한 두 문제를 실제로 발견했다.
 
-- recovery/design history: closed draft PR #45
-- feature -> dev promotion: PR #46
-- dev -> main: PR #47
-- main -> stable: PR #48
-- initial AUTH 0.2 deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
-- initial deploy workflow: `33350989974`
-- initial temporary no-merge production smoke probe: PR #49
-- initial combined production smoke: `33351486056`
-- V4 global logout fix: PR #53 -> #54 -> #55
-- DATA-to-AUTH Service Binding fix: PR #57 -> #58 -> #59
-- V8-A fresh membership refresh regression: PR #61
-- final release evidence: PR #62
-- ancestry reconciliation: PR #64
-- final main -> stable promotion: PR #65
-- final no-merge smoke: PR #66
-- formal release: PR #67
-- release descriptor disarm: PR #68
-- post-release stable -> main: PR #69
-- post-release main -> dev: PR #70
+### Fix 1 — Data Lab canonical tactic selector
 
-Relevant historical docs:
+첫 smoke는 Registry 조회 후:
 
-- `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md` — historical recovery context; old release-readiness status is superseded
-- `docs/releases/2026-08-29-nakwol-auth-v0.2.md` — authoritative formal release record
-- `docs/superpowers/plans/2026-08-31-auth-v0.2.0-formal-release.md` — historical execution plan; tasks were executed even if old unchecked boxes remain
-- `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
-- `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
+```text
+CRUD smoke에 사용할 canonical Registry 항목을 선택하지 못했습니다.
+```
 
-Implemented boundaries:
+으로 중단됐다.
 
-- SDK v0.2.0 is a new immutable asset; v0.1.0 remains untouched.
-- `mountNakwolIdentityMenu` is the new integration UI; legacy `mountNakwolAuthWidget` remains.
-- `/account` uses `nakwol-account-center` app-bound tokens and user-specific successful AUTH evidence for connected services.
-- `/lab` uses `nakwol-auth-lab` app-bound tokens and permits diagnostics only for NAKWOL admins or active Connect developer/operator users.
-- Lab diagnostics return safe metadata only; never raw token/hash/session cookie/PKCE verifier/client secret.
+원인:
 
-## Current next product task
+- raw seed tactic metadata field와 public Registry projection field를 Lab이 혼동
 
-AUTH v0.2.0 itself has **no remaining formal release blocker**.
+수정:
 
-The next product-level follow-up is separate from the completed release:
+- PR #79
+- stable production path #82 + deploy trigger #83
 
-**`siege-calculator` Identity Menu / seamless SSO integration.**
+### Fix 2 — production tactic write validator
 
-Current UX boundary:
+두 번째 smoke는 general C/R/U까지 PASS 후 tactic Create에서:
 
-- a newly opened destination tab does not have another app's `sessionStorage` token by design;
-- the consumer app may detect its missing app token;
-- it can automatically begin its own PKCE authorization flow;
-- the existing central AUTH session can be reused so the user does not need to re-enter Discord credentials;
-- the flow must preserve app-bound token isolation and exact redirect allowlists.
+```text
+TACTIC_NOT_FOUND
+```
 
-Do not reopen AUTH v0.2 release work merely because historical plan/handoff files contain old unchecked release steps.
+으로 실패했다.
+
+원인:
+
+- production Registry/D1 metadata는 projected field names를 저장
+- DATA write validator는 raw source field names만 판정
+
+수정:
+
+- PR #84 -> dev
+- PR #85 -> main
+- ancestry-safe stable promotion #87
+- guarded deploy hotfix #88
+
+최종 production DATA deploy:
+
+- stable deploy trigger head: `6aef40adf903ec32f35dd7e5553c110ce397f557`
+- workflow: `33468253146` — success
+- DATA Worker Version ID: `048d713c-0387-402d-afe0-1691fa0f8fb3`
+- DATA tests in deploy: 80/80 PASS
+- production health/schema/OpenAPI/Lab verification: PASS
+
+이후 사용자가 CRUD smoke 전체 PASS를 직접 확인했다.
+
+따라서 DATA core CRUD는 더 이상 "code only" 상태가 아니다. 실제 production user -> AUTH -> DATA Worker -> D1 -> browser 왕복이 검증되었다.
+
+---
 
 ## DATA safety boundary
 
-User-owned generals, tactics, equipment and decks are permanent account assets. Registry reseeding is UPSERT-only; never DELETE/TRUNCATE user-owned data.
+User-owned generals, tactics, equipment, decks는 permanent account assets다.
 
-`canonical applicability` is intentionally 0 until authoritative applicability evidence is supplied. Do not infer weapon/mount applicability from names, descriptions, ID ranges or observed combinations. Generic `game_stat_types` are not automatically an equipment option catalog.
+Registry seed/reseed는 UPSERT 중심이며 user data를 DELETE/TRUNCATE하지 않는다.
 
-## Historical formal DATA v0.8 release baseline
+production test에서 cleanup 가능한 명시적 test rows만 정리한다.
 
-This section is historical release evidence, not the current DATA runtime.
+snapshot처럼 delete가 없는 불변 데이터를 자동 smoke에서 무분별하게 만들지 않는다.
 
-- DATA 0.8.0
-- schema 3
-- formal tag/name: `data-v0.8.0`
-- historical Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
-- exact verified deployment target: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
-- formal release workflow: `33157010443`
-- notes: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
-- canonical applicability remains 0 until authoritative data arrives.
+---
 
-The existence of this formal v0.8 release does not downgrade the current production runtime, which is DATA 0.9.0.
+# Current product direction — NAKWOL User Data Platform v1
+
+이전 handoff의 `siege-calculator seamless SSO` 단독 우선순위는 **현재 제품 방향으로 superseded**되었다.
+
+현재 공식 다음 방향은:
+
+> **사용자가 한 번 자기 게임/덱 정보를 등록하고, 모든 낙월 서비스가 같은 데이터를 안전하게 재사용하는 User Data Platform을 완성한다.**
+
+Authoritative design:
+
+- `docs/superpowers/specs/2026-09-01-nakwol-user-data-platform-v1-design.md`
+
+Implementation plan:
+
+- `docs/superpowers/plans/2026-09-01-nakwol-user-data-platform-v1.md`
+
+제품은 세 계층으로 구성한다.
+
+```text
+NAKWOL My Data
+  사용자 중앙 입력/관리 앱
+          |
+          v
+NAKWOL DATA
+          |
+          +-----------------------+
+          |                       |
+          v                       v
+High-level Data SDK          NAKWOL Data UI
+                          AccountPicker / DeckPicker
+          |                       |
+          +-----------+-----------+
+                      |
+                      v
+               consumer services
+```
+
+Consumer examples:
+
+- 덱 전적 확인
+- 덱 분석
+- 덱 연구/시뮬레이션
+- 전투 분석
+- 기타 낙월 도구
+
+핵심 UX:
+
+```text
+한 서비스에서 덱 등록
+ -> NAKWOL DATA 저장
+ -> 다른 서비스에서 같은 deck ID 즉시 재사용
+```
+
+---
+
+## Product principles for User Data Platform
+
+1. **Enter once, reuse everywhere.**
+2. 사용자가 서비스마다 같은 roster/deck을 다시 입력하게 만들지 않는다.
+3. 사용자 데이터 입력 UI는 NAKWOL 공통 제품으로 만든다.
+4. 소비자 개발자는 필요하면 공통 Picker를 쓰고, 원하면 high-level SDK로 자기 UI를 만든다.
+5. read-only consumer에 write scope를 주지 않는다.
+6. 수정은 기본적으로 별도 `nakwol-my-data` app identity로 수행한다.
+7. central SSO는 재사용하되 app token은 공유하지 않는다.
+8. live deck과 immutable snapshot을 구분한다.
+9. 전적/역사 재현에는 snapshot을 우선 고려한다.
+10. screenshot/video/game-share importer는 중앙 My Data에 붙이고 모든 서비스가 결과를 재사용한다.
+
+---
+
+## First implementation task
+
+**Phase 1 — High-level NAKWOL Data SDK**
+
+먼저 현재 low-level:
+
+```js
+window.NAKWOL_CONNECT.data.request('/v1/...')
+```
+
+위에 다음 high-level namespace를 추가한다.
+
+```js
+data.accounts
+data.roster.generals
+data.roster.tactics
+data.equipment
+data.decks
+data.snapshots
+data.registry
+```
+
+그 후:
+
+1. `nakwol-my-data` 공식 app + My Data foundation
+2. My Data user CRUD UI
+3. AccountPicker / DeckPicker / My Data launcher
+4. 서로 다른 consumer 두 곳에서 같은 deck 재사용 production E2E
+5. 이후 screenshot/video/share-payload import 연구
+
+구현 순서와 Definition of Done은 implementation plan을 따른다.
+
+---
 
 ## Verification commands
 
@@ -262,36 +368,19 @@ npm run typecheck
 npm run bundle
 ```
 
-Before a completion/release claim, verify the exact final SHA. A DATA verification failure is a stop condition for AUTH stable promotion even when DATA source is unchanged.
+PR에서는 Repository Governance와 관련 component verify가 모두 green인지 확인한다.
 
-## Release / production rules
+User-facing My Data / Data UI는 자동 테스트만으로 완료 처리하지 않고 production browser E2E를 포함한다.
 
-- Production-capable deployment/publish automation belongs to `stable` only.
-- Normal promotion is `dev -> main -> stable` by PR.
-- Component tags: `data-vX.Y.Z`, `connect-vX.Y.Z`, `auth-vX.Y.Z`.
-- Formal component release is created only after the release-specific production smoke/manual verification contract is satisfied.
-- `ops/release.json` is the audited release descriptor and must not be left armed accidentally.
-- production workflows must pass `scripts/verify-stable-promotion.mjs`.
-- DATA-first production ordering must remain fail-closed.
+---
 
-## Do not do these
+## Do not accidentally do these
 
-- do not edit the pinned v0.1 Web SDK asset;
-- do not develop/direct-push on `main` or `stable`;
-- do not direct-push or force-push `dev`;
-- do not bypass stable promotion or DATA-first gates;
-- do not recreate or move the existing `auth-v0.2.0` tag/Release;
-- do not leave `ops/release.json` armed after a component release;
-- do not expose raw authentication secrets in `/lab` or docs;
-- do not merge AUTH and DATA D1 responsibilities;
-- do not delete/truncate Registry or user-owned data during reseed;
-- do not invent game rules or canonical equipment applicability;
-- do not branch from historical feature/ops refs without fresh comparison against `dev`.
-
-## Next
-
-1. Treat `auth-v0.2.0` as formally released and production-verified.
-2. Keep release descriptor disabled and preserve the synchronized `dev/main/stable` content baseline.
-3. For new work, branch from current `dev` using an allowed source prefix.
-4. Proceed with the separate `siege-calculator` Identity Menu / seamless SSO integration when working on the next product task.
-5. Preserve AUTH/DATA D1 separation, DATA-first release ordering, immutable SDK boundaries, and app-bound token isolation.
+- AUTH v0.2 formal release를 다시 수행하지 않는다.
+- pinned Web SDK v0.1 asset을 수정하지 않는다.
+- consumer app끼리 access token/sessionStorage를 공유하지 않는다.
+- My Data write를 위해 read-only consumer에 write scope를 자동 추가하지 않는다.
+- Data Lab을 사용자 daily-use UI로 전환하지 않는다.
+- Registry seed에서 user-owned rows를 삭제하지 않는다.
+- evidence 없는 equipment applicability를 추론하지 않는다.
+- screenshot importer가 생겨도 인식 결과를 사용자 확인 없이 canonical user data로 silent write하지 않는다.
