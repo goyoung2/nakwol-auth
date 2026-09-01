@@ -8,6 +8,7 @@ NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 한 �
 이 프로젝트에 NAKWOL Connect 붙여줘.
 장수/전법 데이터가 필요하니 roster:read도 사용해.
 공식 CLI로 설치하고 data describe --json으로 현재 DATA API를 읽은 뒤 doctor --json까지 통과시켜.
+브라우저 구현은 가능하면 high-level data.accounts / data.roster / data.equipment / data.decks / data.snapshots helper를 사용하고, helper가 없는 경우에만 data.request()를 사용해.
 ```
 
 에이전트가 실행할 명령:
@@ -67,10 +68,41 @@ npx --yes nakwol-connect data describe --json
 const data = window.NAKWOL_CONNECT.data;
 const contract = await data.describe();
 const generals = await data.registry.generals();
-const accounts = await data.request('/v1/game-accounts');
+const accounts = await data.accounts.list();
+const decks = await data.decks.list(accountId);
 ```
 
-보호된 DATA 호출은 현재 앱 access token과 client ID를 자동으로 붙입니다. `data.describe()` / `data.openapi()`는 공개 discovery라 로그인 전에도 사용할 수 있습니다. CLI token, Discord secret, Cloudflare token은 브라우저나 프로젝트에 들어가지 않습니다.
+High-level helper namespace:
+
+```text
+data.accounts.list/create
+data.roster.generals.list/upsert/remove
+data.roster.tactics.list/upsert/remove
+data.equipment.list/create/update/remove
+data.decks.list/get/create/update/replaceComposition/remove
+data.snapshots.list/get/create
+data.registry.summary/generals/tactics/equipment/equipmentTraits/stats/formations/warbooks
+```
+
+예:
+
+```js
+const deck = await data.decks.get(accountId, deckId);
+
+await data.decks.update(accountId, deckId, {
+  name: '연무대회 연구덱',
+});
+```
+
+helper는 기존 DATA API의 `{ ok, data }` envelope와 `NakwolDataError`의 `code/status/payload`를 숨기지 않습니다. ID는 URL encoding되고 JSON write header/body는 runtime이 구성합니다. 현재 server에 없는 game-account update/delete는 SDK도 만들지 않습니다.
+
+기존 low-level 호출은 계속 유효합니다.
+
+```js
+const custom = await data.request('/v1/game-accounts');
+```
+
+보호된 DATA 호출은 현재 앱 access token과 client ID를 자동으로 붙입니다. `data.describe()` / `data.openapi()`는 공개 discovery라 로그인 전에도 사용할 수 있습니다. CLI token, Discord secret, Cloudflare token은 브라우저나 프로젝트에 들어가지 않습니다. `data.hasScope()`는 UI용 hint이며 실제 권한은 DATA Worker가 판정합니다.
 
 ## doctor
 
