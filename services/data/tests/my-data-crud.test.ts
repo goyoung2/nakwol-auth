@@ -67,3 +67,10 @@ test('My Data CRUD remains responsive and keeps explicit empty/error states', as
   assert.ok(page.includes('아직 등록된 장비가 없습니다.'));
   assert.ok(page.includes('아직 등록된 덱이 없습니다.'));
 });
+
+test('My Data captures submit forms before awaiting asynchronous create calls', async () => {
+  const page = await root('services/data/src/my-data.ts');
+  assert.doesNotMatch(page, /event\.currentTarget\.reset\(\)/);
+  assert.ok((page.match(/const form = event\.currentTarget;/g) || []).length >= 2);
+  assert.ok((page.match(/form\.reset\(\)/g) || []).length >= 2);
+});
