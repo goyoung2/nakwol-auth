@@ -27,9 +27,11 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 ```
 
 - default branch: `dev`
-- `dev`, `main`, `stable`은 유지되는 long-lived branch
+- dev, main, stable are preserved long-lived branches.
+- delete merged head branches: disabled
 - long-lived branch direct push/force-push 금지
-- GitHub Free private repository 특성상 native Branch Protection 대신 Repository Governance CI 계약을 사용
+- Native Branch Protection: unavailable / not active for this GitHub Free private repository.
+- Repository Governance CI 계약으로 promotion source와 release/deploy 경계를 검증한다.
 
 Hotfix:
 
@@ -148,6 +150,23 @@ Current known API gaps relevant to user-facing My Data:
 - equipment trait canonical applicability는 authoritative evidence가 없어 0 유지
 
 Generic stats/equipment applicability를 추측하여 쓰기 허용하지 않는다.
+
+---
+
+## Historical formal DATA v0.8 release baseline
+
+이 섹션은 historical release evidence이며 현재 DATA runtime을 뜻하지 않는다.
+
+- DATA 0.8.0
+- schema 3
+- formal tag/name: `data-v0.8.0`
+- historical Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
+- exact verified deployment target: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- formal release workflow: `33157010443`
+- notes: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
+- canonical applicability remains 0 until authoritative equipment-type applicability evidence exists.
+
+이 formal DATA 0.8.0 release 기록은 현재 production runtime DATA 0.9.0을 downgrade하지 않는다.
 
 ---
 
