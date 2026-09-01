@@ -22,7 +22,7 @@ VALUES (
   'nakwol-data-lab',
   'https://nakwol-data.sepsd21.workers.dev/lab',
   'internal',
-  'admin',
+  'lab',
   NULL,
   unixepoch() * 1000,
   unixepoch() * 1000
@@ -30,6 +30,6 @@ VALUES (
 ON CONFLICT(client_id) DO UPDATE SET
   homepage_url = excluded.homepage_url,
   framework = 'internal',
-  access_policy = 'admin',
+  access_policy = 'lab',
   owner_user_id = NULL,
   updated_at = excluded.updated_at;
