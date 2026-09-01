@@ -1,21 +1,26 @@
 import type { Env } from './types';
 import { getUserWithMembership } from './store';
+import { getAuthLabPrivilege } from './platform-access';
 
 export const NAKWOL_CONNECT_POLICY_VERSION = '0.1.0';
-export type ApplicationAccessPolicy = 'public' | 'member' | 'admin';
+export type ApplicationAccessPolicy = 'public' | 'member' | 'admin' | 'lab';
 
 export async function getApplicationAccessPolicy(env: Env, clientId: string): Promise<ApplicationAccessPolicy> {
   const row = await env.DB.prepare(
     `SELECT access_policy FROM application_settings WHERE client_id = ?`
   ).bind(clientId).first<{ access_policy: string }>();
 
-  if (row?.access_policy === 'member' || row?.access_policy === 'admin') return row.access_policy;
+  if (row?.access_policy === 'member' || row?.access_policy === 'admin' || row?.access_policy === 'lab') return row.access_policy;
   return 'public';
 }
 
 export async function isApplicationAccessAllowed(env: Env, userId: string, clientId: string): Promise<boolean> {
   const policy = await getApplicationAccessPolicy(env, clientId);
   if (policy === 'public') return true;
+  if (policy === 'lab') {
+    const privilege = await getAuthLabPrivilege(env, userId);
+    return privilege.canUseLab;
+  }
 
   const user = await getUserWithMembership(env, userId);
   if (!user || user.status !== 'active') return false;
