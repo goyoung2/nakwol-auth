@@ -2,6 +2,9 @@ name: Preflight NAKWOL DATA Deck Integrity
 
 on:
   workflow_dispatch:
+  push:
+    branches: [dev]
+    paths: ['ops/data-deck-integrity-preflight.flag']
 
 permissions:
   contents: read
