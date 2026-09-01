@@ -60,11 +60,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','nakwol-data-lab','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT client_id,status FROM applications WHERE client_id IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','nakwol-data-lab','nakwol-my-data','siege-calculator') ORDER BY client_id;" > /tmp/apps.json
           grep -q 'nakwol-auth-selftest' /tmp/apps.json
           grep -q 'nakwol-connect-admin' /tmp/apps.json
           grep -q 'nakwol-connect-cli' /tmp/apps.json
           grep -q 'nakwol-data-lab' /tmp/apps.json
+          grep -q 'nakwol-my-data' /tmp/apps.json
           grep -q 'siege-calculator' /tmp/apps.json
       - name: Wait for required DATA v0.9 contract
         shell: bash
@@ -91,6 +92,7 @@ jobs:
           echo '::error::NAKWOL DATA v0.9/OpenAPI is not ready; refusing AUTH/Connect deploy.'
           cat /tmp/required-data-health.json || true
           cat /tmp/required-data-schema.json || true
+          cat /tmp/required-data-openapi.json || true
           exit 1
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
