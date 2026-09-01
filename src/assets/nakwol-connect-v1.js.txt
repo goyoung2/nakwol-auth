@@ -51,15 +51,59 @@
         }
         return payload;
       };
+      const segment = (value) => encodeURIComponent(String(value));
+      const jsonRequest = (path, method, body) => {
+        const headers = new Headers({ 'Content-Type': 'application/json' });
+        return dataRequest(path, { method, headers, body: JSON.stringify(body) });
+      };
+      const accountPath = (accountId) => `/v1/game-accounts/${segment(accountId)}`;
+      const deckPath = (accountId, deckId) => `${accountPath(accountId)}/decks/${segment(deckId)}`;
+
       const data = {
         version: '0.4.0', origin: dataOrigin, scopes: dataScopes,
         hasScope: (scope) => dataScopes.includes(scope),
         fetch: dataFetch, request: dataRequest, openapi: dataOpenApi, describe: dataOpenApi,
+        accounts: {
+          list: () => dataRequest('/v1/game-accounts'),
+          create: (input) => jsonRequest('/v1/game-accounts', 'POST', input),
+        },
+        roster: {
+          generals: {
+            list: (accountId) => dataRequest(`${accountPath(accountId)}/roster/generals`),
+            upsert: (accountId, generalId, input) => jsonRequest(`${accountPath(accountId)}/roster/generals/${segment(generalId)}`, 'PUT', input),
+            remove: (accountId, generalId) => dataRequest(`${accountPath(accountId)}/roster/generals/${segment(generalId)}`, { method: 'DELETE' }),
+          },
+          tactics: {
+            list: (accountId) => dataRequest(`${accountPath(accountId)}/roster/tactics`),
+            upsert: (accountId, tacticId, input) => jsonRequest(`${accountPath(accountId)}/roster/tactics/${segment(tacticId)}`, 'PUT', input),
+            remove: (accountId, tacticId) => dataRequest(`${accountPath(accountId)}/roster/tactics/${segment(tacticId)}`, { method: 'DELETE' }),
+          },
+        },
+        equipment: {
+          list: (accountId) => dataRequest(`${accountPath(accountId)}/equipment`),
+          create: (accountId, input) => jsonRequest(`${accountPath(accountId)}/equipment`, 'POST', input),
+          update: (accountId, equipmentId, patch) => jsonRequest(`${accountPath(accountId)}/equipment/${segment(equipmentId)}`, 'PATCH', patch),
+          remove: (accountId, equipmentId) => dataRequest(`${accountPath(accountId)}/equipment/${segment(equipmentId)}`, { method: 'DELETE' }),
+        },
+        decks: {
+          list: (accountId) => dataRequest(`${accountPath(accountId)}/decks`),
+          get: (accountId, deckId) => dataRequest(deckPath(accountId, deckId)),
+          create: (accountId, input) => jsonRequest(`${accountPath(accountId)}/decks`, 'POST', input),
+          update: (accountId, deckId, patch) => jsonRequest(deckPath(accountId, deckId), 'PATCH', patch),
+          replaceComposition: (accountId, deckId, composition) => jsonRequest(`${deckPath(accountId, deckId)}/composition`, 'PUT', composition),
+          remove: (accountId, deckId) => dataRequest(deckPath(accountId, deckId), { method: 'DELETE' }),
+        },
+        snapshots: {
+          list: () => dataRequest('/v1/deck-snapshots'),
+          get: (snapshotId) => dataRequest(`/v1/deck-snapshots/${segment(snapshotId)}`),
+          create: (accountId, deckId, input) => jsonRequest(`${deckPath(accountId, deckId)}/snapshots`, 'POST', input),
+        },
         registry: {
           summary: () => dataRequest('/v1/registry/summary'),
           generals: (options = {}) => dataRequest(`/v1/registry/generals${options.includeHidden ? '?include_hidden=1' : ''}`),
           tactics: () => dataRequest('/v1/registry/tactics'),
           equipment: () => dataRequest('/v1/registry/equipment'),
+          equipmentTraits: () => dataRequest('/v1/registry/equipment-traits'),
           stats: () => dataRequest('/v1/registry/stats'),
           formations: () => dataRequest('/v1/registry/formations'),
           warbooks: () => dataRequest('/v1/registry/warbooks'),
