@@ -27,6 +27,7 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 
 - default branch: `dev`
 - dev/main/stable are long-lived
+- dev, main, stable 장기 브랜치는 항상 보존한다.
 - delete merged head branches: disabled
 - long-lived branch direct push/force-push 금지
 - GitHub Free private repository라 native Branch Protection은 현재 unavailable/not active
@@ -81,6 +82,8 @@ long-lived branches는 동일한 My Data CRUD runtime content를 의도한다. S
 My Data용 `nakwol-my-data` AUTH app도 production에 등록되어 있다.
 
 현재 My Data foundation 당시 AUTH production Worker Version ID는 `ba2e1140-40e5-4d1d-8da8-56efdc78c504`다.
+
+AUTH Lab V1 through V12 completed. V8-B live Discord role mutation remains an approved external-authority waiver and is not an AUTH v0.2 release blocker.
 
 AUTH protocol/release 작업을 My Data hardening과 섞지 않는다.
 
