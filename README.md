@@ -7,8 +7,12 @@
 ### NAKWOL AUTH
 
 - 현재 production runtime: **AUTH 0.2.0**
-- formal component release/tag: **아직 생성하지 않음 — final stable promotion·production deployment 검증 후 생성**
-- deployed stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5` (초기 AUTH 0.2 production deployment 기준; 후속 verified fixes는 정식 release 전 final stable target으로 다시 고정)
+- formal component release/tag: **`auth-v0.2.0` — released 2026-08-31**
+- formal release target stable SHA: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
+- final AUTH v0.2 deploy workflow: `33373705515` — success
+- final AUTH v0.2 Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- final production smoke workflow: `33373908231` — success
+- initial AUTH 0.2 production baseline remains historical evidence: stable `2ea002dca18cbb064be089167326cd311b315dd5`, deploy `33350989974`, Worker Version `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`, combined smoke `33351486056`
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
 - Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
@@ -16,7 +20,7 @@
 - `/account`: 일반 사용자의 NAKWOL Account Center
 - `/lab`: 권한이 있는 운영자/개발자를 위한 안전한 Auth Lab
 - Auth Lab **V1–V12 release matrix는 completed** 상태이며, V8-B 실제 Discord 역할 변경만 외부 역할관리 권한 의존 항목으로 release **waiver**가 승인되었습니다. V8-A는 fresh membership refresh와 접근정책 변화를 자동 검증합니다.
-- formal `auth-v0.2.0` release는 **pending final stable promotion, production deployment verification, and release-PR provenance gate** 상태입니다.
+- `auth-v0.2.0` formal release 이후 `ops/release.json`은 다시 disabled neutral 상태로 disarm되었습니다.
 
 ### NAKWOL Connect
 
@@ -45,6 +49,21 @@ DATA scopes:
 - `roster:read`, `roster:write`
 - `equipment:read`, `equipment:write`
 - `decks:read`, `decks:write`
+
+## 현재 repository 상태
+
+AUTH v0.2.0 release 후 release-control cleanup과 back-propagation까지 완료되었습니다.
+
+- `stable`: `5fa4a0365462519089ddeae1d49ff2de3c5d4452`
+- `main`: `598c05f371f328494c565a7f7d463ef09271320f`
+- `dev`: `4c4337a2ef8146b34f579d12773bf43c33464401`
+- 세 long-lived branch의 현재 tree SHA: `444fd9a5ec963d5970d560de90e3782314881fe7`
+
+커밋 SHA는 squash/promotion history 때문에 다르지만 현재 파일 트리는 동일합니다. 새 작업은 기본 브랜치 `dev`에서 `feature/*`, `fix/*`, `chore/*`, `docs/*` 브랜치를 만들어 진행합니다.
+
+## 다음 제품 작업
+
+AUTH v0.2.0 자체의 release blocker는 없습니다. 다음 제품 단계는 별도 작업으로 **`siege-calculator` Identity Menu / seamless SSO 연동**을 진행하는 것입니다. Account Center에서 새 탭으로 서비스를 열었을 때 목적지 앱의 `sessionStorage` token이 없는 경우 목적지 앱 PKCE를 자동 시작하고 기존 중앙 AUTH session을 재사용하는 흐름이 후속 UX 범위입니다.
 
 ## 경계 원칙
 
