@@ -473,20 +473,20 @@ export function myDataPageHtml(): string {
   });
 
   document.querySelector('#equipment-create-form').addEventListener('submit', async (event) => {
-    event.preventDefault(); const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
+    event.preventDefault(); const form = event.currentTarget; const button = event.submitter || form.querySelector('button[type="submit"]');
     await withButton(button, async () => {
       const templateId = ui.equipmentTemplate.value; if (!templateId) throw new Error('장비 템플릿을 선택해 주세요.'); const api = data();
       await api.equipment.create(activeAccountId, { template_id: templateId, nickname: document.querySelector('#equipment-nickname').value.trim() || null, locked: document.querySelector('#equipment-locked').checked, favorite: document.querySelector('#equipment-favorite').checked });
-      event.currentTarget.reset(); showMessage('장비를 등록했습니다.'); await loadAccountData(activeAccountId);
+      form.reset(); showMessage('장비를 등록했습니다.'); await loadAccountData(activeAccountId);
     });
   });
 
   document.querySelector('#deck-create-form').addEventListener('submit', async (event) => {
-    event.preventDefault(); const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
+    event.preventDefault(); const form = event.currentTarget; const button = event.submitter || form.querySelector('button[type="submit"]');
     await withButton(button, async () => {
       const name = document.querySelector('#deck-name').value.trim(); if (!name) throw new Error('덱 이름을 입력해 주세요.'); const api = data();
       const created = await api.decks.create(activeAccountId, { name, status: document.querySelector('#deck-status').value, visibility: document.querySelector('#deck-visibility').value, note: document.querySelector('#deck-note').value.trim() || null, is_primary: document.querySelector('#deck-primary').checked });
-      event.currentTarget.reset(); showMessage('덱을 만들었습니다. 편성에서 장수와 전법을 연결할 수 있습니다.'); await loadAccountData(activeAccountId); if (created?.data?.id) await openDeckComposition(created.data.id);
+      form.reset(); showMessage('덱을 만들었습니다. 편성에서 장수와 전법을 연결할 수 있습니다.'); await loadAccountData(activeAccountId); if (created?.data?.id) await openDeckComposition(created.data.id);
     });
   });
 </script>
