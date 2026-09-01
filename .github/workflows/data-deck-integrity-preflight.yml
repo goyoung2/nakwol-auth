@@ -1,0 +1,78 @@
+name: Preflight NAKWOL DATA Deck Integrity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: services/data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install DATA dependencies
+        run: npm install --legacy-peer-deps
+      - name: Require existing exact DATA D1
+        run: node scripts/ensure-d1.mjs
+      - name: Read-only duplicate composition scan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npx wrangler d1 execute DB --remote --json --command "SELECT deck_id,general_id,COUNT(*) AS n FROM deck_general_slots GROUP BY deck_id,general_id HAVING COUNT(*) > 1 ORDER BY deck_id,general_id;" > /tmp/deck-duplicate-generals.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT deck_id,weapon_instance_id,COUNT(*) AS n FROM deck_general_slots WHERE weapon_instance_id IS NOT NULL GROUP BY deck_id,weapon_instance_id HAVING COUNT(*) > 1 ORDER BY deck_id,weapon_instance_id;" > /tmp/deck-duplicate-weapons.json
+          npx wrangler d1 execute DB --remote --json --command "SELECT deck_id,mount_instance_id,COUNT(*) AS n FROM deck_general_slots WHERE mount_instance_id IS NOT NULL GROUP BY deck_id,mount_instance_id HAVING COUNT(*) > 1 ORDER BY deck_id,mount_instance_id;" > /tmp/deck-duplicate-mounts.json
+
+          node - <<'NODE'
+          const fs = require('fs');
+
+          function collectRows(value, key) {
+            const rows = [];
+            function visit(node) {
+              if (!node || typeof node !== 'object') return;
+              if (Array.isArray(node)) {
+                for (const item of node) visit(item);
+                return;
+              }
+              if (typeof node.deck_id === 'string' && Object.prototype.hasOwnProperty.call(node, key)) {
+                rows.push(node);
+                return;
+              }
+              for (const child of Object.values(node)) visit(child);
+            }
+            visit(value);
+            return rows;
+          }
+
+          const scans = [
+            ['duplicate_general', '/tmp/deck-duplicate-generals.json', 'general_id'],
+            ['duplicate_weapon', '/tmp/deck-duplicate-weapons.json', 'weapon_instance_id'],
+            ['duplicate_mount', '/tmp/deck-duplicate-mounts.json', 'mount_instance_id'],
+          ];
+
+          let total = 0;
+          for (const [label, path, key] of scans) {
+            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const rows = collectRows(payload, key);
+            total += rows.length;
+            console.log(`${label}_rows=${rows.length}`);
+            for (const row of rows) console.log(`${label}: ${JSON.stringify(row)}`);
+          }
+
+          if (total > 0) {
+            console.error(`NAKWOL_DECK_INTEGRITY_PREFLIGHT_BLOCKED:duplicate_rows=${total}`);
+            process.exit(2);
+          }
+
+          console.log('NAKWOL_DECK_INTEGRITY_PREFLIGHT_OK');
+          NODE
