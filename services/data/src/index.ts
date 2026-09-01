@@ -9,9 +9,11 @@ import { handleCreateDeckSnapshot, handleGetDeckSnapshot, handleListDeckSnapshot
 import { handleDeleteOwnedTactic, handleListOwnedTactics, handlePutOwnedTactic } from './routes/tactics';
 import { handleRegistryList, handleRegistrySummary } from './routes/registry';
 import { handleConnectCliGetScopes, handleConnectCliPutScopes } from './connect-cli';
+import { registerDataLabRoutes } from './lab';
 import type { DataEnv } from './types';
 
 const app = new Hono<{ Bindings:DataEnv }>();
+registerDataLabRoutes(app);
 app.options('*', (c) => preflightResponse(c.req.raw));
 app.get('/api/health', () => publicHealthResponse());
 app.get('/api/schema', () => publicSchemaResponse());
