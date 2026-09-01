@@ -1,6 +1,6 @@
 # CODEX HANDOFF — NAKWOL AUTH / CONNECT / DATA
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 Repository: `goyoung2/nakwol-auth`
 
 ## Read this first
@@ -14,7 +14,7 @@ Repository: `goyoung2/nakwol-auth`
 5. 실제 component `package.json`, CI, production evidence
 6. `DATA.md`, `CONNECT.md`, `WEB_SDK.md`
 
-개별 문서의 오래된 버전 제목보다 실제 package/CI/production evidence를 우선한다.
+개별 문서의 오래된 상태 문구보다 실제 package/CI/production evidence를 우선한다.
 
 ## Authoritative branch model
 
@@ -32,34 +32,107 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 
 Hotfix는 예외적으로 `stable -> hotfix/* -> stable -> main -> dev` 흐름을 사용한다.
 
+## Current repository state
+
+AUTH v0.2.0 formal release, release-control cleanup, and back-propagation are all completed.
+
+Current long-lived branch heads:
+
+- `dev`: `4c4337a2ef8146b34f579d12773bf43c33464401`
+- `main`: `598c05f371f328494c565a7f7d463ef09271320f`
+- `stable`: `5fa4a0365462519089ddeae1d49ff2de3c5d4452`
+
+All three currently resolve to the same tree:
+
+```text
+444fd9a5ec963d5970d560de90e3782314881fe7
+```
+
+The commit SHAs differ because of squash/promotion ancestry. Treat the current content as synchronized. Do not interpret GitHub compare `diverged` by itself as a content mismatch; inspect tree/blob/content differences.
+
+Current open PR count at this handoff point: **0**.
+
+`ops/release.json` is **disabled** after the AUTH release descriptor was disarmed.
+
 ## Current component state
 
 ### AUTH
 
 - current production runtime: **AUTH 0.2.0**
-- initial AUTH 0.2 production stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
-- initial AUTH 0.2 production Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
-- initial AUTH 0.2 production deploy workflow: `33350989974` — success
-- production platform smoke workflow: `33351486056` — success
-- formal component release/tag: **pending final stable promotion, production deployment verification, and release-PR provenance gate**
-- Auth Lab **V1–V12 release matrix is completed**. V8-B live Discord role mutation has an approved release **waiver** because it requires controlled external guild role-management authority; V8-A automatically verifies the fresh Discord refresh, membership persistence, and member-policy allow/deny/allow path.
+- formal component tag / GitHub Release: **`auth-v0.2.0` — released**
+- exact formal release target: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
+- final production deploy workflow: `33373705515` — success
+- final production Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- final production smoke workflow: `33373908231` — success
+- component-release workflow: `33374685878` — success
+- release PR: `#67`
+- descriptor disarm PR: `#68`
+- stable -> main post-release back-propagation: `#69`
+- main -> dev post-release back-propagation: `#70`
 - production origin: `https://nakwol-auth.sepsd21.workers.dev`
 - deployed scope: immutable Web SDK v0.2.0, Compact Identity Menu, `/account`, privileged `/lab`.
 - pinned `src/assets/nakwol-auth-web.js.txt` / SDK v0.1.0 remains the immutable compatibility boundary.
 - OAuth security boundary: Authorization Code + PKCE(S256), state validation, exact redirect allowlist, app-bound access token, restricted CORS.
 
-Production smoke evidence on run `33351486056`:
+Initial AUTH 0.2 production baseline remains historical evidence:
 
-- production AUTH D1 schema and internal apps `nakwol-account-center`, `nakwol-auth-lab` verified read-only;
-- AUTH health/SDK manifest/v0.1/v0.2/stable alias/account/lab all returned expected production responses;
-- unauthenticated Account/Lab APIs returned 401;
-- production v0.1 SDK was byte-equal to the pinned repository v0.1 asset;
-- production v0.2 SDK and stable alias were byte-equal to the repository v0.2 asset;
-- Connect manifest/package/admin/developer/device-verify/llms surfaces were green as Connect 0.4;
-- production Connect package executed and reported `NAKWOL Connect CLI v0.4`;
-- DATA OpenAPI remained 3.1.0 / DATA 0.9.0.
+- stable SHA: `2ea002dca18cbb064be089167326cd311b315dd5`
+- deploy workflow: `33350989974`
+- Worker Version ID: `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`
+- combined production smoke workflow: `33351486056`
 
-The smoke workflow is intentionally read-only against production D1 and must not create test device requests.
+Do not confuse this historical first deployment with the formal release target. The formal release target is `154baf448ee45a7b2bcf6e320f09a65866e1f8af`.
+
+### Auth Lab release matrix
+
+Auth Lab **V1–V12 release matrix is completed**.
+
+Evidence nuances:
+
+- V5 verifies client-side expiry/recovery and is not represented as a literal one-hour wall-clock wait.
+- V7 has live callback/state mismatch evidence; PKCE verifier mismatch remains automated/server-side evidence.
+- V8-A is automated PASS for fresh Discord membership refresh and member-policy allow -> deny -> allow behavior.
+- V8-B live Discord role mutation has an approved release **waiver** because a controlled guild role mutation requires external server-admin/test-account authority.
+- V10 live production proof is AUTH `/me` 200, DATA `/v1/me` 200, and registry 403 `SCOPE_DENIED` without `roster:read`.
+- V11 and V12 live browser recovery/responsive/accessibility checks are PASS.
+
+The V8-B waiver did not block `auth-v0.2.0` formal release.
+
+### Final AUTH v0.2 deployment evidence
+
+Stable candidate `154baf448ee45a7b2bcf6e320f09a65866e1f8af` was deployed by workflow `33373705515`.
+
+Verified in the deployment job:
+
+- stable provenance: `NAKWOL_STABLE_PROMOTION_OK:main->stable:#65`
+- AUTH tests: 71/71 PASS
+- typecheck: PASS
+- Wrangler dry-run: PASS
+- remote D1 migrations: no migrations to apply
+- required applications: verified
+- live DATA gate: `NAKWOL_DATA_V09_READY_FOR_AUTH_DEPLOY`
+- Worker deployment: success
+- Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- Connect v0.4 verification: `NAKWOL_CONNECT_V04_DEPLOY_OK`
+
+No-merge final production smoke PR #66 produced workflow `33373908231` — success.
+
+### Formal AUTH v0.2 release evidence
+
+PR #67 created the release descriptor against exact target:
+
+```text
+154baf448ee45a7b2bcf6e320f09a65866e1f8af
+```
+
+Release-head verification:
+
+- Verify NAKWOL AUTH `33374520124` — success
+- Repository Governance `33374520113` — success, including AUTH/Connect and DATA quality gate
+
+`Create Component Release` workflow `33374685878` completed successfully and published `auth-v0.2.0`.
+
+PR #68 then disarmed the descriptor. `ops/release.json` must remain disabled unless a future audited component release is intentionally being created.
 
 ### Connect
 
@@ -77,8 +150,8 @@ The smoke workflow is intentionally read-only against production D1 and must not
 - stable PR #43 release path deployed DATA first, then allowed AUTH deployment only after live DATA v0.9 contract verification.
 - DATA deploy workflow evidence: `33255315017`.
 - earlier AUTH deploy workflow evidence with DATA-first wait: `33255315038`.
-- AUTH 0.2 production deploy `33350989974` also passed the live DATA 0.9 gate before Worker mutation.
-- DATA-to-AUTH Service Binding hotfix was later promoted to stable and production-verified without changing AUTH D1/DATA D1 separation.
+- final AUTH v0.2 deploy `33373705515` also passed the live DATA 0.9 gate before Worker mutation.
+- DATA-to-AUTH Service Binding hotfix is deployed and production-verified without changing AUTH D1/DATA D1 separation.
 
 DATA scopes:
 
@@ -89,22 +162,37 @@ DATA scopes:
 
 AUTH D1 and DATA D1 are separate. AUTH must not read DATA D1 or invent/mirror DATA scopes. DATA verifies caller identity through AUTH `/me` rather than AUTH D1 access.
 
-## AUTH UX v1 release history
+## AUTH UX v1 implementation history
+
+Historical implementation path:
 
 - recovery/design history: closed draft PR #45
-- feature -> dev promotion: PR #46, exact feature head `b959ce2242c9394a7d7cbdd56a396cc637c8d25e`
+- feature -> dev promotion: PR #46
 - dev -> main: PR #47
 - main -> stable: PR #48
-- initial deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
+- initial AUTH 0.2 deployed stable: `2ea002dca18cbb064be089167326cd311b315dd5`
 - initial deploy workflow: `33350989974`
-- temporary no-merge production smoke probe: PR #49
-- combined production smoke evidence: `33351486056`
-- V8-A fresh membership refresh regression: PR #61 -> `dev`
-- recovery handoff: `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md` (historical recovery context; its old release-readiness status is superseded)
-- release evidence: `docs/releases/2026-08-29-nakwol-auth-v0.2.md`
-- formal release execution plan: `docs/superpowers/plans/2026-08-31-auth-v0.2.0-formal-release.md`
-- design: `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
-- implementation plan: `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
+- initial temporary no-merge production smoke probe: PR #49
+- initial combined production smoke: `33351486056`
+- V4 global logout fix: PR #53 -> #54 -> #55
+- DATA-to-AUTH Service Binding fix: PR #57 -> #58 -> #59
+- V8-A fresh membership refresh regression: PR #61
+- final release evidence: PR #62
+- ancestry reconciliation: PR #64
+- final main -> stable promotion: PR #65
+- final no-merge smoke: PR #66
+- formal release: PR #67
+- release descriptor disarm: PR #68
+- post-release stable -> main: PR #69
+- post-release main -> dev: PR #70
+
+Relevant historical docs:
+
+- `docs/handoffs/2026-08-31-nakwol-auth-ux-v1-resume.md` — historical recovery context; old release-readiness status is superseded
+- `docs/releases/2026-08-29-nakwol-auth-v0.2.md` — authoritative formal release record
+- `docs/superpowers/plans/2026-08-31-auth-v0.2.0-formal-release.md` — historical execution plan; tasks were executed even if old unchecked boxes remain
+- `docs/superpowers/specs/2026-08-29-nakwol-auth-ux-v1-design.md`
+- `docs/superpowers/plans/2026-08-29-nakwol-auth-ux-v1.md`
 
 Implemented boundaries:
 
@@ -114,22 +202,23 @@ Implemented boundaries:
 - `/lab` uses `nakwol-auth-lab` app-bound tokens and permits diagnostics only for NAKWOL admins or active Connect developer/operator users.
 - Lab diagnostics return safe metadata only; never raw token/hash/session cookie/PKCE verifier/client secret.
 
-## Formal AUTH v0.2.0 release gate
+## Current next product task
 
-Do **not** create the formal `auth-v0.2.0` component release until the final stable promotion and production deployment are freshly verified.
+AUTH v0.2.0 itself has **no remaining formal release blocker**.
 
-The Auth Lab **V1–V12 matrix is completed**. Evidence nuances are intentionally preserved:
+The next product-level follow-up is separate from the completed release:
 
-- V5 verifies client-side expiry/recovery and is not represented as a literal one-hour wall-clock wait.
-- V7 has live callback/state mismatch evidence; PKCE verifier mismatch remains automated/server-side evidence.
-- V8-A is automated PASS for fresh Discord membership refresh and member-policy allow -> deny -> allow behavior.
-- V8-B live Discord role mutation has an approved release **waiver** because a controlled guild role mutation requires external server-admin/test-account authority.
-- V10 live production proof is AUTH `/me` 200, DATA `/v1/me` 200, and registry 403 `SCOPE_DENIED` without `roster:read`.
-- V11 and V12 live browser recovery/responsive/accessibility checks are PASS.
+**`siege-calculator` Identity Menu / seamless SSO integration.**
 
-The remaining blocker is lifecycle/provenance rather than functional verification: promote the V8-A/refined release contract through `dev -> main -> stable`, verify the stable-triggered AUTH deployment and DATA-first gate, capture the exact final stable release target, then create the release only through `release/auth-v0.2.0 -> stable` and the guarded component-release workflow.
+Current UX boundary:
 
-Because promotions are squash merges, never point `ops/release.json.target_sha` at a `dev` or `main` SHA. It must point at the exact final verified **stable** commit.
+- a newly opened destination tab does not have another app's `sessionStorage` token by design;
+- the consumer app may detect its missing app token;
+- it can automatically begin its own PKCE authorization flow;
+- the existing central AUTH session can be reused so the user does not need to re-enter Discord credentials;
+- the flow must preserve app-bound token isolation and exact redirect allowlists.
+
+Do not reopen AUTH v0.2 release work merely because historical plan/handoff files contain old unchecked release steps.
 
 ## DATA safety boundary
 
@@ -191,7 +280,8 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 - do not develop/direct-push on `main` or `stable`;
 - do not direct-push or force-push `dev`;
 - do not bypass stable promotion or DATA-first gates;
-- do not create formal AUTH v0.2.0 before final stable promotion, production deployment verification, exact target capture, and release-PR provenance validation;
+- do not recreate or move the existing `auth-v0.2.0` tag/Release;
+- do not leave `ops/release.json` armed after a component release;
 - do not expose raw authentication secrets in `/lab` or docs;
 - do not merge AUTH and DATA D1 responsibilities;
 - do not delete/truncate Registry or user-owned data during reseed;
@@ -200,9 +290,8 @@ Before a completion/release claim, verify the exact final SHA. A DATA verificati
 
 ## Next
 
-1. Finish the release-evidence PR to `dev` with the updated V1–V12/V8 waiver contract and fresh full quality gates.
-2. Promote `dev -> main -> stable` with exact diff review and pinned PR heads.
-3. Verify the stable-triggered AUTH production deployment, DATA-first live contract gate and combined production smoke.
-4. Capture the exact final verified stable release target and final deployment evidence.
-5. Create `release/auth-v0.2.0` from that exact stable target, change only `ops/release.json`, and let the guarded component-release workflow create `auth-v0.2.0`.
-6. After formal release, execute the separate `siege-calculator` Identity Menu/seamless-SSO follow-up plan as appropriate.
+1. Treat `auth-v0.2.0` as formally released and production-verified.
+2. Keep release descriptor disabled and preserve the synchronized `dev/main/stable` content baseline.
+3. For new work, branch from current `dev` using an allowed source prefix.
+4. Proceed with the separate `siege-calculator` Identity Menu / seamless SSO integration when working on the next product task.
+5. Preserve AUTH/DATA D1 separation, DATA-first release ordering, immutable SDK boundaries, and app-bound token isolation.
