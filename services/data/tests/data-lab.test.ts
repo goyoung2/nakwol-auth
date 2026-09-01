@@ -30,6 +30,26 @@ test('DATA Worker exposes a dedicated Data Lab route using pinned AUTH SDK v0.2'
   assert.doesNotMatch(lab, /textContent\s*=\s*auth\.getAccessToken\(\)/);
 });
 
+test('DATA Lab tactic selector follows the public Registry metadata projection and full unique-tactic set', async () => {
+  const lab = await root('services/data/src/lab.ts');
+  const seed = await root('services/data/scripts/seed-registry.mjs');
+
+  for (const [projected, raw] of [
+    ['skill_class_raw', 'class'],
+    ['learn_times', 'learn'],
+    ['get_type', 'get'],
+    ['is_copy', 'copy'],
+    ['chip_id', 'chip'],
+  ] as const) {
+    assert.ok(lab.includes(`m.${projected}`), `DATA Lab must use projected tactic metadata ${projected}`);
+    assert.ok(seed.includes(`${projected}:row.m.${raw}`), `Registry seed must project ${raw} as ${projected}`);
+  }
+
+  assert.match(lab, /\/v1\/registry\/generals\?include_hidden=1/);
+  assert.match(lab, /generalsResult\.data\.find\(\(row\) => row\.enabled === 1\)/);
+  assert.match(lab, /테스트 항목 선택/);
+});
+
 test('DATA Lab guided smoke exercises real production CRUD paths and cleanup', async () => {
   const lab = await root('services/data/src/lab.ts');
   for (const expected of [
