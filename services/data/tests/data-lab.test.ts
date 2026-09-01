@@ -54,7 +54,7 @@ test('DATA Lab guided smoke exercises real production CRUD paths and cleanup', a
   ]) assert.ok(lab.includes(expected), `DATA Lab must include ${expected}`);
 
   assert.match(lab, /X-NAKWOL-CLIENT-ID/);
-  assert.match(lab, /Authorization:\s*'Bearer '\s*\+\s*token/);
+  assert.match(lab, /headers\.set\('Authorization',\s*'Bearer '\s*\+\s*token\)/);
   assert.match(lab, /cleanup/i);
 });
 
