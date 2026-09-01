@@ -5,7 +5,7 @@ export const DATA_LAB_CLIENT_ID = 'nakwol-data-lab';
 
 export function dataLabPageHtml(): string {
   return `<!doctype html>
-<html lang="ko">
+<html lang="ko">">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -175,7 +175,12 @@ export function dataLabPageHtml(): string {
     const unique = new Set(generals.map((row) => row.unique_tactic_id).filter(Boolean));
     return tactics.find((row) => {
       const m = row.metadata || {};
-      return Number(m.class) === 5 && Number(m.learn) === 1 && Number(m.get) === 3 && Number(m.copy || 0) === 0 && Number(m.chip || 0) > 0 && !unique.has(row.id);
+      return Number(m.skill_class_raw) === 5
+        && Number(m.learn_times) === 1
+        && Number(m.get_type) === 3
+        && Number(m.is_copy || 0) === 0
+        && Number(m.chip_id || 0) > 0
+        && !unique.has(row.id);
     });
   }
 
@@ -230,13 +235,17 @@ export function dataLabPageHtml(): string {
       accountStatus.className = 'value ok';
       const accountId = encodeURIComponent(state.accountId);
 
-      const generalsResult = await runStep('Registry 장수 조회', () => dataRequest('/v1/registry/generals'), (value) => String(value.data.length) + '개');
+      const generalsResult = await runStep('Registry 장수 조회', () => dataRequest('/v1/registry/generals?include_hidden=1'), (value) => {
+        const enabled = value.data.filter((row) => row.enabled === 1).length;
+        return enabled + '개 활성 / ' + value.data.length + '개 전체';
+      });
       const tacticsResult = await runStep('Registry 전법 조회', () => dataRequest('/v1/registry/tactics'), (value) => String(value.data.length) + '개');
       const equipmentResult = await runStep('Registry 장비 조회', () => dataRequest('/v1/registry/equipment'), (value) => String(value.data.length) + '개');
-      const general = generalsResult.data[0];
+      const general = generalsResult.data.find((row) => row.enabled === 1);
       const tactic = canonicalTactic(tacticsResult.data, generalsResult.data);
       const template = equipmentResult.data.find((row) => row.type === 'weapon') || equipmentResult.data[0];
       if (!general || !tactic || !template) throw new Error('CRUD smoke에 사용할 canonical Registry 항목을 선택하지 못했습니다.');
+      addStep('INFO', '테스트 항목 선택', general.name + ' / ' + tactic.name + ' / ' + template.name);
       state.generalId = general.id;
       state.tacticId = tactic.id;
 
