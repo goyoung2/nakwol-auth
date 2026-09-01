@@ -5,7 +5,7 @@ export const DATA_LAB_CLIENT_ID = 'nakwol-data-lab';
 
 export function dataLabPageHtml(): string {
   return `<!doctype html>
-<html lang="ko">">
+<html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
