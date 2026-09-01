@@ -31,12 +31,12 @@ test('DATA Worker exposes a separate user-facing My Data route built on Connect 
     'equipment:read','equipment:write','decks:read','decks:write',
   ]) assert.ok(page.includes(scope), `My Data page must declare ${scope}`);
 
-  assert.match(page, /data\.accounts\.list\(\)/);
-  assert.match(page, /data\.accounts\.create\(/);
-  assert.match(page, /data\.roster\.generals\.list\(/);
-  assert.match(page, /data\.roster\.tactics\.list\(/);
-  assert.match(page, /data\.equipment\.list\(/);
-  assert.match(page, /data\.decks\.list\(/);
+  assert.match(page, /data\(\)\.accounts\.list\(\)/);
+  assert.match(page, /data\(\)\.accounts\.create\(/);
+  assert.match(page, /api\.roster\.generals\.list\(/);
+  assert.match(page, /api\.roster\.tactics\.list\(/);
+  assert.match(page, /api\.equipment\.list\(/);
+  assert.match(page, /api\.decks\.list\(/);
   assert.doesNotMatch(page, /getAccessToken\(\)/);
   assert.doesNotMatch(page, /Authorization['"]?\s*,/);
 });
