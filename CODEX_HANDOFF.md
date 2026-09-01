@@ -9,16 +9,15 @@ Repository: `goyoung2/nakwol-auth`
 
 1. `CODEX_HANDOFF.md`
 2. `BRANCHING.md`
-3. 현재 작업의 `docs/handoffs/*`
-4. 관련 `docs/superpowers/specs/*` 및 `docs/superpowers/plans/*`
-5. 실제 component code/package/CI/production evidence
-6. `DATA.md`, `CONNECT.md`, `CONNECT_CLI.md`, `WEB_SDK.md`
+3. 현재 작업의 `docs/superpowers/specs/*` / `docs/superpowers/plans/*`
+4. 실제 component code/package/CI/production evidence
+5. `DATA.md`, `CONNECT.md`, `CONNECT_CLI.md`, `WEB_SDK.md`
 
 오래된 release/handoff 문구보다 실제 branch tree, package, CI, production evidence를 우선한다.
 
 ---
 
-## Authoritative branch model
+## Branch governance
 
 정상 흐름:
 
@@ -27,11 +26,11 @@ feature/fix/chore/docs -> dev -> main -> stable -> component release
 ```
 
 - default branch: `dev`
-- dev, main, stable are preserved long-lived branches.
+- dev/main/stable are long-lived
 - delete merged head branches: disabled
 - long-lived branch direct push/force-push 금지
-- Native Branch Protection: unavailable / not active for this GitHub Free private repository.
-- Repository Governance CI 계약으로 promotion source와 release/deploy 경계를 검증한다.
+- GitHub Free private repository라 native Branch Protection은 현재 unavailable/not active
+- Repository Governance CI와 stable promotion guard가 release/deploy provenance를 fail-closed로 검사
 
 Hotfix:
 
@@ -39,36 +38,31 @@ Hotfix:
 stable -> hotfix/* -> stable -> main -> dev
 ```
 
-과거 squash promotion 때문에 ancestry가 끊겨 GitHub가 실제 content보다 큰 divergence를 보일 수 있다. content/tree를 먼저 확인하고, 필요하면 content-zero ancestry reconciliation을 사용한다. runtime 변경을 ancestry 문제 해결에 섞지 않는다.
+과거 squash promotion 때문에 ancestry가 실제 content와 다르게 보일 수 있다. content/tree를 먼저 확인하고 필요하면 content-zero ancestry reconciliation을 사용한다. runtime 변경을 ancestry 해결에 섞지 않는다.
 
 ---
 
 ## Current long-lived branch state
 
-2026-09-01 User Data Platform 문서 작업 시작 직전 기준:
+2026-09-01 My Data CRUD + browser async-form fix 기준:
 
-- `dev`: `acdf3924616c2b779f580c146848606c347640ec`
-- `main`: `266c8dbaabbb4511c8afa27c62e15e149bd206d0`
-- `stable`: `6aef40adf903ec32f35dd7e5553c110ce397f557`
+- `dev`: `655a1e4689999d565e2b2b99e40a19d13191586d`
+- `main`: `f37365d54435a954f9e5e70ef22f8c74389b885a`
+- `stable`: `e0e85541e10ffde2125efd4d0874acb9bb2a693b`
 
-`dev/main`은 현재 DATA tactic write projection fix의 같은 runtime tree를 포함한다.
-`stable`은 같은 runtime fix + production deploy trigger flag 변경을 포함한다.
-
-기능 차이와 deploy-only flag 차이를 구분한다.
+long-lived branches는 동일한 My Data CRUD runtime content를 의도한다. SHA 차이는 merge history 때문이다.
 
 ---
 
 ## AUTH current state
 
-- runtime version: **AUTH 0.2.0**
-- formal component release: **`auth-v0.2.0` released**
+- runtime: **AUTH 0.2.0**
+- formal release: `auth-v0.2.0`
 - formal release target: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
-- formal release deploy evidence: workflow `33373705515`
-- formal release Worker version evidence: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
-- formal final smoke: `33373908231`
+- formal release deploy: `33373705515`
+- formal release Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- final release smoke: `33373908231`
 - component release workflow: `33374685878`
-
-AUTH v0.2 formal release 이후 DATA Lab용 OAuth app/client 등록을 위해 AUTH가 추가 production deploy되었다.
 
 현재 AUTH 제품 경계:
 
@@ -78,47 +72,56 @@ AUTH v0.2 formal release 이후 DATA Lab용 OAuth app/client 등록을 위해 AU
 - exact redirect allowlist
 - app-bound access token
 - `/me`
-- Compact Identity Menu
-- `/account`
-- privileged AUTH `/lab`
-- pinned Web SDK v0.1 compatibility asset 유지
-- immutable SDK v0.2 asset 유지
+- Account Center
+- Identity UI
+- privileged AUTH Lab
+- pinned Web SDK v0.1 compatibility asset
+- immutable SDK v0.2 asset
 
-AUTH Lab V1–V12 release matrix는 완료 상태다. V8-B live Discord role mutation만 approved external-authority waiver이며 AUTH v0.2 release blocker가 아니다.
+My Data용 `nakwol-my-data` AUTH app도 production에 등록되어 있다.
 
-AUTH protocol/release work를 User Data Platform 작업과 섞지 않는다.
+현재 My Data foundation 당시 AUTH production Worker Version ID는 `ba2e1140-40e5-4d1d-8da8-56efdc78c504`다.
+
+AUTH protocol/release 작업을 My Data hardening과 섞지 않는다.
 
 ---
 
 ## Connect current state
 
 - **NAKWOL Connect 0.4.0**
-- npm publish 완료
+- npm published
 - Universal Embed
-- app registration / device authorization
+- app registration/device authorization
 - DATA scope automation
-- `data describe --json`
-- DATA OpenAPI 3.1 discovery
-- browser runtime `window.NAKWOL_CONNECT.data`
-- low-level `data.request()` / `data.fetch()`
-- Registry convenience helpers
+- DATA OpenAPI discovery
+- browser `window.NAKWOL_CONNECT.data`
 
-현재 개발자 UX의 가장 큰 다음 gap은 user-owned CRUD가 여전히 REST path 기반이라는 점이다.
+High-level Data SDK Phase 1은 완료되어 production Connect runtime에서 다음 namespace를 제공한다.
 
-다음 product phase에서 high-level Data SDK를 추가한다.
+```text
+data.accounts
+data.roster.generals
+data.roster.tactics
+data.equipment
+data.decks
+data.snapshots
+data.registry
+```
+
+기존 low-level `data.request()` / `data.fetch()` / `data.describe()` / `data.openapi()` compatibility도 유지한다.
 
 ---
 
 ## DATA current state
 
-- runtime version: **DATA 0.9.0**
+- runtime: **DATA 0.9.0**
 - schema: **3**
 - origin: `https://nakwol-data.sepsd21.workers.dev`
 - OpenAPI: `/openapi.json`
 - AUTH verification: Worker Service Binding `AUTH_SERVICE -> nakwol-auth`
 - AUTH D1 / DATA D1 직접 결합 없음
 
-Current DATA scopes:
+DATA scopes:
 
 ```text
 profile:read
@@ -133,242 +136,241 @@ decks:write
 
 Current user-data support:
 
-- game account: Create / Read
+- game account: C/R
 - owned generals: C/R/U/D
 - owned tactics: C/R/U/D
 - equipment instances: C/R/U/D
 - live decks: C/R/U/D
 - deck composition replace
-- immutable snapshots: Create / Read
+- immutable snapshots: C/R
 - Registry: generals/tactics/equipment/stats/formations/warbooks/equipment traits
 
-Current known API gaps relevant to user-facing My Data:
+Known gaps:
 
-- game account Update/Delete 없음
-- snapshot Update/Delete 없음 (Update 부재는 immutable design과 일치)
-- snapshot alliance/public metadata는 있으나 current list/detail은 owner-only
-- equipment trait canonical applicability는 authoritative evidence가 없어 0 유지
+- game account U/D 없음
+- snapshot U/D 없음; Update 부재는 immutable design과 일치
+- snapshot alliance/public metadata는 있지만 current list/detail owner-only
+- equipment trait canonical applicability = 0
+- detailed loadout fields(진형/병서/병종/스탯 분배)은 아직 storage contract 미확정
 
-Generic stats/equipment applicability를 추측하여 쓰기 허용하지 않는다.
+근거 없는 게임 규칙/장비 applicability를 추측하여 DATA write로 허용하지 않는다.
 
 ---
 
 ## Historical formal DATA v0.8 release baseline
 
-이 섹션은 historical release evidence이며 현재 DATA runtime을 뜻하지 않는다.
+이 섹션은 historical release evidence이며 현재 runtime을 뜻하지 않는다.
 
-- DATA 0.8.0
+- **DATA 0.8.0**
 - schema 3
-- formal tag/name: `data-v0.8.0`
+- tag: `data-v0.8.0`
 - historical Worker Version ID: `2bea00a2-c4b1-4f8c-a521-8c64f18f10be`
-- exact verified deployment target: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
-- formal release workflow: `33157010443`
-- notes: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
-- canonical applicability remains 0 until authoritative equipment-type applicability evidence exists.
+- exact production deploy commit: `5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61`
+- release workflow: `33157010443`
+- release notes: `docs/releases/2026-08-27-nakwol-data-v0.8.md`
 
-이 formal DATA 0.8.0 release 기록은 현재 production runtime DATA 0.9.0을 downgrade하지 않는다.
+이 기록은 현재 production DATA 0.9.0을 downgrade하지 않는다.
 
 ---
 
 ## DATA Lab production E2E — completed
 
-2026-09-01 사용자가 실제 production DATA Lab에서 CRUD smoke를 수동 실행했고 최종:
+2026-09-01 실제 production DATA Lab 수동 smoke 최종 PASS:
 
 ```text
 CRUD smoke 완료
-장수·전법·장비·덱 C/R/U/D와 덱 composition PUT을 실제 DATA API에서 확인
+장수·전법·장비·덱 C/R/U/D와 덱 composition PUT 확인
 ```
 
-까지 PASS했다.
-
-실제 검증 범위:
-
-- AUTH + DATA principal
-- game account C/R
-- Registry general/tactic/equipment reads
-- general Create/Read/Update/Delete + read-back
-- tactic Create/Read/Update/Delete + read-back
-- equipment Create/Read/Update/Delete + read-back
-- deck Create/Read/Update/Delete + read-back
-- deck composition PUT
-- cleanup
-
-수동 E2E는 코드/단위테스트가 잡지 못한 두 문제를 실제로 발견했다.
-
-### Fix 1 — Data Lab canonical tactic selector
-
-첫 smoke는 Registry 조회 후:
+검증 경로:
 
 ```text
-CRUD smoke에 사용할 canonical Registry 항목을 선택하지 못했습니다.
+browser -> AUTH -> app-bound token -> DATA Worker -> AUTH Service Binding -> DATA D1 -> browser
 ```
 
-으로 중단됐다.
+수동 E2E에서 실제 발견/수정한 production mismatch:
 
-원인:
+1. Data Lab canonical tactic selector vs public Registry projection
+2. tactic write validator vs production Registry projection
 
-- raw seed tactic metadata field와 public Registry projection field를 Lab이 혼동
-
-수정:
-
-- PR #79
-- stable production path #82 + deploy trigger #83
-
-### Fix 2 — production tactic write validator
-
-두 번째 smoke는 general C/R/U까지 PASS 후 tactic Create에서:
-
-```text
-TACTIC_NOT_FOUND
-```
-
-으로 실패했다.
-
-원인:
-
-- production Registry/D1 metadata는 projected field names를 저장
-- DATA write validator는 raw source field names만 판정
-
-수정:
-
-- PR #84 -> dev
-- PR #85 -> main
-- ancestry-safe stable promotion #87
-- guarded deploy hotfix #88
-
-최종 production DATA deploy:
-
-- stable deploy trigger head: `6aef40adf903ec32f35dd7e5553c110ce397f557`
-- workflow: `33468253146` — success
-- DATA Worker Version ID: `048d713c-0387-402d-afe0-1691fa0f8fb3`
-- DATA tests in deploy: 80/80 PASS
-- production health/schema/OpenAPI/Lab verification: PASS
-
-이후 사용자가 CRUD smoke 전체 PASS를 직접 확인했다.
-
-따라서 DATA core CRUD는 더 이상 "code only" 상태가 아니다. 실제 production user -> AUTH -> DATA Worker -> D1 -> browser 왕복이 검증되었다.
+따라서 DATA core CRUD는 mock/code-only가 아니라 production user path로 검증된 상태다.
 
 ---
 
-## DATA safety boundary
+## User Data Platform Phase 1 — High-level Data SDK — completed
 
-User-owned generals, tactics, equipment, decks는 permanent account assets다.
+완료:
 
-Registry seed/reseed는 UPSERT 중심이며 user data를 DELETE/TRUNCATE하지 않는다.
+- accounts
+- roster generals/tactics
+- equipment
+- decks/composition
+- snapshots
+- Registry helpers
 
-production test에서 cleanup 가능한 명시적 test rows만 정리한다.
-
-snapshot처럼 delete가 없는 불변 데이터를 자동 smoke에서 무분별하게 만들지 않는다.
+실제 runtime path/method/body/header/error propagation tests를 거쳐 production 배포됨.
 
 ---
 
-# Current product direction — NAKWOL User Data Platform v1
+## User Data Platform Phase 2 — NAKWOL My Data — completed to CRUD baseline
 
-이전 handoff의 `siege-calculator seamless SSO` 단독 우선순위는 **현재 제품 방향으로 superseded**되었다.
+Production surface:
 
-현재 공식 다음 방향은:
+```text
+https://nakwol-data.sepsd21.workers.dev/my-data
+client_id: nakwol-my-data
+```
 
-> **사용자가 한 번 자기 게임/덱 정보를 등록하고, 모든 낙월 서비스가 같은 데이터를 안전하게 재사용하는 User Data Platform을 완성한다.**
+현재 사용자 기능:
+
+- central SSO/login
+- game account list/create/select
+- account overview counts
+- general management
+- tactic management
+- equipment instance management
+- deck management
+- deck composition editor
+- research/deck-first Registry selection
+
+사용자가 실제 브라우저에서 foundation 화면과 persistence를 확인했다.
+
+My Data CRUD production deploy 이후 브라우저 async submit form reference 위험도 추가 fix했다.
+
+Latest production DATA evidence:
+
+- stable: `e0e85541e10ffde2125efd4d0874acb9bb2a693b`
+- deploy workflow: `33478274558`
+- DATA Worker Version ID: `7d6e4d94-6656-4739-bd1e-c86377b3811a`
+- DATA tests in deploy: 91/91 PASS
+- Registry counts preserved
+- `nakwol-my-data` 8 scopes verified
+- production `/my-data` HTTP verification PASS
+
+---
+
+# CURRENT PRIORITY — My Data Hardening v1
+
+공통 DeckPicker를 만들기 전에 My Data/DATA storage를 한 번 더 단단히 한다.
 
 Authoritative design:
 
-- `docs/superpowers/specs/2026-09-01-nakwol-user-data-platform-v1-design.md`
+```text
+docs/superpowers/specs/2026-09-01-nakwol-my-data-hardening-v1-design.md
+```
 
 Implementation plan:
 
-- `docs/superpowers/plans/2026-09-01-nakwol-user-data-platform-v1.md`
-
-제품은 세 계층으로 구성한다.
-
 ```text
-NAKWOL My Data
-  사용자 중앙 입력/관리 앱
-          |
-          v
-NAKWOL DATA
-          |
-          +-----------------------+
-          |                       |
-          v                       v
-High-level Data SDK          NAKWOL Data UI
-                          AccountPicker / DeckPicker
-          |                       |
-          +-----------+-----------+
-                      |
-                      v
-               consumer services
+docs/superpowers/plans/2026-09-01-nakwol-my-data-hardening-v1.md
 ```
 
-Consumer examples:
+핵심 목표:
 
-- 덱 전적 확인
-- 덱 분석
-- 덱 연구/시뮬레이션
-- 전투 분석
-- 기타 낙월 도구
+1. same-deck duplicate general 저장 차단
+2. same-deck duplicate equipment instance 저장 차단
+3. invalid composition replacement atomicity 회귀 테스트
+4. 가능하면 D1 unique indexes로 defense-in-depth
+5. My Data deck editor 기본값을 owned-first로 변경
+6. 전체 Registry는 명시적 research mode로 유지
+7. write 뒤 authoritative read-back으로 `저장 확인됨` contract
+8. admin-only read-only **NAKWOL DATA Ops** 구축
+9. Ops arbitrary-user inspection audit log
 
-핵심 UX:
+중요:
 
-```text
-한 서비스에서 덱 등록
- -> NAKWOL DATA 저장
- -> 다른 서비스에서 같은 deck ID 즉시 재사용
-```
+- Data Lab은 arbitrary-user admin viewer가 아니다.
+- Connect Admin도 user DATA inspection tool이 아니다.
+- DATA Ops는 별도 `nakwol-data-ops` internal admin app으로 설계한다.
+- `lab` access policy를 재사용하지 않는다. `admin` 경계를 사용한다.
+- Ops v1은 read-only다. 사용자 대신 mutate/impersonate하지 않는다.
 
 ---
 
-## Product principles for User Data Platform
+## Current known integrity issue
 
-1. **Enter once, reuse everywhere.**
-2. 사용자가 서비스마다 같은 roster/deck을 다시 입력하게 만들지 않는다.
-3. 사용자 데이터 입력 UI는 NAKWOL 공통 제품으로 만든다.
-4. 소비자 개발자는 필요하면 공통 Picker를 쓰고, 원하면 high-level SDK로 자기 UI를 만든다.
-5. read-only consumer에 write scope를 주지 않는다.
-6. 수정은 기본적으로 별도 `nakwol-my-data` app identity로 수행한다.
-7. central SSO는 재사용하되 app token은 공유하지 않는다.
-8. live deck과 immutable snapshot을 구분한다.
-9. 전적/역사 재현에는 snapshot을 우선 고려한다.
-10. screenshot/video/game-share importer는 중앙 My Data에 붙이고 모든 서비스가 결과를 재사용한다.
+현재 `deck_general_slots`는 `(deck_id, position)`만 primary key이고 same-deck `general_id`, `weapon_instance_id`, `mount_instance_id` uniqueness를 DB가 강제하지 않는다.
+
+server도 equipment ownership/type은 확인하지만 same-deck duplicate instance/general은 별도 hardening 대상이다.
+
+DB index migration 전에 production duplicate preflight를 수행하고 bad row가 있으면 자동 삭제하지 않는다.
 
 ---
 
-## First implementation task
+## Current persistence verification
 
-**Phase 1 — High-level NAKWOL Data SDK**
+DATA Ops가 아직 없으므로 지금 저장 확인 방법은 두 단계다.
 
-먼저 현재 low-level:
+### User-level
 
-```js
-window.NAKWOL_CONNECT.data.request('/v1/...')
+```text
+My Data 저장
+-> Ctrl+F5 / browser reopen
+-> 같은 account/deck 재조회
+-> 동일 값 확인
 ```
 
-위에 다음 high-level namespace를 추가한다.
+### Backend-level
 
-```js
-data.accounts
-data.roster.generals
-data.roster.tactics
-data.equipment
-data.decks
-data.snapshots
-data.registry
+Cloudflare `nakwol-data` D1 Console 또는:
+
+```bash
+cd services/data
+npx wrangler d1 execute DB --remote --command "SELECT ..."
 ```
 
-그 후:
+으로 `game_accounts`, `user_generals`, `user_tactics`, `user_equipment`, `decks`, `deck_general_slots`, `deck_tactic_slots` persisted rows를 직접 확인한다.
 
-1. `nakwol-my-data` 공식 app + My Data foundation
-2. My Data user CRUD UI
-3. AccountPicker / DeckPicker / My Data launcher
-4. 서로 다른 consumer 두 곳에서 같은 deck 재사용 production E2E
-5. 이후 screenshot/video/share-payload import 연구
+manual SQL UPDATE/DELETE를 정상 운영 흐름으로 사용하지 않는다.
 
-구현 순서와 Definition of Done은 implementation plan을 따른다.
+---
+
+## After hardening
+
+Hardening acceptance가 production에서 PASS한 뒤 원래 User Data Platform 계획으로 복귀한다.
+
+다음 제품 단계:
+
+```text
+AccountPicker
+DeckPicker
+My Data launcher
+```
+
+그 후 서로 다른 두 consumer app이 같은 `deck.id`를 재사용하는 production E2E를 수행한다.
+
+---
+
+## Future loadout fields — do not implement by guess
+
+후속 요구:
+
+- 장수 스탯 분배
+- 병종
+- 진형
+- 병서
+- 장비 특성/options
+
+각 필드는 먼저:
+
+```text
+canonical Registry
+data ownership level
+slot/cardinality
+duplicate rules
+season behavior
+snapshot freeze boundary
+```
+
+를 확정한 후 schema/API/UI에 반영한다.
+
+`deck_settings`에 검증 없는 opaque JSON을 먼저 쌓지 않는다.
 
 ---
 
 ## Verification commands
 
-Repository root:
+Root:
 
 ```bash
 npm install --legacy-peer-deps
@@ -389,7 +391,7 @@ npm run bundle
 
 PR에서는 Repository Governance와 관련 component verify가 모두 green인지 확인한다.
 
-User-facing My Data / Data UI는 자동 테스트만으로 완료 처리하지 않고 production browser E2E를 포함한다.
+My Data / DATA Ops / shared Data UI는 자동 테스트만으로 완료 처리하지 않고 production browser E2E를 포함한다.
 
 ---
 
@@ -398,8 +400,10 @@ User-facing My Data / Data UI는 자동 테스트만으로 완료 처리하지 �
 - AUTH v0.2 formal release를 다시 수행하지 않는다.
 - pinned Web SDK v0.1 asset을 수정하지 않는다.
 - consumer app끼리 access token/sessionStorage를 공유하지 않는다.
-- My Data write를 위해 read-only consumer에 write scope를 자동 추가하지 않는다.
-- Data Lab을 사용자 daily-use UI로 전환하지 않는다.
-- Registry seed에서 user-owned rows를 삭제하지 않는다.
-- evidence 없는 equipment applicability를 추론하지 않는다.
-- screenshot importer가 생겨도 인식 결과를 사용자 확인 없이 canonical user data로 silent write하지 않는다.
+- read-only consumer에 write scope를 자동 추가하지 않는다.
+- Data Lab을 arbitrary-user admin viewer로 바꾸지 않는다.
+- DATA Ops에 active developer-only privilege를 허용하지 않는다.
+- DATA Ops v1에 arbitrary user mutation을 추가하지 않는다.
+- Registry reseed에서 user-owned rows를 delete/truncate하지 않는다.
+- duplicate production rows가 발견됐을 때 자동으로 한 row를 선택/삭제하지 않는다.
+- evidence 없는 tactic/equipment/game rules를 추측하여 validator에 넣지 않는다.
