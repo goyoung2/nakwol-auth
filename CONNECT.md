@@ -48,6 +48,58 @@ await window.NAKWOL_CONNECT.data.registry.tactics();
 
 DATA client가 사용자 access token과 client ID를 자동으로 붙입니다.
 
+## High-level DATA SDK
+
+일반 앱은 가능하면 `/v1/...` REST path를 직접 조합하지 않고 high-level helper를 사용합니다. helper는 기존 `data.request()`와 같은 `{ ok, data }` 응답 envelope와 `NakwolDataError`를 그대로 반환합니다.
+
+```js
+const data = window.NAKWOL_CONNECT.data;
+
+const accounts = await data.accounts.list();
+const generals = await data.roster.generals.list(accountId);
+const tactics = await data.roster.tactics.list(accountId);
+const equipment = await data.equipment.list(accountId);
+const decks = await data.decks.list(accountId);
+const deck = await data.decks.get(accountId, deckId);
+```
+
+쓰기 예:
+
+```js
+await data.roster.generals.upsert(accountId, generalId, {
+  breakthrough: 5,
+  promotion: 3,
+  favorite: true,
+});
+
+await data.decks.replaceComposition(accountId, deckId, {
+  generals: [/* current DATA composition contract */],
+});
+```
+
+지원 namespace:
+
+```text
+data.accounts
+data.roster.generals
+data.roster.tactics
+data.equipment
+data.decks
+data.snapshots
+data.registry
+```
+
+현재 DATA API에 없는 game-account PATCH/DELETE는 SDK도 제공하지 않습니다. 모든 ID path segment는 SDK가 URL encoding하고, JSON write는 `Content-Type: application/json`을 자동 설정합니다.
+
+기존 low-level API도 호환성 때문에 계속 지원합니다.
+
+```js
+await data.request('/v1/game-accounts');
+await data.fetch('/v1/game-accounts');
+await data.describe();
+await data.openapi();
+```
+
 ## 보안 경계
 
 - Discord Client Secret은 AUTH Worker에만 존재합니다.
@@ -55,6 +107,7 @@ DATA client가 사용자 access token과 client ID를 자동으로 붙입니다.
 - DATA scope 관리 시 DATA Worker가 매 요청 AUTH에 앱 owner/operator 권한을 확인합니다.
 - AUTH D1과 DATA D1은 서로 직접 접근하지 않습니다.
 - runtime DATA 요청은 별도로 AUTH `/me`를 통해 사용자 app token을 검증합니다.
+- `data.hasScope()`는 UX hint일 뿐이며 실제 권한 판정은 DATA Worker가 수행합니다.
 
 ## 관리 UI
 
