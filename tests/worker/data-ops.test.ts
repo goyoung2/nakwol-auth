@@ -16,12 +16,26 @@ test('DATA Ops uses a dedicated internal AUTH application with exact admin polic
   assert.doesNotMatch(sql, /DELETE\s+FROM|DROP\s+TABLE|TRUNCATE/i);
 });
 
-test('existing AUTH admin policy requires active membership admin and does not reuse Lab developer privilege', async () => {
+test('AUTH admin policy uses explicit platform operators, never Discord membership admin or Lab developer privilege', async () => {
   const policy = await root('src/policy.ts');
   assert.match(policy, /ApplicationAccessPolicy\s*=.*'admin'/s);
   assert.match(policy, /if \(policy === 'member'\) return Boolean\(user\.membership\?\.is_member\)/);
-  assert.match(policy, /return user\.membership\?\.role === 'admin'/);
+  assert.match(policy, /FROM auth_operators/);
+  assert.match(policy, /isPlatformAdmin/);
+  assert.doesNotMatch(policy, /membership\?\.role\s*===\s*'admin'/);
   assert.match(policy, /if \(policy === 'lab'\)[\s\S]*getAuthLabPrivilege/);
+});
+
+test('platform admin authority migration preserves legacy operators and removes Discord admin semantics', async () => {
+  const sql = await root('migrations/0009_platform_admin_authority.sql');
+  assert.match(sql, /INSERT INTO auth_operators/);
+  assert.match(sql, /FROM memberships/);
+  assert.match(sql, /FROM connect_developers/);
+  assert.match(sql, /cd\.role = 'operator'/);
+  assert.match(sql, /cd\.status = 'active'/);
+  assert.match(sql, /UPDATE memberships/);
+  assert.match(sql, /WHERE role = 'admin'/);
+  assert.match(sql, /THEN 'member'/);
 });
 
 test('AUTH production deployment verifies the DATA Ops client after migrations', async () => {

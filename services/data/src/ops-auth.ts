@@ -16,12 +16,13 @@ export async function requireDataOpsPrincipal(
     throw new DataAuthError('OPS_CLIENT_DENIED', 403, 'DATA Ops 전용 client id가 필요합니다.');
   }
 
+  // verifyPrincipal calls AUTH /me with the exact nakwol-data-ops client id.
+  // AUTH re-evaluates that application's admin policy on every read, so a
+  // successful principal here already means the caller is a current NAKWOL
+  // platform admin. Do not reinterpret Discord membership as admin authority.
   const principal = await verifyPrincipal(request, env, fetcher);
   if (principal.clientId !== DATA_OPS_CLIENT_ID) {
     throw new DataAuthError('OPS_CLIENT_DENIED', 403, 'DATA Ops app binding이 일치하지 않습니다.');
-  }
-  if (principal.membershipRole !== 'admin') {
-    throw new DataAuthError('OPS_ADMIN_REQUIRED', 403, 'NAKWOL membership admin만 DATA Ops에 접근할 수 있습니다.');
   }
   return principal;
 }
