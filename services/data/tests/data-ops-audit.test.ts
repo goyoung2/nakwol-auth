@@ -9,11 +9,15 @@ const audit = await readFile(new URL('../migrations/0007_data_ops_audit.sql', im
 const schema = `${initial}\n${audit}`;
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 
-function authService(role:'user'|'member'|'admin') {
+function authService(role:'user'|'member'|'admin'='member') {
   return { fetch: async () => Response.json({ ok:true, data:{ id:'usr_operator', display_name:'Operator', avatar_url:null, membership:{ role } } }) };
 }
-function envFor(DB:any, role:'user'|'member'|'admin'='admin') {
+function rejectedAuth(status=403) { return { fetch: async () => Response.json({ ok:false }, { status }) }; }
+function envFor(DB:any, role:'user'|'member'|'admin'='member') {
   return { DB, AUTH_ORIGIN:'https://auth.example', AUTH_SERVICE:authService(role) } as any;
+}
+function rejectedEnvFor(DB:any, status=403) {
+  return { DB, AUTH_ORIGIN:'https://auth.example', AUTH_SERVICE:rejectedAuth(status) } as any;
 }
 function opsReq(path:string, clientId='nakwol-data-ops') {
   return new Request(`https://data.example${path}`, { headers:{ Authorization:'Bearer test-token', 'X-NAKWOL-CLIENT-ID':clientId } });
@@ -38,8 +42,8 @@ test('DATA Ops audit migration has only the SSOT fields and constrained actions'
   assert.deepEqual((DB.raw.prepare('PRAGMA table_info(data_ops_audit_log)').all() as any[]).map((row)=>row.name),columns);
 });
 
-test('successful admin search, account view and deck view are audited with no raw search text', async () => {
-  const DB=createSqliteD1(schema);seedTarget(DB);const env=envFor(DB,'admin');
+test('successful platform-admin search, account view and deck view are audited with no raw search text', async () => {
+  const DB=createSqliteD1(schema);seedTarget(DB);const env=envFor(DB);
   const rawSearch='audit-target';
 
   let response=await call(opsReq('/internal/ops/accounts?q='+encodeURIComponent(rawSearch)),env);
@@ -64,31 +68,31 @@ test('successful admin search, account view and deck view are audited with no ra
   assert.equal(JSON.stringify(rows).includes(rawSearch),false,'raw search text must not be persisted in audit rows');
 });
 
-test('denied and unsuccessful Ops requests do not create successful-view audit rows', async () => {
+test('AUTH-denied and unsuccessful Ops requests do not create successful-view audit rows', async () => {
   const DB=createSqliteD1(schema);seedTarget(DB);
 
-  let response=await call(opsReq('/internal/ops/accounts/gac_target'),envFor(DB,'member'));
+  let response=await call(opsReq('/internal/ops/accounts/gac_target'),rejectedEnvFor(DB,403));
   assert.equal(response.status,403);
   assert.equal(auditRows(DB).length,0);
 
-  response=await call(opsReq('/internal/ops/accounts/gac_target','nakwol-data-lab'),envFor(DB,'admin'));
+  response=await call(opsReq('/internal/ops/accounts/gac_target','nakwol-data-lab'),envFor(DB));
   assert.equal(response.status,403);
   assert.equal(auditRows(DB).length,0);
 
-  response=await call(opsReq('/internal/ops/accounts/gac_missing'),envFor(DB,'admin'));
+  response=await call(opsReq('/internal/ops/accounts/gac_missing'),envFor(DB));
   assert.equal(response.status,404);
   assert.equal(auditRows(DB).length,0);
 });
 
 test('successful Ops read fails closed when the audit table is unavailable', async () => {
   const DB=createSqliteD1(initial);seedTarget(DB);
-  const response=await call(opsReq('/internal/ops/accounts?q=audit-target'),envFor(DB,'admin'));
+  const response=await call(opsReq('/internal/ops/accounts?q=audit-target'),envFor(DB));
   assert.equal(response.status,500,'an unaudited arbitrary-user read must not be returned as success');
   assert.equal((await response.json() as any).error.code,'INTERNAL_ERROR');
 });
 
 test('Ops auditing mutates only the audit table, not target user DATA', async () => {
-  const DB=createSqliteD1(schema);seedTarget(DB);const env=envFor(DB,'admin');
+  const DB=createSqliteD1(schema);seedTarget(DB);const env=envFor(DB);
   const beforeAccount=DB.raw.prepare('SELECT * FROM game_accounts WHERE id=?').get('gac_target');
   const beforeDeck=DB.raw.prepare('SELECT * FROM decks WHERE id=?').get('dek_target');
   const beforeUsers=DB.raw.prepare('SELECT COUNT(*) AS n FROM data_users').get() as any;

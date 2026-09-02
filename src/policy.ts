@@ -14,6 +14,17 @@ export async function getApplicationAccessPolicy(env: Env, clientId: string): Pr
   return 'public';
 }
 
+export async function isPlatformAdmin(env: Env, userId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT ao.user_id
+       FROM auth_operators ao
+       JOIN users u ON u.id = ao.user_id
+      WHERE ao.user_id = ? AND u.status = 'active'
+      LIMIT 1`
+  ).bind(userId).first<{ user_id: string }>();
+  return Boolean(row?.user_id);
+}
+
 export async function isApplicationAccessAllowed(env: Env, userId: string, clientId: string): Promise<boolean> {
   const policy = await getApplicationAccessPolicy(env, clientId);
   if (policy === 'public') return true;
@@ -25,5 +36,5 @@ export async function isApplicationAccessAllowed(env: Env, userId: string, clien
   const user = await getUserWithMembership(env, userId);
   if (!user || user.status !== 'active') return false;
   if (policy === 'member') return Boolean(user.membership?.is_member);
-  return user.membership?.role === 'admin';
+  return isPlatformAdmin(env, userId);
 }
