@@ -26,7 +26,7 @@ function seedTarget(DB:any) {
   DB.raw.prepare("INSERT INTO decks(id,account_id,name,status,visibility,is_primary,created_at,updated_at) VALUES ('dek_target','gac_target','audit deck','active','private',1,?,?)").run(now,now);
 }
 function auditRows(DB:any) {
-  return DB.raw.prepare('SELECT id,operator_user_id,target_user_id,target_account_id,action,request_id,created_at FROM data_ops_audit_log ORDER BY created_at,id').all() as any[];
+  return DB.raw.prepare('SELECT id,operator_user_id,target_user_id,target_account_id,action,request_id,created_at FROM data_ops_audit_log ORDER BY rowid').all() as any[];
 }
 
 test('DATA Ops audit migration has only the SSOT fields and constrained actions', () => {
@@ -108,10 +108,13 @@ test('normal consumer routes cannot write DATA Ops audit rows', async () => {
   const ops=await readFile(new URL('../src/ops.ts',import.meta.url),'utf8');
   const index=await readFile(new URL('../src/index.ts',import.meta.url),'utf8');
   const store=await readFile(new URL('../src/store.ts',import.meta.url),'utf8');
+  const workflow=await readFile(new URL('../../../.github/workflows/deploy-data.yml',import.meta.url),'utf8');
 
   assert.match(opsAudit,/INSERT INTO data_ops_audit_log/);
   assert.doesNotMatch(ops,/['"]\/internal\/ops\/audit/);
   assert.doesNotMatch(index,/data_ops_audit_log/);
   assert.doesNotMatch(store,/data_ops_audit_log/);
   assert.doesNotMatch(opsAudit,/Authorization|access.?token|discord|secret/i);
+  assert.match(workflow,/NAKWOL_DATA_OPS_AUDIT_SCHEMA_OK/);
+  assert.match(workflow,/data_ops_audit_log/);
 });
