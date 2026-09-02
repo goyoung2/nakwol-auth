@@ -12,7 +12,7 @@ test('My Data hardened route defaults deck composition to owned assets with an e
   const persistence = await root('services/data/src/my-data-persistence.ts');
 
   assert.match(index, /registerMyDataRoutes\s*}\s*from '\.\/my-data-persistence'/);
-  assert.match(persistence, /myDataOwnedFirstPageHtml\s*}\s*from '\.\/my-data-owned-first'/);
+  assert.match(persistence, /myDataOwnedFirstPageHtml\s*}\s*from '\.\/my-data-owned-first\.ts'/);
   assert.match(page, /id="composition-mode-owned"[^>]*aria-pressed="true"[^>]*>내 보유만</);
   assert.match(page, /id="composition-mode-research"[^>]*>전체 Registry · 연구용</);
   assert.match(page, /id="composition-owned-warning"/);
