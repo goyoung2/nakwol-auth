@@ -58,12 +58,26 @@ export const MY_DATA_OWNED_FIRST_SCRIPT = String.raw`
     return pairs;
   }
 
-  function generalPairsForMode(currentId) {
+  function selectedDraftIds(field, currentPosition) {
+    return new Set(
+      compositionDraft
+        .filter((row) => Number(row.position) !== Number(currentPosition))
+        .map((row) => row[field])
+        .filter(Boolean),
+    );
+  }
+
+  function hideTakenPairs(pairs, currentId, takenIds) {
+    return pairs.filter((pair) => !pair[0] || pair[0] === currentId || !takenIds.has(pair[0]));
+  }
+
+  function generalPairsForMode(currentId, position) {
     const ownedIds = compositionOwnedGeneralIds();
     const pairs = compositionMode === 'owned'
       ? owned.generals.map((row) => [row.general_id, row.name || row.general_id])
       : (registry.generals || []).filter((row) => row.enabled === 1).map((row) => [row.id, (row.name || row.id) + (ownedIds.has(row.id) ? '' : ' · 미등록 · 연구용')]);
-    return appendCurrentPair(pairs, currentId, registryGeneralName(currentId) + ' · 미등록 · 현재 편성');
+    const withCurrent = appendCurrentPair(pairs, currentId, registryGeneralName(currentId) + ' · 미등록 · 현재 편성');
+    return hideTakenPairs(withCurrent, currentId, selectedDraftIds('general_id', position));
   }
 
   function tacticPairsForMode(currentId) {
@@ -74,10 +88,11 @@ export const MY_DATA_OWNED_FIRST_SCRIPT = String.raw`
     return appendCurrentPair(pairs, currentId, registryTacticName(currentId) + ' · 미등록 · 현재 편성');
   }
 
-  function equipmentPairs(type) {
-    return owned.equipment
+  function equipmentPairs(type, currentId, position, field) {
+    const pairs = owned.equipment
       .filter((row) => row.type === type)
       .map((row) => [row.id, (row.nickname || row.template_name) + ' · ' + row.id.slice(-6)]);
+    return hideTakenPairs(pairs, currentId, selectedDraftIds(field, position));
   }
 
   function updateCompositionWarning() {
@@ -111,25 +126,22 @@ export const MY_DATA_OWNED_FIRST_SCRIPT = String.raw`
 
   function onCompositionControlChanged() {
     captureCompositionDraft();
-    refreshCompositionDuplicateGuards();
-    updateCompositionWarning();
+    renderOwnedFirstComposition();
   }
 
   function renderOwnedFirstComposition() {
     ui.compositionSlots.replaceChildren();
     const byPosition = new Map(compositionDraft.map((row) => [Number(row.position), row]));
-    const weapons = equipmentPairs('weapon');
-    const mounts = equipmentPairs('mount');
 
     for (const position of [1, 2, 3]) {
       const current = byPosition.get(position) || { position, general_id:'', tactic_1:'', tactic_2:'', weapon_instance_id:'', mount_instance_id:'' };
       const card = element('article', 'slot-card'); card.dataset.position = String(position); card.appendChild(element('div', 'slot-title', position + '번 위치'));
       const grid = element('div', 'slot-grid');
-      const general = compositionSelect('general-select', generalPairsForMode(current.general_id), current.general_id);
+      const general = compositionSelect('general-select', generalPairsForMode(current.general_id, position), current.general_id);
       const tactic1 = compositionSelect('tactic-1', tacticPairsForMode(current.tactic_1), current.tactic_1);
       const tactic2 = compositionSelect('tactic-2', tacticPairsForMode(current.tactic_2), current.tactic_2);
-      const weapon = compositionSelect('weapon-instance', weapons, current.weapon_instance_id);
-      const mount = compositionSelect('mount-instance', mounts, current.mount_instance_id);
+      const weapon = compositionSelect('weapon-instance', equipmentPairs('weapon', current.weapon_instance_id, position, 'weapon_instance_id'), current.weapon_instance_id);
+      const mount = compositionSelect('mount-instance', equipmentPairs('mount', current.mount_instance_id, position, 'mount_instance_id'), current.mount_instance_id);
       for (const control of [general, tactic1, tactic2, weapon, mount]) control.addEventListener('change', onCompositionControlChanged);
       grid.append(field('장수', general), field('전법 1', tactic1), field('전법 2', tactic2), field('무기', weapon), field('탈것', mount));
       card.append(grid); ui.compositionSlots.appendChild(card);
