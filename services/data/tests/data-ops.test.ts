@@ -5,7 +5,9 @@ import app from '../src/index.ts';
 import { buildDataOpenApi } from '../src/openapi.ts';
 import { createSqliteD1 } from './sqlite-d1.ts';
 
-const migration = await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8');
+const initial = await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8');
+const audit = await readFile(new URL('../migrations/0007_data_ops_audit.sql', import.meta.url), 'utf8');
+const migration = `${initial}\n${audit}`;
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 const source = (path:string) => readFile(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
