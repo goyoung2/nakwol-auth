@@ -49,8 +49,8 @@ test('owned mode exposes only owned generals and tactics while research mode lab
   vm.createContext(context);
   vm.runInContext(MY_DATA_OWNED_FIRST_SCRIPT, context);
 
-  assert.deepEqual(Array.from(vm.runInContext("generalPairsForMode('')", context)), [['g:owned','보유장수']]);
-  assert.deepEqual(Array.from(vm.runInContext("tacticPairsForMode('')", context)), [['t:owned','보유전법']]);
+  assert.equal(JSON.stringify(vm.runInContext("generalPairsForMode('')", context)), JSON.stringify([['g:owned','보유장수']]));
+  assert.equal(JSON.stringify(vm.runInContext("tacticPairsForMode('')", context)), JSON.stringify([['t:owned','보유전법']]));
 
   vm.runInContext("compositionMode = 'research'", context);
   const researchGenerals = Array.from(vm.runInContext("generalPairsForMode('')", context)) as any[];
