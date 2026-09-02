@@ -10,7 +10,7 @@ import { handleDeleteOwnedTactic, handleListOwnedTactics, handlePutOwnedTactic }
 import { handleRegistryList, handleRegistrySummary } from './routes/registry';
 import { handleConnectCliGetScopes, handleConnectCliPutScopes } from './connect-cli';
 import { registerDataLabRoutes } from './lab';
-import { registerMyDataRoutes } from './my-data-owned-first';
+import { registerMyDataRoutes } from './my-data-persistence';
 import type { DataEnv } from './types';
 
 const app = new Hono<{ Bindings:DataEnv }>();
