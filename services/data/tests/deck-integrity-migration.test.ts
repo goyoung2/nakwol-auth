@@ -40,5 +40,7 @@ test('deck integrity migration can be applied again without changing valid rows'
   DB.raw.prepare('INSERT INTO deck_general_slots(deck_id,position,general_id,weapon_instance_id,mount_instance_id) VALUES (?,?,?,?,?)').run('dek_1',1,'g:1','eqp_w1','eqp_m1');
   DB.raw.exec(integrity);
   const row=DB.raw.prepare('SELECT general_id,weapon_instance_id,mount_instance_id FROM deck_general_slots WHERE deck_id=? AND position=1').get('dek_1') as any;
-  assert.deepEqual(row,{general_id:'g:1',weapon_instance_id:'eqp_w1',mount_instance_id:'eqp_m1'});
+  assert.equal(row.general_id,'g:1');
+  assert.equal(row.weapon_instance_id,'eqp_w1');
+  assert.equal(row.mount_instance_id,'eqp_m1');
 });
