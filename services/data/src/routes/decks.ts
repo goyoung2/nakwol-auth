@@ -28,8 +28,10 @@ function validationResponse(error:unknown):Response {
     INVALID_COMPOSITION:'덱 구성을 확인해 주세요.',
     INVALID_GENERAL_POSITION:'장수 위치는 1~3이어야 합니다.',
     DUPLICATE_GENERAL_POSITION:'같은 장수 위치를 두 번 지정할 수 없습니다.',
+    DUPLICATE_GENERAL_IN_DECK:'같은 장수를 한 덱의 여러 위치에 배치할 수 없습니다.',
     INVALID_TACTIC_SLOT:'전법 슬롯은 1~2이어야 합니다.',
     DUPLICATE_TACTIC_SLOT:'같은 전법 슬롯을 두 번 지정할 수 없습니다.',
+    DUPLICATE_EQUIPMENT_IN_DECK:'같은 장비 인스턴스를 한 덱에서 여러 번 사용할 수 없습니다.',
     EQUIPMENT_TYPE_MISMATCH:'장비 종류와 슬롯이 맞지 않습니다.',
   };
   return Response.json({ok:false,error:{code,message:messages[code]??'덱 정보를 확인해 주세요.'}},{status:400});
