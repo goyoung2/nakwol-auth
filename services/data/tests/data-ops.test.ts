@@ -14,11 +14,11 @@ const source = (path:string) => readFile(new URL(`../src/${path}`, import.meta.u
 function opsReq(path:string, clientId='nakwol-data-ops') {
   return new Request(`https://data.example${path}`, { headers:{ Authorization:'Bearer token', 'X-NAKWOL-CLIENT-ID':clientId } });
 }
-function authService(role:'user'|'member'|'admin', extra:Record<string,unknown>={}) {
+function authService(role:'user'|'member'|'admin'='member', extra:Record<string,unknown>={}) {
   return { fetch: async () => Response.json({ ok:true, data:{ id:'usr_operator', display_name:'Operator', avatar_url:null, membership:{ role }, ...extra } }) };
 }
 function rejectedAuth(status=401) { return { fetch: async () => Response.json({ ok:false }, { status }) }; }
-function envFor(DB:any, role:'user'|'member'|'admin'='admin', extra:Record<string,unknown>={}) {
+function envFor(DB:any, role:'user'|'member'|'admin'='member', extra:Record<string,unknown>={}) {
   return { DB, AUTH_ORIGIN:'https://auth.example', AUTH_SERVICE:authService(role,extra) } as any;
 }
 async function call(request:Request, env:any) { return (app as any).fetch(request, env, ctx); }
@@ -46,34 +46,31 @@ function seedTargetData(DB:any) {
   DB.raw.prepare("INSERT INTO deck_snapshots(id,source_deck_id,owner_user_id,visibility,snapshot_json,created_at) VALUES ('dks_target','dek_target','usr_target','alliance','{\"safe\":true}',?)").run(now);
 }
 
-test('DATA Ops authorization allows membership admin only', async () => {
+test('DATA Ops trusts the AUTH platform-admin gate and keeps exact app binding', async () => {
   const DB=createSqliteD1(migration);
-  let response=await call(opsReq('/internal/ops/accounts?q=gac'),envFor(DB,'admin'));
+
+  // A successful /me response for the exact Ops client already means AUTH
+  // re-evaluated access_policy=admin. DATA must not reinterpret Discord role.
+  let response=await call(opsReq('/internal/ops/accounts?q=gac'),envFor(DB,'member'));
   assert.equal(response.status,200);
 
-  response=await call(opsReq('/internal/ops/accounts?q=gac'),envFor(DB,'member'));
-  assert.equal(response.status,403);
-  assert.equal((await response.json() as any).error.code,'OPS_ADMIN_REQUIRED');
-
-  response=await call(opsReq('/internal/ops/accounts?q=gac'),envFor(DB,'user'));
-  assert.equal(response.status,403);
-  assert.equal((await response.json() as any).error.code,'OPS_ADMIN_REQUIRED');
-
-  response=await call(opsReq('/internal/ops/accounts?q=gac'),envFor(DB,'member',{ developer:{ active:true, role:'operator' } }));
-  assert.equal(response.status,403,'active developer/operator without membership admin must remain denied');
-
-  response=await call(opsReq('/internal/ops/accounts?q=gac','nakwol-data-lab'),envFor(DB,'admin'));
+  response=await call(opsReq('/internal/ops/accounts?q=gac','nakwol-data-lab'),envFor(DB,'member'));
   assert.equal(response.status,403);
   assert.equal((await response.json() as any).error.code,'OPS_CLIENT_DENIED');
 
-  const rejectedEnv={DB,AUTH_ORIGIN:'https://auth.example',AUTH_SERVICE:rejectedAuth(401)} as any;
-  response=await call(opsReq('/internal/ops/accounts?q=gac'),rejectedEnv);
+  const deniedEnv={DB,AUTH_ORIGIN:'https://auth.example',AUTH_SERVICE:rejectedAuth(403)} as any;
+  response=await call(opsReq('/internal/ops/accounts?q=gac'),deniedEnv);
+  assert.equal(response.status,403);
+  assert.equal((await response.json() as any).error.code,'AUTH_REJECTED');
+
+  const unauthenticatedEnv={DB,AUTH_ORIGIN:'https://auth.example',AUTH_SERVICE:rejectedAuth(401)} as any;
+  response=await call(opsReq('/internal/ops/accounts?q=gac'),unauthenticatedEnv);
   assert.equal(response.status,401);
   assert.equal((await response.json() as any).error.code,'AUTH_REJECTED');
 });
 
 test('DATA Ops searches arbitrary game accounts by account id, user id, nickname and server code', async () => {
-  const DB=createSqliteD1(migration);seedTargetData(DB);const env=envFor(DB,'admin');
+  const DB=createSqliteD1(migration);seedTargetData(DB);const env=envFor(DB);
   for (const query of ['gac_target','usr_target','고영','5']) {
     const response=await call(opsReq('/internal/ops/accounts?q='+encodeURIComponent(query)),env);
     assert.equal(response.status,200);
@@ -86,7 +83,7 @@ test('DATA Ops searches arbitrary game accounts by account id, user id, nickname
 });
 
 test('DATA Ops account and deck detail expose arbitrary-user read state without secrets', async () => {
-  const DB=createSqliteD1(migration);seedTargetData(DB);const env=envFor(DB,'admin');
+  const DB=createSqliteD1(migration);seedTargetData(DB);const env=envFor(DB);
   let response=await call(opsReq('/internal/ops/accounts/gac_target'),env);
   assert.equal(response.status,200);
   const detail=(await response.json() as any).data;
