@@ -61,12 +61,10 @@ export async function fetchDiscordIdentity(env: Env, accessToken: string): Promi
   return { user, member };
 }
 
-export function resolveNakwolRole(env: Env, member: DiscordGuildMember | null): 'user' | 'member' | 'admin' {
+export function resolveNakwolRole(env: Env, member: DiscordGuildMember | null): 'user' | 'member' {
   if (!member) return 'user';
   const roles = new Set(member.roles ?? []);
-  const adminRole = env.NAKWOL_ADMIN_ROLE_ID?.trim();
   const memberRole = env.NAKWOL_MEMBER_ROLE_ID?.trim();
-  if (adminRole && roles.has(adminRole)) return 'admin';
   if (!memberRole || roles.has(memberRole)) return 'member';
   return 'user';
 }
