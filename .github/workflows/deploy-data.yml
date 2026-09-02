@@ -40,6 +40,16 @@ jobs:
         run: node scripts/ensure-d1.mjs
       - name: Apply DATA migrations
         run: npx wrangler d1 migrations apply DB --remote
+      - name: Verify DATA Ops audit schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute DB --remote --json --command "SELECT name,sql FROM sqlite_master WHERE type='table' AND name='data_ops_audit_log';" > /tmp/data-ops-audit-schema.json
+          grep -q 'data_ops_audit_log' /tmp/data-ops-audit-schema.json
+          grep -q 'SEARCH_ACCOUNT' /tmp/data-ops-audit-schema.json
+          grep -q 'VIEW_ACCOUNT' /tmp/data-ops-audit-schema.json
+          grep -q 'VIEW_DECK' /tmp/data-ops-audit-schema.json
+          echo 'NAKWOL_DATA_OPS_AUDIT_SCHEMA_OK'
       - name: Seed DATA Registry
         run: npm run registry:seed:remote
       - name: Verify DATA Registry counts
