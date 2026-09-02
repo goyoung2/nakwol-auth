@@ -1,4 +1,5 @@
 import { DataAuthError, verifyPrincipal } from './auth.ts';
+import { auditSuccessfulDataOpsRead } from './ops-audit.ts';
 import type { DataEnv, DataPrincipal } from './types.ts';
 
 export const DATA_OPS_CLIENT_ID = 'nakwol-data-ops';
@@ -33,7 +34,9 @@ export async function runDataOpsHandler(
 ): Promise<Response> {
   try {
     const principal = await requireDataOpsPrincipal(request, env, fetcher);
-    return await operation(principal);
+    const response = await operation(principal);
+    await auditSuccessfulDataOpsRead(request, response, env, principal);
+    return response;
   } catch (error) {
     if (error instanceof DataAuthError) {
       return Response.json({ ok: false, error: { code: error.code, message: error.message } }, { status: error.status });
