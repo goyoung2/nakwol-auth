@@ -23,10 +23,12 @@ test('Connect v1 embed exposes DATA client contract without changing script URL'
   assert.doesNotMatch(discovery, /Authorization/);
 });
 
-test('Connect v1 default widget uses the compact Identity Menu', async () => {
+test('Connect v1 default widget uses compact Identity Menu with automatic SSO', async () => {
   const src = await readFile(new URL('../../src/assets/nakwol-connect-v1.js.txt', import.meta.url), 'utf8');
 
-  assert.match(src, /sdk\/v0\.2\.0\/nakwol-auth-web\.js/);
+  assert.match(src, /sdk\/v0\.3\.0\/nakwol-auth-web\.js/);
+  assert.match(src, /dataset\.autoSso\s*!==\s*'false'/);
+  assert.match(src, /new sdk\.NakwolAuthClient\(\{ clientId, redirectUri, authOrigin, autoSso \}\)/);
   assert.match(src, /mountNakwolIdentityMenu/);
   assert.match(src, /variant:\s*'compact'/);
   assert.match(src, /theme:\s*'dark'/);

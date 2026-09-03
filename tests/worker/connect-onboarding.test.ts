@@ -16,7 +16,9 @@ test('public /connect onboarding is available without authentication', async () 
 test('onboarding teaches the official AUTH, Connect and DATA paths only', () => {
   const html = connectOnboardingPageHtml();
   assert.match(html, /https:\/\/nakwol-auth\.sepsd21\.workers\.dev\/connect\/v1\.js/);
-  assert.match(html, /https:\/\/nakwol-auth\.sepsd21\.workers\.dev\/sdk\/v0\.2\.0\/nakwol-auth-web\.js/);
+  assert.match(html, /https:\/\/nakwol-auth\.sepsd21\.workers\.dev\/sdk\/v0\.3\.0\/nakwol-auth-web\.js/);
+  assert.match(html, /autoSso: true/);
+  assert.match(html, /data-auto-sso="false"/);
   assert.match(html, /mountNakwolIdentityMenu/);
   assert.match(html, /nakwol-connect data describe --json/);
   assert.match(html, /profile:read \/ profile:write/);
