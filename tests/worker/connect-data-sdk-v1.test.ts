@@ -41,6 +41,7 @@ async function bootConnectRuntime() {
         dataOrigin: 'https://data.example',
         dataScopes: 'profile:read,roster:read,roster:write,equipment:read,equipment:write,decks:read,decks:write',
         ui: 'headless',
+        auth: 'optional',
       },
       src: 'https://auth.example/connect/v1.js',
     },

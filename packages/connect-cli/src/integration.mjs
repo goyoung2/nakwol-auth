@@ -10,10 +10,11 @@ const JSX_END = '{/* NAKWOL-CONNECT:END */}';
 const NEXT_IMPORT = "import Script from 'next/script'; // NAKWOL-CONNECT:IMPORT";
 function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function replaceBlock(source, start, end, replacement) { const re = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}`, 'm'); return re.test(source) ? source.replace(re, replacement) : null; }
+function authMode(value) { const mode=String(value || 'required').trim().toLowerCase(); if(!['required','optional'].includes(mode)) throw new Error('CONNECT_INVALID_AUTH_MODE'); return mode; }
 function attrs(clientId, options = {}) {
   const dataOrigin = options.dataOrigin == null ? null : String(options.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/, '');
   const dataScopes = options.dataScopes == null ? null : parseDataScopes(options.dataScopes).join(',');
-  const lines = [`  data-client-id="${clientId}"`];
+  const lines = [`  data-client-id="${clientId}"`, `  data-auth="${authMode(options.authMode)}"`];
   if (dataOrigin != null) lines.push(`  data-data-origin="${dataOrigin}"`);
   if (dataScopes != null) lines.push(`  data-data-scopes="${dataScopes}"`);
   return lines.join('\n');
@@ -37,9 +38,9 @@ export async function installIntegration(root, project, clientId, options = unde
   if(next!==original) await writeFile(path,next); return {changedFiles:next===original?[]:[project.targetFile],integration:project.framework.startsWith('next_')?'next-script':'universal-embed'};
 }
 export async function inspectIntegration(root, project) {
-  if(!project?.targetFile) return {present:false,clientId:null,dataOrigin:null,dataScopes:[]};
-  try { const source=await readFile(join(root,project.targetFile),'utf8'); const match=(name)=>source.match(new RegExp(`${name}=["']([^"']*)["']`))?.[1]??null; return {present:source.includes('NAKWOL-CONNECT:START'),clientId:match('data-client-id'),dataOrigin:match('data-data-origin'),dataScopes:parseDataScopes(match('data-data-scopes')||'')}; }
-  catch { return {present:false,clientId:null,dataOrigin:null,dataScopes:[]}; }
+  if(!project?.targetFile) return {present:false,clientId:null,authMode:'required',dataOrigin:null,dataScopes:[]};
+  try { const source=await readFile(join(root,project.targetFile),'utf8'); const match=(name)=>source.match(new RegExp(`${name}=["']([^"']*)["']`))?.[1]??null; return {present:source.includes('NAKWOL-CONNECT:START'),clientId:match('data-client-id'),authMode:authMode(match('data-auth')||'required'),dataOrigin:match('data-data-origin'),dataScopes:parseDataScopes(match('data-data-scopes')||'')}; }
+  catch { return {present:false,clientId:null,authMode:'required',dataOrigin:null,dataScopes:[]}; }
 }
 export async function removeIntegration(root, project) {
   if(!project?.targetFile) return {changedFiles:[]}; const path=join(root,project.targetFile); const original=await readFile(path,'utf8');
