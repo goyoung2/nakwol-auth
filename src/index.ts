@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { randomToken } from './crypto';
 import { buildDiscordAuthorizeUrl, exchangeDiscordCode } from './discord';
 import { registerDemoRoutes } from './demo';
+import { registerConnectOnboardingRoutes } from './connect-onboarding';
 import {
   clearSessionCookie,
   getApplication,
@@ -68,6 +69,7 @@ app.get('/api/health', (c) => c.json({
 }));
 
 registerDemoRoutes(app);
+registerConnectOnboardingRoutes(app);
 
 app.options('*', async (c) => {
   const path = new URL(c.req.url).pathname;
