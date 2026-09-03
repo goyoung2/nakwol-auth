@@ -14,6 +14,7 @@ on:
       - 'package.json'
       - 'tsconfig.json'
       - 'wrangler.jsonc'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -106,25 +107,32 @@ jobs:
             hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
             ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.3.0/nakwol-auth-web.js" || true)
             cs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect -w '%{http_code}' "$origin/connect/v1.js" || true)
+            xm=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/connect-manifest -w '%{http_code}' "$origin/connect/manifest.json" || true)
             cm=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-manifest -w '%{http_code}' "$origin/connect/cli/manifest.json" || true)
             cp=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/cli-package -w '%{http_code}' "$origin/connect/cli/package.tgz" || true)
             ll=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/llms -w '%{http_code}' "$origin/llms.txt" || true)
             dv=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/device -w '%{http_code}' "$origin/connect/cli/device/verify" || true)
-            echo "attempt=$i health=$hs sdk=$ss connect=$cs cli_manifest=$cm cli_package=$cp llms=$ll device=$dv"
-            if [ "$hs" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ] && [ "$cm" = '200' ] && [ "$cp" = '200' ] && [ "$ll" = '200' ] && [ "$dv" = '200' ]; then
+            echo "attempt=$i health=$hs sdk=$ss connect=$cs connect_manifest=$xm cli_manifest=$cm cli_package=$cp llms=$ll device=$dv"
+            if [ "$hs" = '200' ] && [ "$ss" = '200' ] && [ "$cs" = '200' ] && [ "$xm" = '200' ] && [ "$cm" = '200' ] && [ "$cp" = '200' ] && [ "$ll" = '200' ] && [ "$dv" = '200' ]; then
               if grep -q '"service":"nakwol-auth"' /tmp/health && \
                  grep -q "NAKWOL_AUTH_SDK_VERSION = '0.3.0'" /tmp/sdk && \
                  grep -q 'window.NAKWOL_DATA' /tmp/connect && \
                  grep -q 'openapi: dataOpenApi' /tmp/connect && \
                  grep -q "script.dataset.auth || 'required'" /tmp/connect && \
                  grep -q 'data-nakwol-connect-auth-guard' /tmp/connect && \
+                 grep -q '"sdk":"/sdk/v0.3.0/nakwol-auth-web.js"' /tmp/connect-manifest && \
+                 grep -q '"default_auth":"required"' /tmp/connect-manifest && \
+                 grep -q '"default_access_policy":"member"' /tmp/connect-manifest && \
                  grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
                  grep -q '"version":"0.5.0"' /tmp/cli-manifest && \
                  grep -q '"default_auth":"required"' /tmp/cli-manifest && \
+                 grep -q '"default_access_policy":"member"' /tmp/cli-manifest && \
                  grep -q 'init --auth optional' /tmp/cli-manifest && \
                  grep -q 'data describe --json' /tmp/cli-manifest && \
                  grep -q 'openapi.json' /tmp/cli-manifest && \
-                 grep -q 'protected by default' /tmp/llms && \
+                 grep -qi 'protected by default' /tmp/llms && \
+                 grep -q 'auth = required' /tmp/llms && \
+                 grep -q 'access_policy = member' /tmp/llms && \
                  grep -q 'init --auth optional' /tmp/llms && \
                  grep -q 'OpenAPI' /tmp/llms && \
                  grep -q 'CLI 연결 승인' /tmp/device && \
@@ -135,5 +143,13 @@ jobs:
             fi
             sleep 5
           done
-          echo 'NAKWOL Connect v0.5 deployment verification failed.'
+          echo '::error::NAKWOL Connect v0.5 deployment verification failed.'
+          echo '--- Connect manifest ---'
+          cat /tmp/connect-manifest || true
+          echo
+          echo '--- CLI manifest ---'
+          cat /tmp/cli-manifest || true
+          echo
+          echo '--- LLM guidance head ---'
+          head -80 /tmp/llms || true
           exit 1
