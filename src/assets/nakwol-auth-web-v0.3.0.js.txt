@@ -65,6 +65,7 @@ export class NakwolAuthClient extends NakwolAuthClientV02 {
     url.searchParams.set('prompt', 'none');
     this.emit('ssoprobe', { url: url.toString() });
     location.replace(url.toString());
+    return new Promise(() => {});
   }
 
   async handleCallback() {
