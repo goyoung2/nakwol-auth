@@ -18,7 +18,7 @@
 
   const start = async () => {
     try {
-      const sdk = await import(`${authOrigin}/sdk/v0.1.0/nakwol-auth-web.js`);
+      const sdk = await import(`${authOrigin}/sdk/v0.2.0/nakwol-auth-web.js`);
       const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin });
 
       class NakwolDataError extends Error {
@@ -123,7 +123,18 @@
       if (uiMode === 'none' || uiMode === 'headless') {
         const user = await client.bootstrap(); api.user = user || null; if (user) window.NAKWOL_AUTH_USER = user; dispatch('nakwol-ready', api.user); dispatch('nakwol-auth-ready', api.user); return;
       }
-      const widget = sdk.mountNakwolAuthWidget(client, { globalLogout }); api.widget = widget;
+      const widget = sdk.mountNakwolIdentityMenu(client, {
+        globalLogout,
+        variant: 'compact',
+        theme: 'dark',
+      });
+      Object.assign(widget.element.style, {
+        position: 'fixed',
+        top: '14px',
+        right: '14px',
+        zIndex: '2147483000',
+      });
+      api.widget = widget;
       const user = await widget.ready; api.user = user || null; if (user) window.NAKWOL_AUTH_USER = user; dispatch('nakwol-ready', api.user); dispatch('nakwol-auth-ready', api.user);
     } catch (error) { console.error('[NAKWOL Connect] bootstrap failed', error); dispatch('nakwol-error', error); }
   };
