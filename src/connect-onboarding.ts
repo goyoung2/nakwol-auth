@@ -24,7 +24,7 @@ export function connectOnboardingPageHtml(): string {
     <div class="eyebrow">落月 · DEVELOPER</div>
     <h1>NAKWOL Connect 시작하기</h1>
     <p>낙월 서비스에 Discord 기반 로그인과 공통 DATA를 붙이는 공식 연동 경로입니다. 각 서비스는 Discord OAuth나 Client Secret을 직접 다루지 않고 중앙 NAKWOL AUTH와 Connect를 사용합니다.</p>
-    <div class="chips"><span class="chip">AUTH 0.2.0</span><span class="chip">Connect 0.4.0</span><span class="chip">PKCE S256</span><span class="chip">Discord secret 불필요</span></div>
+    <div class="chips"><span class="chip">AUTH 0.2.0</span><span class="chip">Web SDK 0.3.0</span><span class="chip">Connect 0.4.0</span><span class="chip">자동 SSO</span><span class="chip">PKCE S256</span><span class="chip">Discord secret 불필요</span></div>
   </section>
 
   <section class="panel">
@@ -35,7 +35,7 @@ npx --yes nakwol-connect doctor --json</pre></div></div>
     <div class="step"><div class="num">3</div><div><strong>DATA도 필요하면 scope를 함께 선언합니다.</strong><pre>npx --yes nakwol-connect init --scopes roster:read,decks:read
 npx --yes nakwol-connect data describe --json
 npx --yes nakwol-connect doctor --json</pre></div></div>
-    <div class="callout">최초 1회는 브라우저에서 짧은 device authorization 승인이 필요할 수 있습니다. 이후 앱 등록/재사용, callback 등록, 프로젝트 삽입, config 작성과 doctor 검증은 CLI가 처리합니다.</div>
+    <div class="callout">최초 한 서비스에서 Discord 로그인을 완료하면 중앙 NAKWOL SSO 세션이 생깁니다. 같은 브라우저의 다른 NAKWOL Connect 서비스는 별도 로그인 버튼을 누르지 않아도 자동으로 자기 서비스용 access token을 발급받습니다.</div>
   </section>
 
   <section class="panel">
@@ -59,6 +59,7 @@ npx --yes nakwol-connect data describe --json을 먼저 확인해.</pre>
   src="https://nakwol-auth.sepsd21.workers.dev/connect/v1.js"
   data-client-id="발급된-client-id"&gt;
 &lt;/script&gt;</pre>
+    <p class="muted">Universal Embed는 자동 SSO가 기본입니다. 중앙 세션이 있으면 페이지 진입 시 즉시 연결하고, 세션이 없을 때만 로그인 버튼을 표시합니다. 특별히 자동 SSO를 끄려면 <code>data-auto-sso="false"</code>를 지정합니다.</p>
     <pre>window.NAKWOL_CONNECT.user
 window.NAKWOL_CONNECT.login()
 window.NAKWOL_CONNECT.logout()</pre>
@@ -68,11 +69,12 @@ window.NAKWOL_CONNECT.logout()</pre>
   import {
     NakwolAuthClient,
     mountNakwolIdentityMenu,
-  } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.2.0/nakwol-auth-web.js';
+  } from 'https://nakwol-auth.sepsd21.workers.dev/sdk/v0.3.0/nakwol-auth-web.js';
 
   const auth = new NakwolAuthClient({
     clientId: '발급된-client-id',
     redirectUri: 'https://your-service.example/',
+    autoSso: true,
   });
 
   mountNakwolIdentityMenu(auth, {
