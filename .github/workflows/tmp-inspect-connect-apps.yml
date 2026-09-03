@@ -1,0 +1,32 @@
+name: TEMP Inspect NAKWOL Connect Apps
+
+on:
+  push:
+    branches:
+      - docs/protected-connect-guide
+    paths:
+      - '.github/workflows/tmp-inspect-connect-apps.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+      - name: Inspect registered applications and access policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute DB --remote --json --command "SELECT a.client_id,a.name,a.status,COALESCE(s.homepage_url,'') AS homepage_url,COALESCE(s.access_policy,'<missing>') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id=a.client_id ORDER BY a.client_id;" | tee /tmp/apps.json
+          echo '--- external/non-internal candidates ---'
+          npx wrangler d1 execute DB --remote --json --command "SELECT a.client_id,a.name,a.status,COALESCE(s.homepage_url,'') AS homepage_url,COALESCE(s.access_policy,'<missing>') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id=a.client_id WHERE a.client_id NOT IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','nakwol-data-lab','nakwol-data-ops','nakwol-my-data') ORDER BY a.client_id;"
