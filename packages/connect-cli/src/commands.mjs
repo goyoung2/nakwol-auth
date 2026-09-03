@@ -30,10 +30,17 @@ async function authenticatedApis(options = {}) {
   };
 }
 
-function desiredData(existingConfig, options = {}) {
+function normalizeAuthMode(value) {
+  const mode = String(value || 'required').trim().toLowerCase();
+  if (!['required', 'optional'].includes(mode)) throw new Error('--auth는 required 또는 optional이어야 합니다.');
+  return mode;
+}
+
+function desiredIntegration(existingConfig, options = {}) {
   const dataOrigin = String(options.dataOrigin || existingConfig?.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/, '');
   const dataScopes = options.scopes !== undefined ? parseDataScopes(options.scopes) : parseDataScopes(existingConfig?.dataScopes || []);
-  return { dataOrigin, dataScopes };
+  const authMode = options.authMode !== undefined ? normalizeAuthMode(options.authMode) : normalizeAuthMode(existingConfig?.authMode || 'required');
+  return { dataOrigin, dataScopes, authMode };
 }
 
 async function resolveApp(root, project, existingConfig, api, options) {
@@ -69,7 +76,7 @@ export async function initProject(options = {}) {
   const project = await detectProject(root);
   if (!project.targetFile || project.framework === 'unknown') throw new Error('지원되는 웹 프로젝트를 찾지 못했습니다.');
   const existingConfig = await readProjectConfig(root);
-  const desired = desiredData(existingConfig, options);
+  const desired = desiredIntegration(existingConfig, options);
   const { authApi, dataApi } = await authenticatedApis({ ...options, authOrigin, dataOrigin: desired.dataOrigin, output });
   const app = await resolveApp(root, project, existingConfig, authApi, options);
   const dataState = (await dataApi.setScopes(app.client_id, desired.dataScopes)).data;
@@ -83,7 +90,7 @@ export async function initProject(options = {}) {
   });
   const doctor = await doctorProject({ ...options, root, authOrigin, dataOrigin: desired.dataOrigin, offline: false });
   if (!doctor.ok) throw new Error(`Connect 설치 검증 실패: ${doctor.checks.filter((c) => !c.ok).map((c) => c.name).join(', ')}`);
-  output(`NAKWOL Connect + DATA 연결 완료: ${app.client_id}`);
+  output(`NAKWOL Connect + DATA 연결 완료: ${app.client_id} (${config.authMode})`);
   return { clientId: app.client_id, project, config, app, data: dataState, doctor };
 }
 
@@ -99,6 +106,7 @@ export async function doctorProject(options = {}) {
   ];
   if (config?.clientId && marker.present) {
     checks.push({ name:'marker_client_id', ok:marker.clientId === config.clientId, detail:marker.clientId || 'missing' });
+    checks.push({ name:'marker_auth_mode', ok:marker.authMode === config.authMode, detail:marker.authMode || 'required' });
     if (config.version === 2) {
       checks.push({ name:'marker_data_origin', ok:marker.dataOrigin === config.dataOrigin, detail:marker.dataOrigin || 'missing' });
       checks.push({ name:'marker_data_scopes', ok:sameScopes(marker.dataScopes, config.dataScopes), detail:marker.dataScopes.join(',') });
@@ -157,7 +165,7 @@ export async function addUrlProject(url, options = {}) {
   const config = await readProjectConfig(root);
   if (!config?.clientId) throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');
   const project = await detectProject(root);
-  const desired = desiredData(config, options);
+  const desired = desiredIntegration(config, options);
   const { authApi } = await authenticatedApis({ ...options, dataOrigin:desired.dataOrigin });
   const app = (await authApi.addRedirect(config.clientId, url)).data;
   const install = await installIntegration(root, project, config.clientId, desired);
@@ -170,7 +178,7 @@ export async function syncProject(options = {}) {
   const config = await readProjectConfig(root);
   if (!config?.clientId) return initProject(options);
   const project = await detectProject(root);
-  const desired = desiredData(config, options);
+  const desired = desiredIntegration(config, options);
   const { authApi, dataApi } = await authenticatedApis({ ...options, dataOrigin:desired.dataOrigin });
   const app = (await authApi.getApp(config.clientId)).data;
   const dataState = (await dataApi.setScopes(config.clientId, desired.dataScopes)).data;
@@ -194,7 +202,11 @@ export async function dataStatusProject(options = {}) {
 }
 export async function dataSetProject(scopes, options = {}) {
   const ctx = await requireDataProject(options);
-  const desired = { dataOrigin:String(options.dataOrigin || ctx.config.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/,''), dataScopes:parseDataScopes(scopes) };
+  const desired = {
+    authMode: normalizeAuthMode(ctx.config.authMode || 'required'),
+    dataOrigin:String(options.dataOrigin || ctx.config.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/,''),
+    dataScopes:parseDataScopes(scopes),
+  };
   const dataState = (await ctx.dataApi.setScopes(ctx.config.clientId, desired.dataScopes)).data;
   const install = await installIntegration(ctx.root, ctx.project, ctx.config.clientId, desired);
   const config = await writeProjectConfig(ctx.root, { ...ctx.config, integration:install.integration, ...desired });
