@@ -29,7 +29,7 @@ export function connectOnboardingPageHtml(): string {
 
   <section class="panel">
     <h2>가장 빠른 시작</h2>
-    <div class="step"><div class="num">1</div><div><strong>NAKWOL developer 권한을 먼저 받습니다.</strong><div class="muted">일반 맹원은 앱을 등록할 수 없습니다. 운영자가 Connect developer로 등록한 계정으로 최초 device authorization을 승인합니다.</div></div></div>
+    <div class="step"><div class="num">1</div><div><strong>NAKWOL developer 권한을 먼저 받습니다.</strong><div class="muted">NAKWOL 운영자는 /admin/developers에서 Discord 사용자 ID를 미리 허가할 수 있습니다. 대상자가 아직 NAKWOL에 로그인한 적이 없어도 되며 Discord 서버 역할과는 무관합니다. 첫 Connect CLI 승인 때 해당 Discord 계정과 자동 연결됩니다.</div></div></div>
     <div class="step"><div class="num">2</div><div><strong>프로젝트 루트에서 공식 CLI를 실행합니다.</strong><pre>npx --yes nakwol-connect init
 npx --yes nakwol-connect doctor --json</pre></div></div>
     <div class="step"><div class="num">3</div><div><strong>DATA도 필요하면 scope를 함께 선언합니다.</strong><pre>npx --yes nakwol-connect init --scopes roster:read,decks:read
@@ -41,10 +41,14 @@ npx --yes nakwol-connect doctor --json</pre></div></div>
   <section class="panel">
     <h2>코딩 에이전트에게 그대로 주는 지시문</h2>
     <pre>이 프로젝트에 NAKWOL Connect 로그인을 붙여줘.
-Discord OAuth를 직접 구현하지 말고 공식 nakwol-connect CLI를 사용해.
+NAKWOL Connect의 공식 CLI는 npm 패키지 nakwol-connect이고,
+프로젝트 루트에서 npx --yes nakwol-connect ... 형태로 실행한다.
+Discord OAuth를 직접 구현하지 말고 이 CLI가 생성·관리하는 AUTH 연동을 사용해.
 현재 서비스의 실제 production URL을 callback으로 등록하고 로그인/로그아웃/현재 사용자 표시까지 연결해.
-브라우저에는 Discord secret, Cloudflare secret, CLI token을 넣지 마.
-nakwol-connect doctor --json이 통과할 때까지 검증해.</pre>
+브라우저 코드나 저장소에는 Discord Client Secret, Cloudflare secret, Connect CLI token을 넣지 마.
+작업이 끝나면 npx --yes nakwol-connect doctor --json이 통과하는지 검증해.
+CLI 사용법이나 현재 DATA 계약이 더 필요하면 npx --yes nakwol-connect --help와
+npx --yes nakwol-connect data describe --json을 먼저 확인해.</pre>
     <p class="muted">DATA가 필요하면 마지막에 “decks:read와 roster:read도 사용해”처럼 필요한 scope만 추가하면 됩니다.</p>
   </section>
 
