@@ -149,7 +149,7 @@ function appFromRow(row: any): ConnectApp {
     status: row.status,
     homepage_url: row.homepage_url ?? null,
     framework: row.framework ?? 'other',
-    access_policy: row.access_policy ?? 'public',
+    access_policy: row.access_policy ?? 'member',
     owner_user_id: row.owner_user_id ?? null,
     created_at: row.created_at == null ? null : Number(row.created_at),
     updated_at: row.updated_at == null ? null : Number(row.updated_at),
@@ -202,7 +202,9 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     name: 'nakwol-connect',
     stable: '1.0.0',
     embed: '/connect/v1.js',
-    sdk: '/sdk/v0.1.0/nakwol-auth-web.js',
+    sdk: '/sdk/v0.3.0/nakwol-auth-web.js',
+    default_auth: 'required',
+    default_access_policy: 'member',
   }));
 
   app.get('/admin/apps', (c) => c.html(adminPage()));
