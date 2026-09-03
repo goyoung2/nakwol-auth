@@ -94,12 +94,20 @@ test('production smoke covers AUTH 0.2, Connect 0.4 and DATA 0.9 without mutatin
   assert.doesNotMatch(workflow, /curl[^\n]*\s-d\s/);
 });
 
-test('production deploy ignores test-only changes while keeping runtime triggers', async () => {
+test('production deploy ignores test-only changes while keeping runtime and verifier triggers', async () => {
   const workflow = await root('.github/workflows/deploy.yml');
 
   assert.doesNotMatch(workflow, /^\s*-\s*'tests\/\*\*'\s*$/m);
   assert.doesNotMatch(workflow, /^\s*-\s*'!tests\//m);
-  for (const runtimePath of ['src/**', 'packages/**', 'migrations/**', 'scripts/**', 'package.json', 'wrangler.jsonc']) {
+  for (const runtimePath of ['src/**', 'packages/**', 'migrations/**', 'scripts/**', 'package.json', 'wrangler.jsonc', '.github/workflows/deploy.yml']) {
     assert.ok(workflow.includes(`'${runtimePath}'`), `AUTH deploy must still watch ${runtimePath}`);
   }
+
+  assert.match(workflow, /connect\/manifest\.json/);
+  assert.match(workflow, /"default_auth":"required"/);
+  assert.match(workflow, /"default_access_policy":"member"/);
+  assert.match(workflow, /grep -qi 'protected by default' \/tmp\/llms/);
+  assert.match(workflow, /grep -q 'auth = required' \/tmp\/llms/);
+  assert.match(workflow, /grep -q 'access_policy = member' \/tmp\/llms/);
+  assert.match(workflow, /NAKWOL_CONNECT_V05_DEPLOY_OK/);
 });
