@@ -1,27 +1,49 @@
-# NAKWOL Connect v0.3
+# NAKWOL Connect 0.5
 
 NAKWOL Connect는 낙월 서비스가 AUTH와 DATA를 공통 방식으로 연결하도록 하는 공식 integration layer입니다.
 
+## 기본은 보호된 서비스
+
+Connect 0.5부터 기본 정책은 다음과 같습니다.
+
+```text
+auth = required
+access_policy = member
+```
+
+둘은 다른 역할을 합니다.
+
+- `auth=required`: 로그인/인증이 끝나기 전에는 페이지 자체를 보여주지 않습니다.
+- `access_policy=member`: 로그인한 사용자 중 낙월 맹원만 앱 access token을 받을 수 있습니다.
+
+설정이 빠졌다고 공개되지 않습니다. 중앙 정책에 설정 행이 없거나 알 수 없는 값이 들어 있어도 `member`로 닫힙니다.
+
 ## 가장 쉬운 방법
 
-코딩 에이전트나 개발자는 OAuth나 DATA 헤더를 직접 구현하지 않습니다.
-
 ```bash
-# AUTH만
+# 기본: 로그인 필수 + 낙월 맹원 전용
 npx --yes nakwol-connect init
 
-# AUTH + DATA
+# AUTH + DATA, 여전히 required + member
 npx --yes nakwol-connect init --scopes roster:read,decks:read
 
 # 항상 검증
 npx --yes nakwol-connect doctor --json
 ```
 
-최초 한 번은 브라우저에서 짧은 device approval이 필요할 수 있습니다. 이후 AUTH 앱 등록/재사용, DATA scope 등록, 프레임워크별 코드 삽입, config 작성, doctor가 자동입니다.
+최초 한 번은 브라우저에서 짧은 device approval이 필요할 수 있습니다. 이후 AUTH 앱 등록/재사용, DATA scope 등록, 프레임워크별 Embed 삽입, `.nakwol-connect.json` 작성, doctor 검증이 자동입니다.
+
+공개 서비스는 예외입니다. 공개가 제품 요구사항일 때만 다음처럼 명시합니다.
+
+```bash
+npx --yes nakwol-connect init --auth optional --access-policy public
+```
+
+코딩 에이전트는 사용자 지시 없이 `optional` 또는 `public`으로 완화하면 안 됩니다.
 
 ## Universal Embed
 
-CLI가 다음 형식을 자동 관리합니다.
+CLI가 관리하는 기본 Embed:
 
 ```html
 <script
@@ -32,25 +54,62 @@ CLI가 다음 형식을 자동 관리합니다.
 </script>
 ```
 
-인증:
+`data-auth`가 없으면 `required`입니다. 페이지 로드 직후 전체 페이지 인증 가드가 생깁니다.
+
+required 모드의 흐름:
+
+```text
+페이지 진입
+→ 페이지 잠금
+→ 기존 앱 token 확인
+→ 없으면 중앙 SSO 자동 확인
+→ 중앙 SSO 성공: 앱별 token 발급 후 페이지 공개
+→ 중앙 세션 없음: 로그인 흐름 시작
+→ 비맹원/access denied: 페이지 잠금 유지
+```
+
+같은 브라우저 프로필에서 이미 다른 NAKWOL 서비스에 로그인했다면 사용자가 로그인 버튼을 다시 누르지 않아도 자동으로 연결됩니다.
+
+공개 페이지에서만:
+
+```html
+<script
+  src="https://nakwol-auth.sepsd21.workers.dev/connect/v1.js"
+  data-client-id="public-guide"
+  data-auth="optional">
+</script>
+```
+
+`data-auth="optional"`은 페이지 공개 여부만 바꿉니다. 비맹원에게 앱 권한까지 주려면 중앙 앱 정책도 명시적으로 `public`이어야 합니다.
+
+## 브라우저 API
 
 ```js
 window.NAKWOL_CONNECT.user
 window.NAKWOL_CONNECT.login()
+window.NAKWOL_CONNECT.logout()
+window.NAKWOL_CONNECT.data
 ```
 
-DATA:
+Web SDK stable은 `0.3.0`입니다. Universal Embed는 automatic SSO를 기본으로 사용합니다.
 
-```js
-await window.NAKWOL_CONNECT.data.registry.generals();
-await window.NAKWOL_CONNECT.data.registry.tactics();
+## LLM/코딩 에이전트 규칙
+
+에이전트에게 연동을 맡길 때 다음 원칙을 고정합니다.
+
+```text
+공식 CLI `nakwol-connect`를 사용한다.
+Discord OAuth/PKCE를 직접 구현하지 않는다.
+기본 설치는 `npx --yes nakwol-connect init`이다.
+사용자가 공개 서비스라고 명시하지 않는 한 auth=required, access_policy=member를 유지한다.
+`--auth optional`과 `--access-policy public`을 임의로 사용하지 않는다.
+production callback URL을 exact URL로 등록한다.
+비밀값을 브라우저/저장소에 넣지 않는다.
+DATA는 필요한 scope만 요청하고 live OpenAPI로 계약을 확인한다.
+마지막에 `npx --yes nakwol-connect doctor --json`을 실행하고 required/member 상태를 확인한다.
 ```
-
-DATA client가 사용자 access token과 client ID를 자동으로 붙입니다.
 
 ## High-level DATA SDK
-
-일반 앱은 가능하면 `/v1/...` REST path를 직접 조합하지 않고 high-level helper를 사용합니다. helper는 기존 `data.request()`와 같은 `{ ok, data }` 응답 envelope와 `NakwolDataError`를 그대로 반환합니다.
 
 ```js
 const data = window.NAKWOL_CONNECT.data;
@@ -61,20 +120,6 @@ const tactics = await data.roster.tactics.list(accountId);
 const equipment = await data.equipment.list(accountId);
 const decks = await data.decks.list(accountId);
 const deck = await data.decks.get(accountId, deckId);
-```
-
-쓰기 예:
-
-```js
-await data.roster.generals.upsert(accountId, generalId, {
-  breakthrough: 5,
-  promotion: 3,
-  favorite: true,
-});
-
-await data.decks.replaceComposition(accountId, deckId, {
-  generals: [/* current DATA composition contract */],
-});
 ```
 
 지원 namespace:
@@ -89,8 +134,6 @@ data.snapshots
 data.registry
 ```
 
-현재 DATA API에 없는 game-account PATCH/DELETE는 SDK도 제공하지 않습니다. 모든 ID path segment는 SDK가 URL encoding하고, JSON write는 `Content-Type: application/json`을 자동 설정합니다.
-
 기존 low-level API도 호환성 때문에 계속 지원합니다.
 
 ```js
@@ -104,10 +147,11 @@ await data.openapi();
 
 - Discord Client Secret은 AUTH Worker에만 존재합니다.
 - Connect CLI token은 사용자 홈 session에만 있고 브라우저/프로젝트에 들어가지 않습니다.
-- DATA scope 관리 시 DATA Worker가 매 요청 AUTH에 앱 owner/operator 권한을 확인합니다.
+- callback URL은 등록된 exact redirect만 허용됩니다.
+- access token은 앱별 client binding으로 검증됩니다.
+- 기본 앱 정책은 member-only이며 누락/오류도 fail-closed입니다.
+- DATA 권한 판정은 DATA Worker가 수행합니다.
 - AUTH D1과 DATA D1은 서로 직접 접근하지 않습니다.
-- runtime DATA 요청은 별도로 AUTH `/me`를 통해 사용자 app token을 검증합니다.
-- `data.hasScope()`는 UX hint일 뿐이며 실제 권한 판정은 DATA Worker가 수행합니다.
 
 ## 관리 UI
 

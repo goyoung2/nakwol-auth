@@ -2,28 +2,46 @@
 
 Official agent-first CLI for connecting web projects to NAKWOL AUTH and NAKWOL DATA.
 
+## Protected by default
+
+NAKWOL Connect is intentionally private-by-default. Unless the developer explicitly asks for a public service, preserve both defaults:
+
+```text
+auth=required
+access-policy=member
+```
+
+A plain install therefore locks the page until authentication succeeds and allows only authenticated NAKWOL members. Missing or malformed central access-policy settings fail closed to `member`.
+
+Do not infer that a page should be public merely because it is static, a demo, a test page, or hosted on Cloudflare Pages.
+
 ## Fast path
 
-NAKWOL Connect is protected by default. A plain install requires NAKWOL login, and newly created apps use the `member` access policy unless another policy is explicitly requested.
-
-AUTH only, protected by default:
+Default protected service:
 
 ```bash
 npx --yes nakwol-connect init
+npx --yes nakwol-connect doctor --json
 ```
 
-Explicitly allow a page to remain visible without login:
-
-```bash
-npx --yes nakwol-connect init --auth optional
-```
-
-AUTH + shared NAKWOL DATA:
+AUTH + shared NAKWOL DATA, still protected:
 
 ```bash
 npx --yes nakwol-connect init --scopes roster:read,decks:read
 npx --yes nakwol-connect data describe --json
 npx --yes nakwol-connect doctor --json
+```
+
+Only when the user explicitly wants the page visible without login:
+
+```bash
+npx --yes nakwol-connect init --auth optional
+```
+
+Only when the user explicitly wants a fully public service, including non-member authenticated users:
+
+```bash
+npx --yes nakwol-connect init --auth optional --access-policy public
 ```
 
 The first machine authorization opens a short-lived browser approval once. After that the CLI automatically creates/reuses the AUTH app, configures exact DATA scopes, installs or updates the project marker, writes `.nakwol-connect.json`, and verifies local + AUTH + DATA + OpenAPI state.
@@ -38,22 +56,29 @@ These are separate controls:
 auth=required   page is locked until authentication succeeds (default)
 auth=optional   page is public; login is available for identity/personalization
 
-access-policy=member   authenticated NAKWOL members only (default for new apps)
+access-policy=member   authenticated NAKWOL members only (default)
 access-policy=public   any authenticated NAKWOL user
-access-policy=admin    NAKWOL admins only
-```
-
-Examples:
-
-```bash
-# Default private NAKWOL member service
-npx --yes nakwol-connect init
-
-# Public page with optional login
-npx --yes nakwol-connect init --auth optional --access-policy public
+access-policy=admin    NAKWOL platform admins only
 ```
 
 At runtime the Universal Embed uses `data-auth="required"` or `data-auth="optional"`. If the attribute is omitted, `required` is assumed.
+
+## Rules for coding agents
+
+When an LLM/coding agent performs an integration, it must follow these rules:
+
+```text
+Use the official nakwol-connect CLI.
+Do not implement Discord OAuth or PKCE separately.
+Use npx --yes nakwol-connect init for normal services.
+Do not add --auth optional or --access-policy public unless the user explicitly requests a public service.
+Register the exact production callback URL.
+Reuse and normalize an existing Connect integration instead of stacking a second auth implementation.
+Do not place Discord Client Secret, Cloudflare secrets, or CLI tokens in browser code or the repository.
+Discover DATA with nakwol-connect data describe --json and request minimum scopes only.
+Run nakwol-connect doctor --json at the end.
+Explicitly confirm the installed auth mode is required and access policy is member unless an exception was requested.
+```
 
 ## DATA discovery and commands
 
@@ -79,6 +104,8 @@ decks:read decks:write
 ## Browser runtime
 
 The installed `connect/v1.js` exposes authentication and DATA automatically. With the default required mode it places a full-page authentication guard over the app immediately, attempts central SSO, and redirects to NAKWOL/Discord login when no reusable NAKWOL session exists. The app is revealed only after the current service receives its own valid access token. Access denial leaves the guard in place.
+
+Same-browser NAKWOL SSO does not share app tokens: every service still receives its own client-bound access token.
 
 Prefer the high-level helpers for the current DATA contract:
 
@@ -142,13 +169,15 @@ remove               remove local integration/config; central state preserved
 Useful options:
 
 ```text
---auth <required|optional>       default: required
---access-policy <public|member|admin>  default for new apps: member
+--auth <required|optional>              default: required
+--access-policy <public|member|admin>   default: member
 ```
 
 ## Discovery
 
 ```text
+https://github.com/goyoung2/nakwol-auth
+https://nakwol-auth.sepsd21.workers.dev/connect
 https://nakwol-auth.sepsd21.workers.dev/llms.txt
 https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json
 https://nakwol-data.sepsd21.workers.dev/openapi.json
