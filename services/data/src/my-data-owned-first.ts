@@ -175,6 +175,17 @@ export const MY_DATA_OWNED_FIRST_SCRIPT = String.raw`
     ui.compositionPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const baseLoadAccountData = loadAccountData;
+  loadAccountData = async function(accountId) {
+    const refreshOpenComposition = Boolean(editingDeckId && !ui.compositionPanel.hidden && accountId === activeAccountId);
+    if (refreshOpenComposition) captureCompositionDraft();
+    const result = await baseLoadAccountData(accountId);
+    if (refreshOpenComposition && editingDeckId && !ui.compositionPanel.hidden && accountId === activeAccountId) {
+      renderOwnedFirstComposition();
+    }
+    return result;
+  };
+
   const baseCloseComposition = closeComposition;
   closeComposition = function() {
     compositionDraft = [];
@@ -192,7 +203,7 @@ export function myDataOwnedFirstPageHtml(): string {
           <div id="composition-mode-controls" class="toolbar" style="margin-top:14px" aria-label="덱 편성 항목 범위">
             <span class="muted"><strong>편성 목록</strong></span>
             <button id="composition-mode-owned" class="button small" type="button" aria-pressed="true">내 보유만</button>
-            <button id="composition-mode-research" class="button secondary small" type="button" aria-pressed="false">전체 Registry · 연구용</button>
+            <button id="composition-mode-research" class="button secondary small" type="button">전체 Registry · 연구용</button>
           </div>
           <div id="composition-owned-warning" class="warning-line" hidden></div>
           ${COMPOSITION_SLOTS_MARKER}`;

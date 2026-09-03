@@ -16,7 +16,7 @@ function makeBaseContext(overrides:Record<string,unknown>={}) {
     document:{querySelector:(selector:string)=>nodes[selector]},
     owned:{generals:[],tactics:[],equipment:[],decks:[]}, registry:{generals:[],tactics:[]},
     ui:{compositionSlots:{querySelectorAll:()=>[],replaceChildren(){}},compositionPanel:{},compositionTitle:{}},
-    canonicalTactics:()=>[], closeComposition:()=>{}, openDeckComposition:async()=>{}, data:()=>({}), ensureGeneralRegistry:async()=>{}, ensureTacticRegistry:async()=>{},
+    canonicalTactics:()=>[], closeComposition:()=>{}, openDeckComposition:async()=>{}, loadAccountData:async()=>{}, data:()=>({}), ensureGeneralRegistry:async()=>{}, ensureTacticRegistry:async()=>{},
     element:()=>({dataset:{},appendChild(){},append(){}}), compositionSelect:()=>({addEventListener(){},options:[],value:''}), field:()=>({}), editingDeckId:'',activeAccountId:'', Set,Map,Array,Number,String,Boolean,
     ...overrides,
   } as any;
@@ -134,6 +134,11 @@ test('deck editor keeps disabled duplicate guards as a fallback for stale DOM st
 
 test('changing a composition control re-renders options from the captured draft', () => {
   assert.match(MY_DATA_OWNED_FIRST_SCRIPT,/function onCompositionControlChanged\(\) \{\s*captureCompositionDraft\(\);\s*renderOwnedFirstComposition\(\);\s*\}/);
+});
+
+test('owned data reload refreshes an open composition while preserving the current draft', () => {
+  assert.match(MY_DATA_OWNED_FIRST_SCRIPT,/const baseLoadAccountData = loadAccountData/);
+  assert.match(MY_DATA_OWNED_FIRST_SCRIPT,/refreshOpenComposition[\s\S]*captureCompositionDraft\(\)[\s\S]*await baseLoadAccountData\(accountId\)[\s\S]*renderOwnedFirstComposition\(\)/);
 });
 
 test('owned-first layer does not introduce raw token or low-level DATA access', () => {
