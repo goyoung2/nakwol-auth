@@ -16,6 +16,7 @@ on:
       - 'tsconfig.json'
       - 'wrangler.jsonc'
       - '.github/workflows/verify.yml'
+      - '.github/workflows/deploy.yml'
       - '.github/workflows/repository-governance.yml'
       - 'BRANCHING.md'
       - 'CODEX_HANDOFF.md'
@@ -58,5 +59,8 @@ jobs:
           grep -q "init --scopes roster:read,decks:read" src/connect-cli-distribution.ts
           grep -q "data describe --json" src/connect-cli-distribution.ts
           grep -q "data_openapi" src/connect-cli-distribution.ts
+          grep -q "Verify production AUTH and Connect v0.5 distribution" .github/workflows/deploy.yml
+          grep -q '"version":"0.5.0"' .github/workflows/deploy.yml
+          grep -q '"default_auth":"required"' .github/workflows/deploy.yml
           test -s src/assets/nakwol-connect-cli.tgz.b64.js.txt
           echo 'NAKWOL_CONNECT_V05_STATIC_CHECK_OK'
