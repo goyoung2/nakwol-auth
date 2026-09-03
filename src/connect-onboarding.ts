@@ -29,7 +29,7 @@ export function connectOnboardingPageHtml(): string {
 
   <section class="panel">
     <h2>가장 빠른 시작</h2>
-    <div class="step"><div class="num">1</div><div><strong>NAKWOL developer 권한을 먼저 받습니다.</strong><div class="muted">일반 맹원은 앱을 등록할 수 없습니다. 운영자가 Connect developer로 등록한 계정으로 최초 device authorization을 승인합니다.</div></div></div>
+    <div class="step"><div class="num">1</div><div><strong>NAKWOL developer 권한을 먼저 받습니다.</strong><div class="muted">NAKWOL 운영자는 /admin/developers에서 Discord 사용자 ID를 미리 허가할 수 있습니다. 대상자가 아직 NAKWOL에 로그인한 적이 없어도 되며 Discord 서버 역할과는 무관합니다. 첫 Connect CLI 승인 때 해당 Discord 계정과 자동 연결됩니다.</div></div></div>
     <div class="step"><div class="num">2</div><div><strong>프로젝트 루트에서 공식 CLI를 실행합니다.</strong><pre>npx --yes nakwol-connect init
 npx --yes nakwol-connect doctor --json</pre></div></div>
     <div class="step"><div class="num">3</div><div><strong>DATA도 필요하면 scope를 함께 선언합니다.</strong><pre>npx --yes nakwol-connect init --scopes roster:read,decks:read
