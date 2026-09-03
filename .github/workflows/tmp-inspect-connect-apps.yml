@@ -1,4 +1,4 @@
-name: TEMP Inspect NAKWOL Connect Apps
+name: TEMP Normalize External Connect Policies
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  normalize:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -25,57 +25,21 @@ jobs:
         run: npm install --legacy-peer-deps
       - name: Resolve production D1 binding
         run: node scripts/ensure-d1.mjs
-      - name: Inspect registered applications and access policies
+      - name: Normalize known external service policy
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute DB --remote --json --command "SELECT a.client_id,a.name,a.status,COALESCE(s.homepage_url,'') AS homepage_url,COALESCE(s.access_policy,'<missing>') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id=a.client_id ORDER BY a.client_id;" | tee /tmp/apps.json
-      - name: Inspect live external page auth modes
+          npx wrangler d1 execute DB --remote --command "UPDATE application_settings SET access_policy='member', updated_at=unixepoch()*1000 WHERE client_id='siege-calculator';"
+      - name: Verify all registered external service policies
+        shell: bash
         run: |
+          set -euo pipefail
+          npx wrangler d1 execute DB --remote --json --command "SELECT a.client_id,a.name,a.status,COALESCE(s.homepage_url,'') AS homepage_url,COALESCE(s.access_policy,'<missing>') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id=a.client_id WHERE a.client_id IN ('cloudflare-deploy-smoke-20260903','deploy','deploy-2','siege-calculator') ORDER BY a.client_id;" | tee /tmp/external-policies.json
           node - <<'NODE'
           const fs = require('fs');
-          const payload = JSON.parse(fs.readFileSync('/tmp/apps.json', 'utf8'));
-          const rows = payload.flatMap((item) => item.results || []);
-          const internal = new Set([
-            'nakwol-auth-selftest',
-            'nakwol-connect-admin',
-            'nakwol-connect-cli',
-            'nakwol-account-center',
-            'nakwol-auth-lab',
-            'nakwol-data-lab',
-            'nakwol-data-ops',
-            'nakwol-my-data',
-          ]);
-
-          (async () => {
-            for (const row of rows) {
-              if (internal.has(row.client_id) || !/^https?:\/\//.test(row.homepage_url || '')) continue;
-              console.log(`=== ${row.client_id} policy=${row.access_policy} url=${row.homepage_url} ===`);
-              try {
-                const response = await fetch(row.homepage_url, {
-                  redirect: 'follow',
-                  headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'NAKWOL-Connect-Audit/0.5' },
-                });
-                const html = await response.text();
-                console.log(`http=${response.status}`);
-                if (html.includes('nakwol-auth.sepsd21.workers.dev/connect/v1.js')) {
-                  console.log('integration=universal-connect');
-                  if (/data-auth\s*=\s*["']optional["']/i.test(html)) console.log('auth_mode=OPTIONAL');
-                  else if (/data-auth\s*=\s*["']required["']/i.test(html)) console.log('auth_mode=required-explicit');
-                  else console.log('auth_mode=required-default');
-                  const client = html.match(/data-client-id\s*=\s*["']([^"']+)["']/i)?.[1] || '<missing>';
-                  console.log(`page_client_id=${client}`);
-                } else if (/nakwol-auth[^"']*sdk\/v0\.[123]/i.test(html)) {
-                  console.log('integration=DIRECT_SDK_NO_CONNECT_GUARD');
-                } else {
-                  console.log('integration=CONNECT_NOT_FOUND_IN_HTML');
-                }
-              } catch (error) {
-                console.log(`fetch_error=${error instanceof Error ? error.message : String(error)}`);
-              }
-            }
-          })().catch((error) => {
-            console.error(error);
-            process.exitCode = 1;
-          });
+          const rows = JSON.parse(fs.readFileSync('/tmp/external-policies.json','utf8')).flatMap((x) => x.results || []);
+          if (rows.length !== 4) throw new Error(`expected 4 external registrations, got ${rows.length}`);
+          const bad = rows.filter((row) => row.access_policy !== 'member');
+          if (bad.length) throw new Error(`non-member policies remain: ${bad.map((row) => `${row.client_id}=${row.access_policy}`).join(', ')}`);
+          for (const row of rows) console.log(`EXTERNAL_POLICY_OK:${row.client_id}:member:${row.homepage_url}`);
           NODE
