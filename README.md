@@ -1,6 +1,51 @@
 # NAKWOL Platform Core
 
-낙월(落月) 서비스들의 중앙 인증·SSO와 공통 게임 데이터 기반입니다. AUTH와 DATA는 같은 저장소에서 계약을 함께 관리하지만 Worker, D1, migration, deployment lifecycle은 분리합니다.
+낙월(落月) 서비스들이 **로그인과 공통 게임 데이터를 같은 방식으로 재사용**할 수 있도록 만든 중앙 플랫폼입니다.
+
+새 서비스에서 Discord OAuth를 다시 구현하거나 각 프로젝트마다 별도 로그인 체계를 만들 필요 없이, **NAKWOL AUTH + NAKWOL Connect**를 붙여 사용합니다.
+
+- **NAKWOL AUTH** — Discord 기반 중앙 로그인/SSO, 앱별 access token, `/me`, Account Center
+- **NAKWOL Connect** — 새 프로젝트에 AUTH/DATA를 연결하는 공식 CLI 및 브라우저 integration layer
+- **NAKWOL DATA** — 장수·전법·장비·덱 등 낙월 서비스가 공유하는 사용자 게임 데이터
+
+## NAKWOL Connect로 새 서비스 연결하기
+
+가장 쉬운 시작점은 공개 안내 페이지입니다.
+
+**https://nakwol-auth.sepsd21.workers.dev/connect**
+
+NAKWOL Connect CLI의 실제 npm 패키지명은 **`nakwol-connect`**이며 현재 배포 버전은 **0.4.0**입니다.
+
+프로젝트 루트에서 다음처럼 직접 실행합니다.
+
+```bash
+npx --yes nakwol-connect init
+npx --yes nakwol-connect doctor --json
+```
+
+DATA도 함께 쓰는 경우 필요한 scope만 선언합니다.
+
+```bash
+npx --yes nakwol-connect init --scopes roster:read,decks:read
+npx --yes nakwol-connect data describe --json
+npx --yes nakwol-connect doctor --json
+```
+
+### 코딩 에이전트에게 그대로 줄 지시문
+
+```text
+이 프로젝트에 NAKWOL Connect 로그인을 붙여줘.
+NAKWOL Connect의 공식 CLI는 npm 패키지 `nakwol-connect`이고,
+프로젝트 루트에서 `npx --yes nakwol-connect ...` 형태로 실행한다.
+Discord OAuth를 직접 구현하지 말고 이 CLI가 생성·관리하는 AUTH 연동을 사용해.
+현재 서비스의 실제 production URL을 callback으로 등록하고 로그인/로그아웃/현재 사용자 표시까지 연결해.
+브라우저 코드나 저장소에는 Discord Client Secret, Cloudflare secret, Connect CLI token을 넣지 마.
+작업이 끝나면 `npx --yes nakwol-connect doctor --json`이 통과하는지 검증해.
+CLI 사용법이나 현재 DATA 계약이 더 필요하면 `npx --yes nakwol-connect --help`와
+`npx --yes nakwol-connect data describe --json`을 먼저 확인해.
+```
+
+이렇게 적어두면 코딩 에이전트가 `공식 CLI`라는 표현만 보고 별도 도구를 추측할 필요가 없습니다. **패키지 식별자, 실행 방법, 검증 명령**이 지시문 자체에 모두 들어 있습니다.
 
 ## 현재 구성
 
@@ -8,31 +53,18 @@
 
 - 현재 production runtime: **AUTH 0.2.0**
 - formal component release/tag: **`auth-v0.2.0` — released 2026-08-31**
-- formal release target stable SHA: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
-- final AUTH v0.2 deploy workflow: `33373705515` — success
-- final AUTH v0.2 Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
-- final production smoke workflow: `33373908231` — success
-- initial AUTH 0.2 production baseline remains historical evidence: stable `2ea002dca18cbb064be089167326cd311b315dd5`, deploy `33350989974`, Worker Version `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`, combined smoke `33351486056`
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
-- Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
-- Web SDK v0.2.0은 Compact Identity Menu를 추가합니다.
 - `/account`: 일반 사용자의 NAKWOL Account Center
-- `/lab`: 권한이 있는 운영자/개발자를 위한 안전한 Auth Lab
-- Auth Lab **V1–V12 release matrix는 completed** 상태이며, V8-B 실제 Discord 역할 변경만 외부 역할관리 권한 의존 항목으로 release **waiver**가 승인되었습니다. V8-A는 fresh membership refresh와 접근정책 변화를 자동 검증합니다.
-- `auth-v0.2.0` formal release 이후 `ops/release.json`은 다시 disabled neutral 상태로 disarm되었습니다.
+- `/lab`: 권한이 있는 운영자/개발자를 위한 Auth Lab
+- Web SDK v0.2.0은 Compact Identity Menu를 제공합니다.
 
 ### NAKWOL Connect
 
 - 현재 CLI/distribution: **Connect 0.4.0**
-- `nakwol-connect@0.4.0`은 npm에 게시된 상태입니다.
-- 앱 등록, AUTH/DATA 자동 연동, doctor, DATA OpenAPI discovery를 담당합니다.
-
-```bash
-npx nakwol-connect init
-npx nakwol-connect doctor --json
-npx nakwol-connect data describe --json
-```
+- npm package: **`nakwol-connect@0.4.0`**
+- 앱 등록/재사용, callback 등록, AUTH/DATA 자동 연동, doctor, DATA OpenAPI discovery를 담당합니다.
+- 최초 한 번은 브라우저에서 device authorization 승인이 필요할 수 있습니다.
 
 ### NAKWOL DATA
 
@@ -50,28 +82,13 @@ DATA scopes:
 - `equipment:read`, `equipment:write`
 - `decks:read`, `decks:write`
 
-## 현재 repository 상태
+## 보안 경계
 
-AUTH v0.2.0 release 후 release-control cleanup과 back-propagation까지 완료되었습니다.
-
-- `stable`: `5fa4a0365462519089ddeae1d49ff2de3c5d4452`
-- `main`: `598c05f371f328494c565a7f7d463ef09271320f`
-- `dev`: `4c4337a2ef8146b34f579d12773bf43c33464401`
-- 세 long-lived branch의 현재 tree SHA: `444fd9a5ec963d5970d560de90e3782314881fe7`
-
-커밋 SHA는 squash/promotion history 때문에 다르지만 현재 파일 트리는 동일합니다. 새 작업은 기본 브랜치 `dev`에서 `feature/*`, `fix/*`, `chore/*`, `docs/*` 브랜치를 만들어 진행합니다.
-
-## 다음 제품 작업
-
-AUTH v0.2.0 자체의 release blocker는 없습니다. 다음 제품 단계는 별도 작업으로 **`siege-calculator` Identity Menu / seamless SSO 연동**을 진행하는 것입니다. Account Center에서 새 탭으로 서비스를 열었을 때 목적지 앱의 `sessionStorage` token이 없는 경우 목적지 앱 PKCE를 자동 시작하고 기존 중앙 AUTH session을 재사용하는 흐름이 후속 UX 범위입니다.
-
-## 경계 원칙
-
+- 외부 서비스는 Discord Client Secret을 보유하지 않습니다.
+- Connect CLI token은 브라우저 코드나 프로젝트 저장소에 넣지 않습니다.
 - 앱은 AUTH/DATA 공개 API와 SDK만 사용하며 D1에 직접 접근하지 않습니다.
 - AUTH D1과 DATA D1은 분리합니다.
-- AUTH는 DATA scope를 추측하거나 복제하지 않습니다.
-- DATA Registry reseed는 UPSERT 중심이며 사용자 소유 데이터를 DELETE/TRUNCATE하지 않습니다.
+- DATA scope는 필요한 권한만 최소로 요청합니다.
 - 게임 규칙이나 장비 적용 가능성을 근거 없이 추론하지 않습니다.
-- production smoke는 D1 read-only 조회와 HTTP/패키지 실행 검증만 수행하며 테스트용 device request를 production에 생성하지 않습니다.
 
-상세 인증 계약은 [WEB_SDK.md](./WEB_SDK.md), DATA 구조는 [DATA.md](./DATA.md), Connect 운영은 [CONNECT.md](./CONNECT.md)를 참고합니다. 오래된 개별 문서의 버전 표기가 이 README 또는 실제 package/CI/production evidence와 충돌하면 현재 package/CI/production evidence를 우선 확인합니다.
+상세 인증 계약은 [WEB_SDK.md](./WEB_SDK.md), DATA 구조는 [DATA.md](./DATA.md), Connect 운영은 [CONNECT.md](./CONNECT.md)를 참고합니다.
