@@ -31,36 +31,51 @@ jobs:
           set -euo pipefail
           npx wrangler d1 execute DB --remote --json --command "SELECT a.client_id,a.name,a.status,COALESCE(s.homepage_url,'') AS homepage_url,COALESCE(s.access_policy,'<missing>') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id=a.client_id ORDER BY a.client_id;" | tee /tmp/apps.json
       - name: Inspect live external page auth modes
-        shell: bash
         run: |
-          set -euo pipefail
-          node - <<'NODE' > /tmp/external.tsv
+          node - <<'NODE'
           const fs = require('fs');
-          const payload = JSON.parse(fs.readFileSync('/tmp/apps.json','utf8'));
-          const rows = payload.flatMap(x => x.results || []);
-          const internal = new Set(['nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','nakwol-account-center','nakwol-auth-lab','nakwol-data-lab','nakwol-data-ops','nakwol-my-data']);
-          for (const row of rows) {
-            if (internal.has(row.client_id) || !/^https?:\/\//.test(row.homepage_url || '')) continue;
-            process.stdout.write(`${row.client_id}\t${row.access_policy}\t${row.homepage_url}\n`);
-          }
+          const payload = JSON.parse(fs.readFileSync('/tmp/apps.json', 'utf8'));
+          const rows = payload.flatMap((item) => item.results || []);
+          const internal = new Set([
+            'nakwol-auth-selftest',
+            'nakwol-connect-admin',
+            'nakwol-connect-cli',
+            'nakwol-account-center',
+            'nakwol-auth-lab',
+            'nakwol-data-lab',
+            'nakwol-data-ops',
+            'nakwol-my-data',
+          ]);
+
+          (async () => {
+            for (const row of rows) {
+              if (internal.has(row.client_id) || !/^https?:\/\//.test(row.homepage_url || '')) continue;
+              console.log(`=== ${row.client_id} policy=${row.access_policy} url=${row.homepage_url} ===`);
+              try {
+                const response = await fetch(row.homepage_url, {
+                  redirect: 'follow',
+                  headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'NAKWOL-Connect-Audit/0.5' },
+                });
+                const html = await response.text();
+                console.log(`http=${response.status}`);
+                if (html.includes('nakwol-auth.sepsd21.workers.dev/connect/v1.js')) {
+                  console.log('integration=universal-connect');
+                  if (/data-auth\s*=\s*["']optional["']/i.test(html)) console.log('auth_mode=OPTIONAL');
+                  else if (/data-auth\s*=\s*["']required["']/i.test(html)) console.log('auth_mode=required-explicit');
+                  else console.log('auth_mode=required-default');
+                  const client = html.match(/data-client-id\s*=\s*["']([^"']+)["']/i)?.[1] || '<missing>';
+                  console.log(`page_client_id=${client}`);
+                } else if (/nakwol-auth[^"']*sdk\/v0\.[123]/i.test(html)) {
+                  console.log('integration=DIRECT_SDK_NO_CONNECT_GUARD');
+                } else {
+                  console.log('integration=CONNECT_NOT_FOUND_IN_HTML');
+                }
+              } catch (error) {
+                console.log(`fetch_error=${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+          });
           NODE
-          while IFS=$'\t' read -r client policy url; do
-            echo "=== $client policy=$policy url=$url ==="
-            status=$(curl -sSL -H 'Cache-Control: no-cache' -o /tmp/page.html -w '%{http_code}' "$url" || true)
-            echo "http=$status"
-            if grep -q 'nakwol-auth.sepsd21.workers.dev/connect/v1.js' /tmp/page.html; then
-              echo 'integration=universal-connect'
-              if grep -Eq 'data-auth=["'"']optional["'"']' /tmp/page.html; then
-                echo 'auth_mode=OPTIONAL'
-              elif grep -Eq 'data-auth=["'"']required["'"']' /tmp/page.html; then
-                echo 'auth_mode=required-explicit'
-              else
-                echo 'auth_mode=required-default'
-              fi
-            elif grep -Eq 'nakwol-auth.*sdk/v0\.[123]' /tmp/page.html; then
-              echo 'integration=DIRECT_SDK_NO_CONNECT_GUARD'
-            else
-              echo 'integration=CONNECT_NOT_FOUND_IN_HTML'
-            fi
-            grep -oE 'data-client-id=["'"'][^"'"']+["'"']' /tmp/page.html | head -1 || true
-          done < /tmp/external.tsv
