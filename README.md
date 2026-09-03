@@ -145,6 +145,19 @@ NAKWOL 운영자는 `https://nakwol-auth.sepsd21.workers.dev/admin/developers`�
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, 중앙 SSO를 담당합니다.
 
+#### AUTH 0.2 formal release provenance
+
+아래 값은 현재 Connect 0.5 안내와 별개로 보존하는 **AUTH 0.2.0 정식 릴리스 증거**입니다.
+
+- formal component release/tag: **`auth-v0.2.0` — released 2026-08-31**
+- formal release target stable SHA: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
+- final AUTH v0.2 deploy workflow: `33373705515` — success
+- final AUTH v0.2 Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- final production smoke workflow: `33373908231` — success
+- 당시 cross-component compatibility baseline: **Connect 0.4.0**, **DATA 0.9.0**
+- Auth Lab **V1–V12 release matrix: completed**
+- V8-B 실제 Discord 역할 변경 검증은 외부 역할관리 권한 의존 항목으로 release **waiver**가 승인됨
+
 ### NAKWOL Connect
 
 - CLI/distribution: **Connect 0.5.0**
