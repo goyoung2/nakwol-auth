@@ -41,10 +41,14 @@ npx --yes nakwol-connect doctor --json</pre></div></div>
   <section class="panel">
     <h2>코딩 에이전트에게 그대로 주는 지시문</h2>
     <pre>이 프로젝트에 NAKWOL Connect 로그인을 붙여줘.
-Discord OAuth를 직접 구현하지 말고 공식 nakwol-connect CLI를 사용해.
+NAKWOL Connect의 공식 CLI는 npm 패키지 `nakwol-connect`이고,
+프로젝트 루트에서 `npx --yes nakwol-connect ...` 형태로 실행한다.
+Discord OAuth를 직접 구현하지 말고 이 CLI가 생성·관리하는 AUTH 연동을 사용해.
 현재 서비스의 실제 production URL을 callback으로 등록하고 로그인/로그아웃/현재 사용자 표시까지 연결해.
-브라우저에는 Discord secret, Cloudflare secret, CLI token을 넣지 마.
-nakwol-connect doctor --json이 통과할 때까지 검증해.</pre>
+브라우저 코드나 저장소에는 Discord Client Secret, Cloudflare secret, Connect CLI token을 넣지 마.
+작업이 끝나면 `npx --yes nakwol-connect doctor --json`이 통과하는지 검증해.
+CLI 사용법이나 현재 DATA 계약이 더 필요하면 `npx --yes nakwol-connect --help`와
+`npx --yes nakwol-connect data describe --json`을 먼저 확인해.</pre>
     <p class="muted">DATA가 필요하면 마지막에 “decks:read와 roster:read도 사용해”처럼 필요한 scope만 추가하면 됩니다.</p>
   </section>
 
