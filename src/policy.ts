@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { getUserWithMembership } from './store';
 import { getAuthLabPrivilege } from './platform-access';
 
-export const NAKWOL_CONNECT_POLICY_VERSION = '0.1.0';
+export const NAKWOL_CONNECT_POLICY_VERSION = '0.2.0';
 export type ApplicationAccessPolicy = 'public' | 'member' | 'admin' | 'lab';
 
 export async function getApplicationAccessPolicy(env: Env, clientId: string): Promise<ApplicationAccessPolicy> {
@@ -10,8 +10,16 @@ export async function getApplicationAccessPolicy(env: Env, clientId: string): Pr
     `SELECT access_policy FROM application_settings WHERE client_id = ?`
   ).bind(clientId).first<{ access_policy: string }>();
 
-  if (row?.access_policy === 'member' || row?.access_policy === 'admin' || row?.access_policy === 'lab') return row.access_policy;
-  return 'public';
+  if (
+    row?.access_policy === 'public' ||
+    row?.access_policy === 'member' ||
+    row?.access_policy === 'admin' ||
+    row?.access_policy === 'lab'
+  ) return row.access_policy;
+
+  // Fail closed: a missing or malformed application setting must never make
+  // a NAKWOL service public. Explicit `public` remains supported above.
+  return 'member';
 }
 
 export async function isPlatformAdmin(env: Env, userId: string): Promise<boolean> {
