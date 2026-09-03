@@ -9,6 +9,7 @@
   const redirectUri = script.dataset.redirectUri || `${location.origin}${location.pathname}`;
   const uiMode = script.dataset.ui || 'widget';
   const globalLogout = script.dataset.globalLogout === 'true';
+  const autoSso = script.dataset.autoSso !== 'false';
 
   if (!clientId) { console.error('[NAKWOL Connect] data-client-id is required.'); return; }
   const guardKey = `__NAKWOL_CONNECT_${clientId}`;
@@ -18,8 +19,8 @@
 
   const start = async () => {
     try {
-      const sdk = await import(`${authOrigin}/sdk/v0.2.0/nakwol-auth-web.js`);
-      const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin });
+      const sdk = await import(`${authOrigin}/sdk/v0.3.0/nakwol-auth-web.js`);
+      const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin, autoSso });
 
       class NakwolDataError extends Error {
         constructor(code, message, status = 0, payload = null) { super(message || code); this.name = 'NakwolDataError'; this.code = code; this.status = status; this.payload = payload; }
@@ -110,7 +111,7 @@
         },
       };
       const api = {
-        version: '1.2.0', clientId, redirectUri, authOrigin, client, data, user: null,
+        version: '1.2.0', clientId, redirectUri, authOrigin, autoSso, client, data, user: null,
         login: () => client.login(), logout: (options = {}) => client.logout(options), getMe: () => client.getMe(),
         isAuthenticated: () => client.isAuthenticated(), isMember: () => client.isMember(),
       };
