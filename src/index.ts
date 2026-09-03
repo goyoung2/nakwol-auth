@@ -88,10 +88,14 @@ app.get('/authorize', async (c) => {
   const codeChallenge = c.req.query('code_challenge') ?? '';
   const method = c.req.query('code_challenge_method') ?? '';
   const clientState = c.req.query('state') ?? null;
+  const prompt = c.req.query('prompt') ?? '';
 
   if (responseType !== 'code') return jsonError(c, 400, 'UNSUPPORTED_RESPONSE_TYPE', 'response_type=code만 지원합니다.');
   if (!clientId || !redirectUri || !codeChallenge || method !== 'S256') {
     return jsonError(c, 400, 'INVALID_AUTHORIZE_REQUEST', 'client_id, redirect_uri, PKCE(S256)가 필요합니다.');
+  }
+  if (prompt && prompt !== 'none') {
+    return jsonError(c, 400, 'UNSUPPORTED_PROMPT', 'prompt는 none만 지원합니다.');
   }
 
   const application = await getApplication(c.env, clientId);
@@ -107,8 +111,12 @@ app.get('/authorize', async (c) => {
       return c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
     }
     const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
-    await logAuthEvent(c.env, 'authorize.sso', sessionUserId, clientId);
+    await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
     return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
+  }
+
+  if (prompt === 'none') {
+    return c.redirect(redirectWithParams(redirectUri, { error: 'login_required', state: clientState }), 302);
   }
 
   const requestId = `req_${randomToken(18)}`;
