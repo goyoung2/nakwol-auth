@@ -31,6 +31,16 @@ npx --yes nakwol-connect data describe --json
 npx --yes nakwol-connect doctor --json
 ```
 
+### 개발자 권한 사전 등록
+
+NAKWOL 운영자는 `/admin/developers`에서 **Discord 사용자 ID**를 기준으로 Connect 개발자 권한을 미리 등록할 수 있습니다.
+
+- 대상자가 아직 NAKWOL에 로그인한 적이 없어도 등록할 수 있습니다.
+- Discord 서버 역할이나 서버 관리자 권한과는 관계가 없습니다.
+- 대상자가 같은 Discord 계정으로 처음 Connect CLI 승인을 하면 사전 권한이 NAKWOL 사용자와 자동 연결됩니다.
+- `developer`는 자기 앱을 생성·관리할 수 있고, `operator`는 Connect의 전체 앱을 관리할 수 있습니다.
+- NAKWOL 플랫폼 전체 관리자(`auth_operators`) 권한은 Connect operator와 별도입니다.
+
 ### 코딩 에이전트에게 그대로 줄 지시문
 
 ```text
@@ -45,7 +55,7 @@ CLI 사용법이나 현재 DATA 계약이 더 필요하면 `npx --yes nakwol-con
 `npx --yes nakwol-connect data describe --json`을 먼저 확인해.
 ```
 
-이렇게 적어두면 코딩 에이전트가 `공식 CLI`라는 표현만 보고 별도 도구를 추측할 필요가 없습니다. **패키지 식별자, 실행 방법, 검증 명령**이 지시문 자체에 모두 들어 있습니다.
+이 지시문에는 패키지 식별자, 실행 방법, 검증 명령이 모두 들어 있어 코딩 에이전트가 별도 도구를 추측할 필요가 없습니다.
 
 ## 현재 구성
 
@@ -53,11 +63,19 @@ CLI 사용법이나 현재 DATA 계약이 더 필요하면 `npx --yes nakwol-con
 
 - 현재 production runtime: **AUTH 0.2.0**
 - formal component release/tag: **`auth-v0.2.0` — released 2026-08-31**
+- formal release target stable SHA: `154baf448ee45a7b2bcf6e320f09a65866e1f8af`
+- final AUTH v0.2 deploy workflow: `33373705515` — success
+- final AUTH v0.2 Worker Version ID: `b3540665-6d2a-4f85-a61f-4dbfb8837cad`
+- final production smoke workflow: `33373908231` — success
+- initial AUTH 0.2 production baseline remains historical evidence: stable `2ea002dca18cbb064be089167326cd311b315dd5`, deploy `33350989974`, Worker Version `f6160a7a-e886-4d3b-a7fe-cb63c1bfc5a4`, combined smoke `33351486056`
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, SSO, Web SDK를 담당합니다.
+- Web SDK v0.1.0 pinned URL은 immutable로 유지됩니다.
+- Web SDK v0.2.0은 Compact Identity Menu를 제공합니다.
 - `/account`: 일반 사용자의 NAKWOL Account Center
 - `/lab`: 권한이 있는 운영자/개발자를 위한 Auth Lab
-- Web SDK v0.2.0은 Compact Identity Menu를 제공합니다.
+- Auth Lab **V1–V12 release matrix는 completed** 상태이며, V8-B 실제 Discord 역할 변경만 외부 역할관리 권한 의존 항목으로 release **waiver**가 승인되었습니다.
+- `auth-v0.2.0` formal release 이후 `ops/release.json`은 disabled neutral 상태로 disarm되었습니다.
 
 ### NAKWOL Connect
 
