@@ -8,6 +8,7 @@ import {
   denyDeviceGrant,
   exchangeDeviceGrant,
 } from './connect-cli-store';
+import { ensureDiscordDeveloperPregrantForUser } from './connect-developer-pregrants';
 import type { Env } from './types';
 
 const DEVICE_CLIENT_ID = 'nakwol-connect-cli';
@@ -96,6 +97,12 @@ export function registerConnectCliRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post('/connect/cli/device/approve', async (c) => {
     const userId = await browserUserId(c);
     if (!userId) return c.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'NAKWOL ID 로그인이 필요합니다.' } }, 401);
+
+    const pregrantRole = await ensureDiscordDeveloperPregrantForUser(c.env, userId);
+    if (pregrantRole) {
+      await logAuthEvent(c.env, 'connect.developer.pregrant.materialized', userId, DEVICE_CLIENT_ID, { role: pregrantRole });
+    }
+
     const body: { user_code?: string } = await c.req.json<{ user_code?: string }>().catch(() => ({} as { user_code?: string }));
     const userCode = String(body.user_code || '').trim().toUpperCase();
     if (!userCode) return c.json({ ok: false, error: { code: 'USER_CODE_REQUIRED', message: '승인 코드가 필요합니다.' } }, 400);
