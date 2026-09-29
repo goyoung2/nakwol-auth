@@ -107,13 +107,14 @@ export class NakwolAuthClient extends EventTarget {
     history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   }
 
-  async login() {
+  async login(options = {}) {
     const verifier = randomValue(48);
     const state = randomValue(24);
     const challenge = await sha256Base64Url(verifier);
     this.storage.setItem(this.key('transaction'), JSON.stringify({ verifier, state, createdAt: Date.now() }));
 
     const url = new URL(`${this.authOrigin}/authorize`);
+    if (options.reauthenticate === true) url.searchParams.set('prompt', 'login');
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', this.clientId);
     url.searchParams.set('redirect_uri', this.redirectUri);

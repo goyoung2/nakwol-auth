@@ -123,3 +123,20 @@ never authorize users; all deployment summaries remain informational.
 공식 어댑터는 Workers, Pages, Vercel static이며 동일 공통 게이트 소스를 사용합니다. Vercel은 모든 경로를 matcher에 포함하고 기존 라우팅 설정을 덮어쓰지 않습니다. Next/SSR 자동 설치는 미지원입니다. AUTH origin은 정규화하며 SDK 실패 시 동작하는 재시도·계정 복구 수단을 제공합니다.
 
 `protect manifest`와 `verify --manifest --origins-file --session-cookie-env`는 빌드 경로·크기·SHA256, 배포 ID, runtime을 묶습니다. bounded body와 canary/hash, 원주소 캐시/304, 정상 인증 파일을 검사합니다. 단순 익명 차단(ok)과 출시 증명(releaseAccepted)을 분리합니다. 기존 헤더 검사 보고서는 자동 롤백 승인의 근거로 쓰지 않으며 재검증해야 합니다. 세부 계약은 [보호 증거 안내](../../docs/PROTECTION_EVIDENCE.md)를 따릅니다.
+
+## 0.9.0 동적 권한 정책 계약
+
+공통 게이트는 `/me`에 `X-Nakwol-Capabilities: policy-v1`을 보내고, 응답의
+`authorization_policy`에서 schemaVersion, accessPolicy, policyVersion, leaseSeconds,
+authorizationEvidenceValidUntil을 검사한다. lease는 60~300초이며 토큰 만료와
+실제로 사용한 승인 증거의 만료를 넘을 수 없다. 잘못된 정책은 세션을 발급하지 않는다.
+정책 필드가 없는 기존 AUTH 응답은 기존 설치 정책으로 검증한다.
+
+유효 lease에서는 쿠키의 암호학적 검증 후 자산을 제공하며 중앙 정책 저장소나 `/me`를
+조회하지 않는다. 저장된 정책 변경은 다음 재검증 때 반영되므로 현재 lease가 남아 있으면
+최대 5분 지연될 수 있다. 0.7.x/0.8.x에 동적 정책 적용을 주장하지 않는다.
+이미 설치된 사이트는 패키지 업데이트와 재빌드·배포가 필요하다.
+
+현재 사이트 쿠키는 기존 토큰 만료(최대 1시간)에 묶인다. 관리 화면의 session idle/absolute
+저장 계약은 준비되었지만, 긴 세션 지속 및 자동 갱신은 T06 구현 전까지 지원하지 않는다.
+정책 저장·전파 대기·실제 배포 관측은 별개의 상태다. pending outbox는 적용 완료가 아니다.

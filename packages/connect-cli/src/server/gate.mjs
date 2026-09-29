@@ -1,6 +1,6 @@
 import { loginPage } from './login.mjs';
 
-export const RUNTIME_VERSION = '0.8.0';
+export const RUNTIME_VERSION = '0.9.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -55,7 +55,7 @@ async function verify(token, settings) {
     const url = new URL('/me', settings.authOrigin);
     url.searchParams.set('client_id', settings.clientId);
     const result = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
+      headers: { Authorization: `Bearer ${token}`, 'X-Nakwol-Capabilities':'policy-v1', ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
       cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(7000),
     });
     if (result.status !== 200) return { status: [401, 403].includes(result.status) ? result.status : 503 };
@@ -65,15 +65,21 @@ async function verify(token, settings) {
       || !['policy', 'manual_grant'].includes(body.application_access.source)) return { status: 403 };
     const manualGrant = body.application_access?.client_id === settings.clientId
       && body.application_access?.allowed === true && body.application_access?.source === 'manual_grant';
-    if (settings.accessPolicy === 'member' && body.data?.membership?.is_member !== true && !manualGrant) return { status: 403 };
+    if (!body.authorization_policy && settings.accessPolicy === 'member' && body.data?.membership?.is_member !== true && !manualGrant) return { status: 403 };
     if (!Number.isFinite(body.expires_at) || body.expires_at <= Date.now()) return { status: 401 };
-    const leaseUntil = Math.min(body.expires_at, verifiedAt + AUTHORIZATION_LEASE_MS);
+    const policy = body.authorization_policy;
+    let leaseMs=AUTHORIZATION_LEASE_MS, evidenceUntil=body.expires_at;
+    if (policy !== undefined) {
+      if (policy?.schemaVersion !== 1 || !['member','guest','admin','lab'].includes(policy.accessPolicy) || !Number.isSafeInteger(policy.policyVersion) || policy.policyVersion < 0 || !Number.isInteger(policy.leaseSeconds) || policy.leaseSeconds < 60 || policy.leaseSeconds > 300 || !Number.isFinite(policy.authorizationEvidenceValidUntil)) return {status:503};
+      leaseMs=policy.leaseSeconds*1000; evidenceUntil=policy.authorizationEvidenceValidUntil;
+    }
+    const leaseUntil = Math.min(body.expires_at, verifiedAt + leaseMs, evidenceUntil);
     if (leaseUntil <= Date.now()) return { status: 503 };
     return { status: 200, expires: body.expires_at, authorization: {
       clientId: settings.clientId, siteOrigin: new URL(settings.siteUrl).origin,
       authOrigin: settings.authOrigin, accessPolicy: settings.accessPolicy,
       userId: body.data.id, allowed: true, source: body.application_access.source,
-      verifiedAt, leaseUntil,
+      verifiedAt, leaseUntil, ...(policy ? {policyVersion:policy.policyVersion, authorizationEvidenceValidUntil:evidenceUntil} : {}),
     } };
   } catch { return { status: 503 }; } // AUTH outages fail closed at the request boundary.
 }

@@ -16,7 +16,7 @@ test('operator support actions use real D1 and preserve service and identity bou
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_policy_settings.sql']) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
   }
@@ -47,6 +47,15 @@ test('operator support actions use real D1 and preserve service and identity bou
       method: 'POST', headers: { Authorization: 'Bearer operator', Origin: 'https://other.test' },
       body: JSON.stringify({ action: 'grant', discord_user_id: discordId, reason: 'fixture' }),
     }, env)).status, 403);
+  });
+  await t.test('manual grants require a finite bounded expiry', async () => {
+    for (const expiry of [null, 'tomorrow', Date.now() + 1000, Date.now() + 8 * 24 * 60 * 60 * 1000]) {
+      const response = await app.request('https://auth.test/admin/api/access/site', {
+        method: 'POST', headers: { Authorization: 'Bearer operator', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'grant', discord_user_id: discordId, reason: 'fixture', expires_at: expiry }),
+      }, env);
+      assert.equal(response.status, 400);
+    }
   });
   await t.test('pregrant only links after verified Discord identity and never alters membership', async () => {
     assert.equal((await request('grant')).status, 200);

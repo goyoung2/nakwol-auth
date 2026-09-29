@@ -66,6 +66,11 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     const target = await c.env.DB.prepare(`SELECT user_id FROM auth_identities WHERE provider = 'discord' AND provider_user_id = ?`)
       .bind(body.discord_user_id).first<{ user_id: string }>();
     const now = Date.now();
+    const expiresAt = 'expires_at' in body ? body.expires_at : now + 60 * 60 * 1000;
+    if (body.action === 'grant' && (typeof expiresAt !== 'number' || !Number.isSafeInteger(expiresAt)
+      || expiresAt < now + 5 * 60 * 1000 || expiresAt > now + 7 * 24 * 60 * 60 * 1000)) {
+      return c.json({ error: { message: '수동 허가 만료는 현재부터 5분 이상 7일 이하여야 합니다.' } }, 400);
+    }
     const statements: D1PreparedStatement[] = [];
     if (body.action === 'reauthenticate') {
       if (!target) return c.json({ error: { message: '아직 로그인한 적 없는 사용자입니다. 수동 허가는 미리 등록할 수 있습니다.' } }, 404);
@@ -79,10 +84,10 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, target.user_id),
       );
     } else {
-      statements.push(c.env.DB.prepare(`INSERT INTO application_access_grants(client_id, discord_user_id, status, reason, updated_by, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, discord_user_id) DO UPDATE SET
-        status=excluded.status, reason=excluded.reason, updated_by=excluded.updated_by, updated_at=excluded.updated_at`)
-        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', body.reason.trim(), actor, now));
+      statements.push(c.env.DB.prepare(`INSERT INTO application_access_grants(client_id, discord_user_id, status, reason, updated_by, updated_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, discord_user_id) DO UPDATE SET
+        status=excluded.status, reason=excluded.reason, updated_by=excluded.updated_by, updated_at=excluded.updated_at, expires_at=excluded.expires_at`)
+        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', body.reason.trim(), actor, now, body.action === 'grant' ? expiresAt : null));
       if (target && body.action === 'revoke') statements.push(
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`).bind(now, target.user_id, clientId),
         c.env.DB.prepare(`DELETE FROM auth_codes WHERE user_id = ? AND client_id = ?`).bind(target.user_id, clientId),
@@ -90,7 +95,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     statements.push(c.env.DB.prepare(`INSERT INTO auth_events(id, user_id, client_id, event_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(`evt_${randomToken(10)}`, target?.user_id ?? null, clientId, `admin.access.${body.action}`,
-        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim() }), now));
+        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), ...(body.action === 'grant' ? { expires_at: expiresAt } : {}) }), now));
     await c.env.DB.batch(statements);
     return c.json({ ok: true, message: body.action === 'reauthenticate'
       ? '모든 서비스의 기존 AUTH 토큰을 회수했습니다. 다음 접속 시 Discord 재인증이 필요합니다.'

@@ -1,3 +1,7 @@
+import { registerServiceManagementRoutes } from './service-management-routes';
+import { registerAuthPolicyAdminRoutes } from './auth-policy-admin';
+import { serviceManagementPage } from './service-management-page';
+import serviceManagementSource from './assets/nakwol-service-management.js.txt';
 import { registerGateReportRoutes } from './gate-reports';
 import { registerAccessSupportRoutes } from './access-support';
 import app from './index';
@@ -11,6 +15,10 @@ import { registerAccountRoutes } from './account';
 import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 
+registerServiceManagementRoutes(app);
+registerAuthPolicyAdminRoutes(app);
+app.get('/developer/apps', c => c.html(serviceManagementPage(),200,{'Cache-Control':'no-store'}));
+app.get('/developer/service-management.js', c => c.text(serviceManagementSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
 registerGateReportRoutes(app);
 registerAccessSupportRoutes(app);
 registerSdkRoutes(app);

@@ -43,14 +43,7 @@ function jsResponse(source: string, cacheControl = 'public, max-age=300'): Respo
   });
 }
 
-function adminPage(): string {
-  return `<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NAKWOL Connect</title>
-  <style>
+export function connectSharedStyles(): string { return `
     :root{font-family:Inter,Pretendard,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e5e7eb;background:#080c14;--panel:#111827;--panel2:#0c1321;--line:#263244;--muted:#94a3b8;--accent:#818cf8;--ok:#86efac;--bad:#fca5a5}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 10% 0%,#182038 0,#080c14 38%);color:#e5e7eb}button,input,textarea,select{font:inherit}button{cursor:pointer}
     header{height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(8,12,20,.82);backdrop-filter:blur(16px);position:sticky;top:0;z-index:10}.brand{display:flex;gap:14px;align-items:center}.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#4f46e5;font-weight:900}.brand b{font-size:18px}.brand small{display:block;color:var(--muted);margin-top:2px}
@@ -61,7 +54,16 @@ function adminPage(): string {
     .content{display:flex;flex-direction:column;gap:16px}.content-card{padding:20px}.content-card h2,.content-card h3{margin-top:0}.content-card h3{font-size:15px;margin-bottom:14px}.detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.detail-head h2{margin:0;font-size:21px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:#cbd5e1;font-weight:700}.field input,.field textarea,.field select{width:100%;border:1px solid #334155;background:#0b1220;color:#f8fafc;border-radius:10px;padding:10px 11px;outline:none}.field textarea{min-height:88px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus{border-color:#6366f1}.field small{color:var(--muted);font-size:11px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
     .guide-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.guide-step{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:6px}.guide-step span{font-size:12px;color:var(--muted);line-height:1.45}.code-wrap{position:relative;margin:10px 0}.code{margin:0;background:#050912;border:1px solid #202c3f;border-radius:11px;padding:14px 70px 14px 14px;color:#c7d2fe;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.code-wrap .copy{position:absolute;top:8px;right:8px}.muted{color:var(--muted);font-size:13px}.diag-row{display:grid;grid-template-columns:22px 145px 1fr;gap:7px;align-items:center;border-bottom:1px solid #1f2937;padding:9px 0}.diag-ok{color:var(--ok);font-weight:900}.diag-bad{color:var(--bad);font-weight:900}.diag-detail{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.event-row{padding:9px 0;border-bottom:1px solid #1f2937}.event-top{display:flex;justify-content:space-between;gap:10px}.event-top time{font-size:11px;color:var(--muted)}.event-row code{display:block;color:#94a3b8;font-size:11px;margin-top:4px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.error-text{color:var(--bad)}#toast{position:fixed;right:20px;bottom:20px;background:#172033;border:1px solid #334155;border-radius:12px;padding:12px 15px;box-shadow:0 15px 50px rgba(0,0,0,.35);z-index:30}#toast[data-bad="true"]{border-color:#7f1d1d;color:#fecaca}
     @media(max-width:900px){header{padding:0 14px}.workspace{grid-template-columns:1fr}.sidebar{min-height:auto}.app-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid,.guide-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.auth-copy{display:none}}@media(max-width:560px){main{padding:12px}.app-list{grid-template-columns:1fr}.brand small{display:none}.diag-row{grid-template-columns:22px 1fr}.diag-detail{grid-column:2}}
-  </style>
+  `; }
+
+function adminPage(): string {
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NAKWOL Connect</title>
+  <style>${connectSharedStyles()}</style>
 </head>
 <body>
 <header>
@@ -87,7 +89,7 @@ function adminPage(): string {
             <div class="field full"><label>서비스 주소</label><input name="homepage_url" required type="url" placeholder="https://example.pages.dev/"></div>
             <div class="field full"><label>Redirect URI</label><textarea name="redirect_uris" required placeholder="https://example.pages.dev/\nhttps://preview.example.dev/"></textarea><small>한 줄에 하나. 로그인 후 돌아올 정확한 URL입니다.</small></div>
             <div class="field"><label>개발 환경</label><select name="framework"><option value="vite">Vite</option><option value="react">React</option><option value="vue">Vue</option><option value="cra">Create React App</option><option value="next_app">Next.js App Router</option><option value="next_pages">Next.js Pages Router</option><option value="sveltekit">SvelteKit</option><option value="html">일반 HTML</option><option value="other">기타</option></select></div>
-            <div class="field"><label>접근 정책</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
+            <div class="field"><label>접근 정책 · 기존 앱은 <a href="/developer/apps">정책 관리</a>에서 변경</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
             <div class="field"><label>상태</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select></div>
           </div>
           <div class="actions"><button id="reset-app" class="ghost" type="button">되돌리기</button><button id="save-app" class="primary" type="submit">저장</button></div>
@@ -133,7 +135,7 @@ async function adminIdentity(c: Context<{ Bindings: Env }>): Promise<AdminIdenti
     user,
     operatorRole: operator?.role ?? null,
     operatorCount: Number(count?.count ?? 0),
-    canManage: Boolean(operator) || user.membership?.role === 'admin',
+    canManage: Boolean(operator) && user.status === 'active',
   };
 }
 
@@ -295,6 +297,7 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     const normalized = normalizeAppInput(raw, clientId);
     if (!normalized.value) return c.json({ ok: false, error: { code: 'INVALID_APP', message: normalized.error } }, 400);
     const v = normalized.value;
+    if (v.accessPolicy !== existing.access_policy) return c.json({ok:false,error:{code:'POLICY_WORKFLOW_REQUIRED',message:'접근 정책은 정책 관리 화면에서 영향 확인과 사유를 남겨 변경하세요.'}},409);
     const now = Date.now();
     await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, status = ?, updated_at = ? WHERE client_id = ?`)
@@ -305,11 +308,10 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
          ON CONFLICT(client_id) DO UPDATE SET
            homepage_url = excluded.homepage_url,
            framework = excluded.framework,
-           access_policy = excluded.access_policy,
            updated_at = excluded.updated_at`
       ).bind(clientId, v.homepageUrl, v.framework, v.accessPolicy, existing.owner_user_id || identity.userId, existing.created_at || now, now),
     ]);
-    await logAuthEvent(c.env, 'connect.app.updated', identity.userId, clientId, { framework: v.framework, access_policy: v.accessPolicy, status: v.status });
+    await logAuthEvent(c.env, 'connect.app.updated', identity.userId, clientId, { framework: v.framework, status: v.status });
     return c.json({ ok: true, data: await readApp(c.env, clientId) });
   });
 

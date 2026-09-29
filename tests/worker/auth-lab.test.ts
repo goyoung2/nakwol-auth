@@ -70,7 +70,7 @@ test('access-token inspection validates client binding and returns metadata with
   assert.match(source, /row\.client_id\s*!==\s*clientId/);
   assert.match(source, /userId:\s*row\.user_id/);
   assert.match(source, /clientId:\s*row\.client_id/);
-  assert.match(source, /expiresAt:\s*Number\(row\.expires_at\)/);
+  assert.match(source, /expiresAt, createdAt:\s*Number\(row\.created_at\)/);
 });
 
 test('Lab diagnostics endpoint requires a Lab-bound token, privilege, and reports only same-user central session state', async () => {

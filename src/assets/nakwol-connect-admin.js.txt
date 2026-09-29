@@ -180,7 +180,7 @@ function getFormData() {
     homepage_url: String(fd.get('homepage_url') || '').trim(),
     redirect_uris: String(fd.get('redirect_uris') || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
     framework: String(fd.get('framework') || 'other'),
-    access_policy: String(fd.get('access_policy') || 'member'),
+    access_policy: String(ui.form.elements.namedItem('access_policy').value || 'member'),
     status: String(fd.get('status') || 'active'),
   };
 }
@@ -192,6 +192,7 @@ function fillForm(app) {
   setField('redirect_uris', (app?.redirect_uris || []).join('\n'));
   setField('framework', app?.framework || 'other');
   setField('access_policy', app?.access_policy || 'member');
+  ui.form.elements.namedItem('access_policy').disabled = Boolean(app && !state.creating);
   setField('status', app?.status || 'active');
   const clientField = ui.form.elements.namedItem('client_id');
   clientField.readOnly = Boolean(app && !state.creating);
@@ -465,6 +466,8 @@ ui.refreshEvents.addEventListener('click', () => loadEvents().catch((error) => r
       renderGate();
       return;
     }
+    const developerReturn = sessionStorage.getItem('nakwol.developer.return');
+    if (developerReturn !== null) { sessionStorage.removeItem('nakwol.developer.return'); location.replace('/developer/apps' + (developerReturn ? '?client_id='+encodeURIComponent(developerReturn) : '')); return; }
     await loadSession();
     if (state.session.can_manage) await loadApps();
   } catch (error) {

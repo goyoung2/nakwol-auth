@@ -30,6 +30,7 @@ function createV8Env() {
         return {
           bind(...args: unknown[]) {
             return {
+              async all() { return { results: [], success: true }; },
               async first() {
                 if (sql.includes("SELECT provider_user_id FROM auth_identities")) {
                   return { provider_user_id: '1493410906456064113' };

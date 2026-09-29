@@ -30,7 +30,7 @@ async function fixture() {
   for (const user of ['owner', 'outsider']) {
     db.prepare('INSERT INTO connect_cli_tokens VALUES(?,?,?,?,NULL,0,0)').run(await sha256Base64Url(user), user, '["connect:apps"]', Date.now()+60000);
   }
-  db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,0)').run(await sha256Base64Url('admin'), 'admin', 'nakwol-connect-admin', Date.now()+60000);
+  db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,?)').run(await sha256Base64Url('admin'), 'admin', 'nakwol-connect-admin', Date.now()+60000, Date.now());
   function prepare(sql: string, args: (string | number | null)[] = []) {
     return {
       bind(...values: (string | number | null)[]) { return prepare(sql, values); },

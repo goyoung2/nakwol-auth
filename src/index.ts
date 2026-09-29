@@ -1,4 +1,4 @@
-import { diagnoseApplicationAccess } from './policy';
+import { evaluateAccess, diagnoseApplicationAccess } from './policy';
 import { createOAuthTransaction, validateOAuthTransaction } from './oauth-transaction';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -69,7 +69,7 @@ app.get('/', (c) => c.html(`<!doctype html>
 body{font-family:system-ui,sans-serif;background:#111827;color:#f9fafb;display:grid;place-items:center;min-height:100vh;margin:0}
 main{width:min(680px,calc(100% - 40px));background:#1f2937;border:1px solid #374151;border-radius:18px;padding:32px}
 small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{color:#a5b4fc}.links{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
-</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.2</p><p><code>GET /api/health</code></p><div class="links"><a href="/account">내 낙월 계정</a><a href="/lab">AUTH Lab</a><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
+</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.2</p><p><code>GET /api/health</code></p><div class="links"><a href="/account">내 낙월 계정</a><a href="/lab">AUTH Lab</a><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a><a href="/developer/apps">내 서비스 정책</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
 
 app.get('/api/health', (c) => c.json({
   ok: true,
@@ -104,8 +104,8 @@ app.get('/authorize', async (c) => {
   if (!clientId || !redirectUri || !codeChallenge || method !== 'S256') {
     return jsonError(c, 400, 'INVALID_AUTHORIZE_REQUEST', 'client_id, redirect_uri, PKCE(S256)가 필요합니다.');
   }
-  if (prompt && prompt !== 'none') {
-    return jsonError(c, 400, 'UNSUPPORTED_PROMPT', 'prompt는 none만 지원합니다.');
+  if (prompt && !['none', 'login'].includes(prompt)) {
+    return jsonError(c, 400, 'UNSUPPORTED_PROMPT', 'prompt는 none 또는 login만 지원합니다.');
   }
 
   const application = await getApplication(c.env, clientId);
@@ -115,7 +115,7 @@ app.get('/authorize', async (c) => {
 
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
   const sessionUserId = await findSessionUser(c.env, sid);
-  if (sessionUserId) {
+  if (sessionUserId && prompt !== 'login') {
     if (await isApplicationAccessAllowed(c.env, sessionUserId, clientId)) {
       const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
@@ -290,7 +290,7 @@ app.get('/me', async (c) => {
   }
 
   const userId = tokenInfo.userId;
-  const access = await diagnoseApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true');
+  const access = await evaluateAccess(c.env, userId, clientId, {requireMember:c.req.header('X-Nakwol-Require-Member') === 'true' && !c.req.header('X-Nakwol-Capabilities')?.split(',').includes('policy-v1'),expiresAt:tokenInfo.expiresAt});
   if (!access.allowed) {
     const response = c.json({ ok: false, error: { code: 'ACCESS_DENIED', message: '이 앱을 사용할 권한이 없습니다.' } }, 403);
     return origin ? withCorsHeaders(response, origin) : response;
@@ -303,7 +303,8 @@ app.get('/me', async (c) => {
   }
 
   const response = c.json({ ok: true, data: user, expires_at: tokenInfo.expiresAt,
-    application_access: { client_id: clientId, allowed: true, source: access.reason === 'MANUAL_GRANT' ? 'manual_grant' : 'policy' } });
+    application_access: { client_id: clientId, allowed: true, source: access.source === 'manual-grant' ? 'manual_grant' : 'policy' },
+    authorization_policy: {schemaVersion:1,accessPolicy:access.policy,policyVersion:access.policyVersion,leaseSeconds:access.effectivePolicy.leaseSeconds,authorizationEvidenceValidUntil:access.validUntil,capabilities:['policy-v1']} });
   return origin ? withCorsHeaders(response, origin) : response;
 });
 

@@ -14,7 +14,8 @@ const guild = '1493410906456064112';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT);
+  db.exec(`CREATE TABLE auth_policy_settings(scope TEXT PRIMARY KEY,version INTEGER,settings_json TEXT);
+    CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT);
     CREATE TABLE users(id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE application_settings(client_id TEXT PRIMARY KEY, access_policy TEXT);
     CREATE TABLE auth_operators(user_id TEXT PRIMARY KEY, role TEXT);
@@ -27,7 +28,7 @@ async function fixture() {
     INSERT INTO users VALUES ('operator','active');`);
   db.exec(readFileSync(new URL('../../migrations/0011_season_roles.sql', import.meta.url), 'utf8'));
   for (const [token, user, client] of [['admin-token','operator','nakwol-connect-admin'], ['wrong-client','operator','site'], ['member-token','member','nakwol-connect-admin']]) {
-    db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,0)').run(await sha256Base64Url(token), user, client, Date.now()+60000);
+    db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,?)').run(await sha256Base64Url(token), user, client, Date.now()+60000, Date.now());
   }
   function prepare(sql: string, args: (string | number | null)[] = []) {
     return {
