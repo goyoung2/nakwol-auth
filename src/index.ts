@@ -1,7 +1,7 @@
 import { diagnoseApplicationAccess } from './policy';
+import { createOAuthTransaction, validateOAuthTransaction } from './oauth-transaction';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { randomToken } from './crypto';
 import { buildDiscordAuthorizeUrl, exchangeDiscordCode, DiscordMembershipUnavailable } from './discord';
 import { registerDemoRoutes } from './demo';
 import { registerConnectOnboardingRoutes } from './connect-onboarding';
@@ -121,11 +121,14 @@ app.get('/authorize', async (c) => {
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
       return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
     }
-    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis: await diagnoseApplicationAccess(c.env, sessionUserId, clientId) });
+    const diagnosis = await diagnoseApplicationAccess(c.env, sessionUserId, clientId);
+    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis });
     if (prompt === 'none') {
-      await deleteSession(c.env, sid);
       const response = c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      if (diagnosis.reason === 'USER_DISABLED' || diagnosis.reason === 'REAUTHENTICATION_REQUIRED') {
+        await deleteSession(c.env, sid);
+        response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      }
       return response;
     }
     // 저장된 역할은 마지막 Discord 로그인 시점 값이다. 역할을 새로 받은 사용자가
@@ -136,7 +139,9 @@ app.get('/authorize', async (c) => {
     return c.redirect(redirectWithParams(redirectUri, { error: 'login_required', state: clientState }), 302);
   }
 
-  const requestId = `req_${randomToken(18)}`;
+  const transaction = await createOAuthTransaction(c.req.header('Cookie'), secureCookie(c.env));
+  if (!transaction) return jsonError(c, 429, 'TOO_MANY_LOGIN_ATTEMPTS', '진행 중인 로그인 창을 완료한 뒤 다시 시도해 주세요.');
+  const requestId = transaction.state;
   const now = Date.now();
   await c.env.DB.prepare(
     `INSERT INTO oauth_requests(id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at)
@@ -144,6 +149,9 @@ app.get('/authorize', async (c) => {
   ).bind(requestId, clientId, redirectUri, codeChallenge, clientState, now + OAUTH_REQUEST_TTL_MS, now).run();
 
   if (Math.random() < 0.03) c.executionCtx.waitUntil(cleanupExpiredAuthData(c.env));
+  c.header('Set-Cookie', transaction.cookie);
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
   return c.redirect(buildDiscordAuthorizeUrl(c.env, requestId), 302);
 });
 
@@ -153,10 +161,15 @@ app.get('/auth/discord/callback', async (c) => {
   const discordError = c.req.query('error');
   if (!requestId) return jsonError(c, 400, 'MISSING_STATE', 'Discord state가 없습니다.');
 
+  const clearTransaction = await validateOAuthTransaction(requestId, c.req.header('Cookie'), secureCookie(c.env));
+  if (!clearTransaction) return jsonError(c, 400, 'INVALID_LOGIN_BROWSER', '로그인을 시작한 브라우저에서 다시 시도해 주세요.');
+  c.header('Set-Cookie', clearTransaction);
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
   const requestRow = await c.env.DB.prepare(
-    `SELECT id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at
-       FROM oauth_requests WHERE id = ?`
-  ).bind(requestId).first<OAuthRequestRow>();
+    `DELETE FROM oauth_requests WHERE id = ? AND expires_at > ?
+     RETURNING id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at`
+  ).bind(requestId, Date.now()).first<OAuthRequestRow>();
 
   if (!requestRow || requestRow.expires_at <= Date.now()) {
     return jsonError(c, 400, 'EXPIRED_LOGIN_REQUEST', '로그인 요청이 만료되었습니다. 다시 로그인해 주세요.');
@@ -168,7 +181,6 @@ app.get('/auth/discord/callback', async (c) => {
   }
 
   if (discordError || !discordCode) {
-    await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
     return c.redirect(redirectWithParams(requestRow.redirect_uri, {
       error: discordError ?? 'discord_authorization_failed',
       state: requestRow.client_state,
@@ -180,16 +192,19 @@ app.get('/auth/discord/callback', async (c) => {
     const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken);
     const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
 
-    await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
-
     if (!allowed) {
       await logAuthEvent(c.env, 'discord.login.access_denied', userId, requestRow.client_id, { role, diagnosis: await diagnoseApplicationAccess(c.env, userId, requestRow.client_id) });
       const response = c.redirect(redirectWithParams(requestRow.redirect_uri, {
         error: 'access_denied',
         state: requestRow.client_state,
       }), 302);
-      await deleteSession(c.env, parseCookies(c.req.header('Cookie')).nakwol_sid);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      const previousSid = parseCookies(c.req.header('Cookie')).nakwol_sid;
+      const previousUser = await findSessionUser(c.env, previousSid);
+      const diagnosis = await diagnoseApplicationAccess(c.env, userId, requestRow.client_id);
+      if (previousUser === userId && (diagnosis.reason === 'USER_DISABLED' || diagnosis.reason === 'REAUTHENTICATION_REQUIRED')) {
+        await deleteSession(c.env, previousSid);
+        response.headers.append('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      }
       return response;
     }
 
@@ -198,7 +213,7 @@ app.get('/auth/discord/callback', async (c) => {
 
     const session = await createSession(c.env, userId);
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
-    response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
+    response.headers.append('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;
   } catch (error) {
     await logAuthEvent(c.env, 'discord.login.error', null, requestRow.client_id, {

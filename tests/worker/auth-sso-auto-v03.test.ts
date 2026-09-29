@@ -44,7 +44,7 @@ test('authorize prompt=none checks only the central session and never opens Disc
   assert.match(authorize, /error: 'login_required'/);
 
   const silentMiss = authorize.indexOf("if (prompt === 'none')");
-  const createRequest = authorize.indexOf('const requestId = `req_');
+  const createRequest = authorize.indexOf('const transaction = await createOAuthTransaction');
   const discordRedirect = authorize.indexOf('buildDiscordAuthorizeUrl');
   assert.ok(silentMiss >= 0 && silentMiss < createRequest && createRequest < discordRedirect);
 });

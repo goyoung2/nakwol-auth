@@ -89,8 +89,8 @@ test('OAuth season membership gates tokens and additional roles without a bot', 
     assert.equal(new URL(denied.headers.get('Location') ?? '').searchParams.get('error'), 'access_denied');
     roles = [season];
     await refresh();
-    assert.match(denied.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    const freshSession = await createSession(env, 'u');
+    assert.equal(denied.headers.get('Set-Cookie'), null);
+    const freshSession = session;
     const allowed = await app.request(url.toString(), { headers: { Cookie: `nakwol_sid=${freshSession.token}` } }, env);
     assert.equal(allowed.status, 302);
     assert.ok(new URL(allowed.headers.get('Location') ?? '').searchParams.get('code'));

@@ -1,3 +1,4 @@
+import { createOAuthTransaction } from '../../src/oauth-transaction';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -114,7 +115,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.ok(data.events.some((e: { event_type: string }) => e.event_type === 'admin.access.reauthenticate'));
     assert.equal((await app.request(url, { headers: { Authorization: 'Bearer ordinary' } }, env)).status, 403);
   });
-  await t.test('denied OAuth creates no session or token; retry with new role succeeds', async (t) => {
+  await t.test('denied OAuth preserves prior identity without issuing credentials; retry with new role succeeds', async (t) => {
     let roles: string[] = [];
     t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
       const url = String(input);
@@ -122,22 +123,25 @@ test('operator support actions use real D1 and preserve service and identity bou
       if (url.endsWith('/users/@me')) return Response.json({ id: discordId, username: 'target' });
       return Response.json({ roles });
     });
-    const callback = async (requestId: string, cookie = '') => {
+    const callback = async (cookie = '') => {
+      const transaction = await createOAuthTransaction(undefined, true);
+      assert.ok(transaction);
+      const requestId = transaction.state;
       await DB.prepare(`INSERT INTO oauth_requests VALUES (?, 'site', 'https://site.test/', 'challenge', 'state', ?, ?)`)
         .bind(requestId, Date.now() + 60000, Date.now()).run();
-      return auth.request('https://auth.test/auth/discord/callback?state=' + requestId + '&code=fixture', { headers: { Cookie: cookie } }, env);
+      return auth.request('https://auth.test/auth/discord/callback?state=' + requestId + '&code=fixture', { headers: { Cookie: [cookie, transaction.cookie.split(';')[0]].filter(Boolean).join('; ') } }, env);
     };
     const oldSession = await createSession(env, 'target');
-    const denied = await callback('deny-request', 'nakwol_sid=' + oldSession.token);
+    const denied = await callback('nakwol_sid=' + oldSession.token);
     assert.equal(new URL(denied.headers.get('Location') || '').searchParams.get('error'), 'access_denied');
     assert.match(denied.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal(await findSessionUser(env, oldSession.token), null);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 0);
+    assert.equal(await findSessionUser(env, oldSession.token), 'target');
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
     assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_codes WHERE user_id='target'`).first())?.n, 0);
     roles = [env.NAKWOL_MEMBER_ROLE_ID];
-    const accepted = await callback('retry-request');
+    const accepted = await callback();
     assert.ok(new URL(accepted.headers.get('Location') || '').searchParams.get('code'));
-    assert.doesNotMatch(accepted.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
+    assert.match(accepted.headers.get('Set-Cookie') || '', /nakwol_sid=[^;]+;/);
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 2);
   });
 });

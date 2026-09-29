@@ -147,12 +147,23 @@ export async function exchangeAuthorizationCode(env: Env, args: { code: string; 
   const accessToken = randomToken(32);
   const tokenHash = await sha256Base64Url(accessToken);
   const expiresAt = now + ACCESS_TOKEN_TTL_MS;
-  await env.DB.batch([
-    env.DB.prepare(`UPDATE auth_codes SET used_at = ? WHERE code_hash = ?`).bind(now, codeHash),
+  // D1 executes this batch transactionally: only the first exchange can insert.
+  // The UPDATE is bound to that exchange's token hash, not to a shared timestamp.
+  const results = await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)`
-    ).bind(tokenHash, row.user_id, args.clientId, expiresAt, now),
+      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at)
+       SELECT ?, user_id, client_id, ?, NULL, ? FROM auth_codes
+        WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
+          AND client_id = ? AND redirect_uri = ? AND code_challenge = ?`
+    ).bind(tokenHash, expiresAt, now, codeHash, Date.now(), args.clientId, args.redirectUri, expected),
+    env.DB.prepare(
+      `UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL
+         AND EXISTS (SELECT 1 FROM access_tokens WHERE token_hash = ?)`
+    ).bind(now, codeHash, tokenHash),
   ]);
+  if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
+    throw new Error('INVALID_OR_EXPIRED_CODE');
+  }
   return { accessToken, expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000) };
 }
 
