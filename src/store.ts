@@ -117,14 +117,14 @@ export async function refreshDiscordMembership(
   return { userId, role };
 }
 
-export async function createAuthorizationCode(env: Env, userId: string, clientId: string, redirectUri: string, codeChallenge: string): Promise<string> {
+export async function createAuthorizationCode(env: Env, userId: string, clientId: string, redirectUri: string, codeChallenge: string, rawSession?: string): Promise<string> {
   const code = randomToken(32);
   const codeHash = await sha256Base64Url(code);
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO auth_codes(code_hash, user_id, client_id, redirect_uri, code_challenge, expires_at, used_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`
-  ).bind(codeHash, userId, clientId, redirectUri, codeChallenge, now + AUTH_CODE_TTL_MS, now).run();
+      `INSERT INTO auth_codes(code_hash, user_id, client_id, redirect_uri, code_challenge, expires_at, used_at, created_at, auth_session_hash)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+  ).bind(codeHash, userId, clientId, redirectUri, codeChallenge, now + AUTH_CODE_TTL_MS, now, rawSession ? await sha256Base64Url(rawSession) : null).run();
   return code;
 }
 

@@ -13,7 +13,7 @@ const adapters = {'cloudflare-workers':workers,'cloudflare-pages':pages,vercel};
 export const WRANGLER_FILE = 'wrangler.nakwol.json';
 const GENERATED = '.nakwol/server';
 const { version: runtimeVersion } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.9.0 protect update';
+const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.10.0 protect update';
 // Git may convert generated text to CRLF on Windows; line endings are not a gate change.
 const hash = value => createHash('sha256').update(value.toString().replaceAll('\r\n', '\n')).digest('hex');
 
@@ -51,7 +51,8 @@ export async function inspectProtection(root, config, options = {}) {
   if (!config?.protection) return { installed: false, ok: false, detail: '서버 게이트 미설치. Embed만으로 HTML/파일 직접 접근은 차단되지 않습니다.' };
   const p = config.protection;
   if (!options.allowSettingsChange && (p.accessPolicy !== config.accessPolicy || p.clientId !== config.clientId || p.authOrigin !== config.authOrigin)) return { installed:true, ok:false, detail:'앱 정책/주소와 서버 게이트 설정이 다릅니다. protect install로 갱신 후 배포하세요.' };
-  const expectedNames = p.provider === 'vercel' ? vercel.files : p.provider === 'cloudflare-pages' ? pagesFiles(p.assetsDirectory) : [`${GENERATED}/gate.mjs`, `${GENERATED}/login.mjs`, `${GENERATED}/index.mjs`, WRANGLER_FILE];
+  const modern = Number((p.runtimeVersion || '0.0.0').split('.')[0]) > 0 || Number((p.runtimeVersion || '0.0.0').split('.')[1]) >= 10;
+  const expectedNames = p.provider === 'vercel' ? vercel.files.filter(file => modern || !file.endsWith('/session.mjs')) : p.provider === 'cloudflare-pages' ? pagesFiles(p.assetsDirectory) : [`${GENERATED}/gate.mjs`, `${GENERATED}/login.mjs`, `${GENERATED}/index.mjs`, WRANGLER_FILE, ...(modern ? [`${GENERATED}/session.mjs`] : [])];
   if (!Object.hasOwn(adapters,p.provider) || !p.files || Object.keys(p.files).length !== expectedNames.length) return { installed: true, ok: false, detail: '지원하지 않는 보호 설정' };
   for (const file of expectedNames) {
     try { if (hash(await readFile(join(root, file))) !== p.files[file]) return { installed: true, ok: false, detail: `설치 이후 파일 변경: ${file}` }; }
@@ -62,7 +63,7 @@ export async function inspectProtection(root, config, options = {}) {
   }
   const adapterInspection = await adapters[p.provider].inspect(root, p);
   if (!adapterInspection.ok) return {installed:true, ...adapterInspection};
-  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.9.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
+  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.10.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
 }
 export async function installProtection(options = {}) {
   const root = options.root || process.cwd();
@@ -107,6 +108,7 @@ export async function installProtection(options = {}) {
   return { ok: true, protectionStatus: 'configured', protection, nextSteps: [
     'npm run build는 설정된 버전의 공식 공통 게이트를 반영합니다. 별도 빌드 도구/배포 명령은 빌드 후 npm run nakwol:gate를 실행하세요.',
     'Connect의 서버 로그아웃 연동이 반영되도록 사이트를 다시 빌드하세요.',
+    '서버 자동 갱신은 별도 활성화입니다. 등록된 /__nakwol/callback과 해당 origin의 서버 credential을 NAKWOL_SITE_CREDENTIAL Secret에 설정하세요. 자세한 절차: docs/SERVER_SESSION_REFRESH.md. Secret이 없으면 기존 1시간 세션을 유지합니다.',
     options.provider === 'vercel' ? 'Vercel 프로젝트의 Production/Preview 환경 변수에 NAKWOL_SESSION_SECRET을 설정하세요 (무작위 32자 이상). npm install로 @vercel/functions를 설치하세요.' : options.provider === 'cloudflare-pages' ? `npx wrangler pages secret put NAKWOL_SESSION_SECRET --project-name ${projectName} (무작위 32자 이상)` : `npx wrangler secret put NAKWOL_SESSION_SECRET --config ${WRANGLER_FILE} (무작위 32자 이상, 저장소에 넣지 않기)`,
     options.provider === 'vercel' ? 'npm run build 후 vercel --prod로 배포하세요. 미리보기 주소는 등록 origin과 달라 차단됩니다.' : options.provider === 'cloudflare-pages' ? `npx wrangler pages deploy ${inventory.directory} --project-name ${projectName} (운영 브랜치를 명시하고 Pages Functions fail-open을 비활성화하세요)` : `npx wrangler deploy --config ${WRANGLER_FILE}`,
     `nakwol-connect protect verify --url ${url}`,
@@ -124,7 +126,7 @@ async function updateBuildHook(root, managed = false) {
     if (scripts['nakwol:gate'] !== 'nakwol-connect protect update') throw new Error('Managed gate hook was changed; refusing network-based fallback.');
     return pkg;
   }
-  if (scripts['nakwol:gate'] && scripts['nakwol:gate'] !== UPDATE_COMMAND && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.8.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.7.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@latest protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.6.3 protect update') throw new Error('기존 nakwol:gate 스크립트를 덮어쓰지 않습니다.');
+  if (scripts['nakwol:gate'] && scripts['nakwol:gate'] !== UPDATE_COMMAND && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.9.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.8.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.7.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@latest protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.6.3 protect update') throw new Error('기존 nakwol:gate 스크립트를 덮어쓰지 않습니다.');
   scripts['nakwol:gate'] = UPDATE_COMMAND;
   if (!scripts.build) scripts.build = 'npm run nakwol:gate';
   else if (scripts.build !== 'npm run nakwol:gate' && !(scripts.postbuild || '').includes('npm run nakwol:gate')) {

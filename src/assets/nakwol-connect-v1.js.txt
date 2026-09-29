@@ -11,6 +11,7 @@
   const globalLogout = script.dataset.globalLogout === 'true';
   const autoSso = script.dataset.autoSso !== 'false';
   const authMode = (script.dataset.auth || 'required').trim().toLowerCase();
+  const serverGate = script.dataset.serverGate === 'true';
 
   if (!clientId) { console.error('[NAKWOL Connect] data-client-id is required.'); return; }
   if (!['required', 'optional'].includes(authMode)) { console.error('[NAKWOL Connect] data-auth must be required or optional.'); return; }
@@ -171,9 +172,11 @@
       else window.sessionStorage.removeItem(verifiedUserKey);
     } catch {}
   };
-  const restoredUser = authRequired ? readVerifiedUser() : null;
+  // A server-gated page is already protected by its host. Browser token cache is
+  // not evidence of the host session, so wait for the local status response.
+  const restoredUser = authRequired && !serverGate ? readVerifiedUser() : null;
 
-  if (authRequired && !restoredUser) ensureAuthGuard();
+  if (authRequired && !restoredUser && !serverGate) ensureAuthGuard();
   if (restoredUser) {
     window.NAKWOL_AUTH_USER = restoredUser;
     dispatch('nakwol-session-restored', restoredUser);
@@ -181,10 +184,71 @@
 
   const start = async () => {
     try {
-      if (authRequired && !restoredUser) ensureAuthGuard();
+      let serverMode = false;
+      let initialStatus = null;
+      if (serverGate) {
+        // Probe exactly once before importing or bootstrapping the browser SDK.
+        // Only an explicit server mode header activates this contract. A failed
+        // probe cannot safely be interpreted as a legacy host.
+        initialStatus = await fetch('/__nakwol/status', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+        serverMode = initialStatus.headers.get('X-Nakwol-Session-Mode') === 'server-refresh-v1';
+      }
+      if (authRequired && !restoredUser && !serverMode) ensureAuthGuard();
       const sdk = await import(`${authOrigin}/sdk/v0.3.2/nakwol-auth-web.js`);
       const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin, autoSso });
-      if (script.dataset.serverGate === 'true') {
+      if (serverMode) {
+        let pendingStatus = initialStatus;
+        const readServerStatus = async () => {
+          const response = pendingStatus || await fetch('/__nakwol/status', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+          pendingStatus = null;
+          if (response.headers.get('X-Nakwol-Session-Mode') !== 'server-refresh-v1') {
+            throw new sdk.NakwolAuthError('SERVER_SESSION_UNAVAILABLE', '서버 세션을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+          }
+          const payload = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            client.user = null;
+            return null;
+          }
+          if (!response.ok || payload?.ok !== true || !payload.user?.id) {
+            const code = response.status === 403 ? 'ACCESS_DENIED' : (payload?.error?.code || 'SERVER_SESSION_UNAVAILABLE');
+            throw new sdk.NakwolAuthError(code, payload?.error?.message || '서버 세션을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+          }
+          client.user = payload.user;
+          client.emit('user', client.user);
+          return client.user;
+        };
+        client.getMe = readServerStatus;
+        client.bootstrap = async () => {
+          client.emit('loading', null);
+          const user = await readServerStatus();
+          client.emit('ready', user);
+          return user;
+        };
+        client.login = async () => {
+          const url = new URL('/__nakwol/login', location.origin);
+          url.searchParams.set('return_to', location.pathname + location.search + location.hash);
+          client.emit('loginstart', { url: url.toString() });
+          location.assign(url.toString());
+        };
+        client.logout = async (options = {}) => {
+          const result = await fetch('/__nakwol/logout', { method: 'POST', cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+          if (!result.ok) throw new sdk.NakwolAuthError('SERVER_LOGOUT_FAILED', '서버 로그아웃에 실패했습니다. 다시 시도해 주세요.');
+          client.clearLocalState();
+          rememberVerifiedUser(null);
+          client.emit('logout', null);
+          if (options.global) {
+            const url = new URL('/session/logout', authOrigin);
+            url.searchParams.set('client_id', clientId);
+            url.searchParams.set('return_to', location.href);
+            location.assign(url.toString());
+          }
+          if (result.headers.get('X-Nakwol-Revoke') === 'failed') dispatch('nakwol-error', { code:'SERVER_REVOKE_FAILED', message:'이 브라우저의 로그아웃은 완료했지만 서버 토큰 폐기를 확인하지 못했습니다.' });
+        };
+        client.isAuthenticated = () => Boolean(client.user);
+        // A host cookie does not grant a DATA bearer token. The existing DATA
+        // API continues to require a separately issued browser token.
+        client.getAccessToken = () => null;
+      } else if (serverGate) {
         const rememberReturnPage = () => {
           try {
             sessionStorage.setItem(`nakwol:server:return:${clientId}`, JSON.stringify({ path:location.pathname + location.search + location.hash, at:Date.now() }));
@@ -205,7 +269,7 @@
       const enforceRequiredAuth = async (user) => {
         if (!authRequired) return user || null;
         if (user) { releaseAuthGuard(); return user; }
-        const suppressed = client.storage.getItem(client.key('sso_suppressed')) === '1';
+        const suppressed = !serverMode && client.storage.getItem(client.key('sso_suppressed')) === '1';
         if (suppressed) {
           setAuthGuardState('loggedout');
           return null;

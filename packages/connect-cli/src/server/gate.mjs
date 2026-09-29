@@ -1,6 +1,7 @@
 import { loginPage } from './login.mjs';
+import { serveServerSession } from './session.mjs';
 
-export const RUNTIME_VERSION = '0.9.0';
+export const RUNTIME_VERSION = '0.10.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -136,6 +137,7 @@ async function sessionCookie(session, secret, audience) {
 }
 
 export async function serveProtected(request, env, settings) {
+  if (env.NAKWOL_SITE_CREDENTIAL) return serveServerSession(request, env, settings);
   const url = new URL(request.url);
   // Only the explicitly registered deployment origin can serve protected content.
   if (url.origin !== new URL(settings.siteUrl).origin) return response(null, 403);
@@ -224,8 +226,11 @@ export function createGate(settings) {
   config.siteUrl = new URL(config.siteUrl).href;
   Object.freeze(config);
   if (!config.clientId || !['member', 'guest', 'admin'].includes(config.accessPolicy)) throw new Error('clientId and accessPolicy are required');
-  return (request, { sessionSecret, serveAsset }) => serveProtected(request, {
+  return (request, { sessionSecret, serveAsset, siteCredential = config.siteCredential, sessionPreviousSecret = config.sessionPreviousSecret, sessionPreviousUntil = config.sessionPreviousUntil }) => serveProtected(request, {
     NAKWOL_SESSION_SECRET: sessionSecret,
+    NAKWOL_SITE_CREDENTIAL: siteCredential,
+    NAKWOL_SESSION_PREVIOUS_SECRET: sessionPreviousSecret,
+    NAKWOL_SESSION_PREVIOUS_UNTIL: sessionPreviousUntil,
     ASSETS: { fetch: serveAsset },
   }, config);
 }

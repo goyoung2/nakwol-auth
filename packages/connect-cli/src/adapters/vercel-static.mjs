@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { source } from './shared.mjs';
 export { capabilities } from './shared.mjs';
 
-export const files = ['.nakwol/server/gate.mjs','.nakwol/server/login.mjs','middleware.js','vercel.json'];
+export const files = ['.nakwol/server/gate.mjs','.nakwol/server/login.mjs','.nakwol/server/session.mjs','middleware.js','vercel.json'];
 const conflicts = ['middleware.js','middleware.ts','middleware.mjs','proxy.js','proxy.ts','proxy.mjs','src/middleware.js','src/middleware.ts','src/middleware.mjs','src/proxy.js','src/proxy.ts','src/proxy.mjs','vercel.json','vercel.ts','api','functions','.vercel/output'];
 export async function inspect(root, protection) {
   for (const path of conflicts) {
@@ -15,16 +15,17 @@ export async function inspect(root, protection) {
   return {ok:true};
 }
 export async function generate({settings}, {directory}) {
-  const {gate,login}=await source();
+  const {gate,login,session}=await source();
   return {
     '.nakwol/server/gate.mjs':gate,
     '.nakwol/server/login.mjs':login,
+    '.nakwol/server/session.mjs':session,
     'middleware.js':`import { next } from '@vercel/functions';
 import { createGate } from './.nakwol/server/gate.mjs';
 const gate = createGate(${JSON.stringify(settings)});
 export const config = { matcher: ['/:path*'] };
 export default function middleware(request) {
-  return gate(request, { sessionSecret:process.env.NAKWOL_SESSION_SECRET, serveAsset:()=>next() });
+  return gate(request, { sessionSecret:process.env.NAKWOL_SESSION_SECRET, siteCredential:process.env.NAKWOL_SITE_CREDENTIAL, sessionPreviousSecret:process.env.NAKWOL_SESSION_PREVIOUS_SECRET, sessionPreviousUntil:Number(process.env.NAKWOL_SESSION_PREVIOUS_UNTIL), serveAsset:()=>next() });
 }
 `,
     'vercel.json':JSON.stringify({framework:null,outputDirectory:directory,buildCommand:'npm run build'},null,2)+'\n',

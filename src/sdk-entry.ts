@@ -1,3 +1,4 @@
+import { registerServerSessionRoutes } from './server-session-routes';
 import { registerServiceManagementRoutes } from './service-management-routes';
 import { registerAuthPolicyAdminRoutes } from './auth-policy-admin';
 import { serviceManagementPage } from './service-management-page';
@@ -15,6 +16,7 @@ import { registerAccountRoutes } from './account';
 import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 
+registerServerSessionRoutes(app);
 registerServiceManagementRoutes(app);
 registerAuthPolicyAdminRoutes(app);
 app.get('/developer/apps', c => c.html(serviceManagementPage(),200,{'Cache-Control':'no-store'}));

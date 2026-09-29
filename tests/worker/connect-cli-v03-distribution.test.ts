@@ -7,7 +7,7 @@ test('Connect v0.9 package, distribution and protected agent guidance stay align
   const dist = await readFile(new URL('../../src/connect-cli-distribution.ts', import.meta.url), 'utf8');
   const publish = await readFile(new URL('../../.github/workflows/publish-npm.yml', import.meta.url), 'utf8');
 
-  assert.equal(pkg.version, '0.9.0');
+  assert.equal(pkg.version, '0.10.0');
   assert.ok(dist.includes(`CONNECT_CLI_VERSION = '${pkg.version}'`));
   assert.match(dist, /embed_is_server_protection:false/);
   assert.match(dist, /protect verify/);

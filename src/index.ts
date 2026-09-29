@@ -117,7 +117,7 @@ app.get('/authorize', async (c) => {
   const sessionUserId = await findSessionUser(c.env, sid);
   if (sessionUserId && prompt !== 'login') {
     if (await isApplicationAccessAllowed(c.env, sessionUserId, clientId)) {
-      const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
+      const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge, sid);
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
       return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
     }
@@ -208,10 +208,10 @@ app.get('/auth/discord/callback', async (c) => {
       return response;
     }
 
-    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge);
+    const session = await createSession(c.env, userId);
+    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge, session.token);
     await logAuthEvent(c.env, 'discord.login.success', userId, requestRow.client_id, { role });
 
-    const session = await createSession(c.env, userId);
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
     response.headers.append('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;

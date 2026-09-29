@@ -96,6 +96,15 @@ export async function saveAuthPolicy(env: Env, input: SaveAuthPolicyInput) {
       COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='global'),3600),
       COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='app:'||access_tokens.client_id),3600)))
       WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
+    env.DB.prepare(`UPDATE server_sessions SET
+      idle_seconds=MIN(idle_seconds,COALESCE((SELECT json_extract(settings_json,'$.sessionIdleSeconds') FROM auth_policy_settings WHERE scope='global'),864000),COALESCE((SELECT json_extract(settings_json,'$.sessionIdleSeconds') FROM auth_policy_settings WHERE scope='app:'||server_sessions.client_id),864000)),
+      absolute_seconds=MIN(absolute_seconds,COALESCE((SELECT json_extract(settings_json,'$.sessionAbsoluteSeconds') FROM auth_policy_settings WHERE scope='global'),2592000),COALESCE((SELECT json_extract(settings_json,'$.sessionAbsoluteSeconds') FROM auth_policy_settings WHERE scope='app:'||server_sessions.client_id),2592000))
+      WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
+    env.DB.prepare(`UPDATE server_sessions SET idle_expires_at=MIN(idle_expires_at,last_used_at+idle_seconds*1000,created_at+absolute_seconds*1000),
+      absolute_expires_at=MIN(absolute_expires_at,created_at+absolute_seconds*1000)
+      WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
+    env.DB.prepare(`UPDATE server_sessions SET lease_until=MIN(lease_until,idle_expires_at,absolute_expires_at)
+      WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
     env.DB.prepare('DELETE FROM auth_policy_previews WHERE token=? AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)').bind(input.previewToken ?? '', operationId),
   ]);
   if (results[0].meta.changes !== 1) throw new AuthPolicyError(409, 'POLICY_VERSION_CONFLICT');

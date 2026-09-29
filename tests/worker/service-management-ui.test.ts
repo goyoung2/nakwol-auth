@@ -71,7 +71,7 @@ test('unauthenticated console fetches no PII and has working forced reauthentica
 test('console shell explains effective policy and unobserved rollout without embedding account data',async()=>{
   const page=await readFile(new URL('../../src/service-management-page.ts',import.meta.url),'utf8');
   assert.match(page,/\[hidden\]\{display:none!important\}/); assert.match(page,/connectSharedStyles/); assert.match(page,/마지막 관측 버전: 미확인/);
-  assert.match(page,/0.7.x·0.8.x/); assert.match(page,/T06/);
+  assert.match(page,/0.7.x·0.8.x/); assert.match(page,/런타임 0.10/); assert.match(page,/서버 credential/);
   assert.doesNotMatch(page,/access_token|discord_id|owner_user_id/);
 });
 
