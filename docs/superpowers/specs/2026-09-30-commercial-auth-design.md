@@ -1,6 +1,8 @@
 # NAKWOL AUTH 상용 운영 설계안
 
-작성: 2026-09-30 / 상태: **검토용 제안, 미구현**
+작성: 2026-09-30 / 개정: 독립 리뷰 R1~R8 반영 / 상태: **개정 설계안, 미구현·개정판 독립 재승인 전**
+
+개정 근거: [독립 리뷰 보고서](../../reviews/2026-09-30-commercial-auth-independent-review.md). 원안의 ITERATE 판정을 보완한 문서이며 제품 기능의 구현·검증 완료를 뜻하지 않는다.
 
 소스 기준: `4ca24da5e8a4dfd4867ad1f6b88725f1b0f59a40`(dev), Connect 0.7.1.
 운영 검사 근거는 2026-09-29 기록이다. 이 문서 작성 중 운영 코드를 바꾸거나 재배포하지 않았다.
@@ -8,7 +10,7 @@
 
 ## 1. 결론과 사용자 의도
 
-목표는 **각 개발자가 인증 로직을 만들지 않아도, 공식 SDK와 호스팅 어댑터 설치만으로 비인가자의 콘텐츠 전송을 차단하는 서비스**다. 로그인 편의성, 처리 속도, 비용, 관리자의 복구 능력도 제품 계약에 포함한다.
+목표는 **각 개발자가 인증 로직을 만들지 않아도, 공식 SDK와 호스팅 어댑터 설치만으로 비인가자의 콘텐츠 전송을 차단하는 서비스**다. 로그인 편의성, 처리 속도, 비용, 관리자의 복구 능력도 제품 계약에 포함한다. 외부 개발자는 자기 서비스 사용자 조회·관리, 인증 UI 편집, 허용 범위의 세션 정책 설정을 개발자 콘솔에서 수행한다. UI와 정책을 미리 보고 설치하는 흐름까지 첫 정식 SDK의 범위다.
 
 현재의 공통 게이트는 버릴 대상이 아니다. 로컬 AES-GCM 검증과 5분 authorization lease는 유지할 기반이다. 가장 큰 결손은 게이트 바깥의 공개 경로, 호스팅별 불완전한 설치, 인증/권한/세션의 수명 분리, 실제 조치 반영을 확인하는 운영 체계다.
 
@@ -114,7 +116,8 @@ flowchart LR
 - 공식 어댑터: **모든 콘텐츠 진입점**에 게이트 연결. framework rewrite/API/image optimizer도 인벤토리에 포함.
 - 설치/업데이트 CLI: 최소 구성 생성, 기존 CI 병합안, 배포된 버전과 보호 범위 확인.
 - 브라우저 SDK: 상태 표시/사용자 조작. 브라우저 저장값은 서버 승인 근거가 아니다.
-- 개발자는 clientId, origin, 빌드 산출물, 플랫폼만 지정. OAuth/쿠키/권한 로직 작성 불필요.
+- 개발자는 서비스·origin·빌드 산출물·플랫폼을 지정하고 UI 프리셋·위임된 정책을 선택한다. OAuth/쿠키/권한 로직 작성 불필요.
+- 개발자 콘솔: 앱 소유권에 근거한 서비스 사용자 관리·presentation·정책 설정. 중앙 운영 콘솔과 API 응답 및 조치 범위를 분리한다.
 
 ## 5. 완전한 보호 설치 계약
 
@@ -139,13 +142,13 @@ flowchart LR
 |---|---:|---:|---|
 | 권한 lease | 300초 | 60~300초 | 전역 기본+앱별 더 짧은 값 |
 | 앱 access token | 60분 | 10~60분 | 앱 |
-| 사이트 세션 idle / absolute | 10일 / 30일 | 1시간~10일 / 1~30일, idle≤absolute | 전역 상한+앱 강화 |
+| 사이트 세션 idle / absolute | 10일 / 30일 | 1시간~10일 / 1시간~30일, idle≤absolute | 전역 상한 안에서 앱 소유자 설정 |
 | 중앙 SSO idle / absolute | 10일 / 30일 | 동일 상한 | AUTH 운영자 |
 | Discord 역할 정보 최대 나이 | 15분 | 5~60분 | 전역 상한, 자동 갱신 지원 이후 활성화 |
 | 수동 허가 만료 | 1시간 | 5분~7일 | 해당 앱/사용자, 사유 필수 |
 | 운영 차단 snapshot freshness | 30초 | 정식 1차는 고정 | bounded-control 프로필 |
 
-5분 넘는 lease는 현재 기준보다 회수 지연을 늘리므로 초기 UI에서 제공하지 않는다. 시간 단위를 분/일로 명확히 표시하고 무제한 토큰 옵션을 만들지 않는다. refresh token, access token, Discord 역할 나이, 로그인 유지 기간을 하나의 '토큰 만료일'로 합치지 않는다.
+5분 넘는 lease는 현재 기준보다 회수 지연을 늘리므로 초기 UI에서 제공하지 않는다. 시간 단위를 초/분/시간/일로 명확히 표시하고 무제한 토큰 옵션을 만들지 않는다. refresh token, access token, Discord 역할 나이, 로그인 유지 기간을 하나의 '토큰 만료일'로 합치지 않는다.
 
 ### 정책 프로토콜 v1
 
@@ -163,17 +166,30 @@ flowchart LR
   "source": "role",
   "verifiedAt": 1900000000000,
   "leaseUntil": 1900000300000,
+  "accessExpiresAt": 1900003600000,
   "sessionExpiresAt": 1900003600000,
   "membershipValidUntil": 1900000900000,
+  "authorizationEvidenceValidUntil": 1900000900000,
   "capabilities": ["policy-v1", "server-refresh-v1", "control-v1"]
 }
 ```
 
-시각은 Unix milliseconds로 통일. leaseUntil은 검증 시작시각+lease, access/session/역할/수동허가 만료 중 최솟값이다. 지연된 응답 수신시각으로 연장하지 않는다. 서버가 발급한 응답만 AEAD 쿠키에 봉인한다. 브라우저의 allowed/role/TTL 값은 입력으로 받지 않는다.
+시각은 Unix milliseconds로 통일. `leaseUntil = min(verifiedAt + leaseMs, accessExpiresAt, sessionExpiresAt, authorizationEvidenceValidUntil)`이다. sessionExpiresAt에는 idle/absolute 상한을 모두 적용한다. authorizationEvidenceValidUntil은 **실제 승인에 사용한 증거와 면제 불가능한 전역 조건**의 가장 이른 만료다. 사용하지 않은 grant/role의 만료를 무조건 포함하지 않는다. 별도 승인 증거 만료가 없는 guest는 authorizationEvidenceValidUntil을 sessionExpiresAt로 제한해 유한한 값으로 반환한다.
+
+| 승인 source | 사용한 증거의 만료 |
+|---|---|
+| role | 필수 시즌 역할 및 추가 역할 증거 validUntil |
+| manual-grant | 해당 grant expiresAt 및 그 grant가 면제하지 못하는 전역 조건의 validUntil |
+| guest | 역할 만료 없음; 신원·세션·앱 활성 상태는 계속 검사 |
+| admin/lab | 해당 권한의 명시된 증거 수명; member 역할로 임의 대체 금지 |
+
+membershipValidUntil은 역할 증거를 사용한 경우의 진단 필드이며 모든 승인에서 필수인 값으로 해석하지 않는다. 정상 역할+만료된 미사용 grant는 역할로 승인할 수 있고, 유효한 플랫폼 승인 예외+stale role은 예외가 면제한 범위에 한해 평가한다. explicit deny와 사용자/앱 비활성은 모든 경로에서 우선한다. 지연된 응답 수신시각으로 만료를 연장하지 않는다. 서버가 발급한 응답만 AEAD 쿠키에 봉인하며 브라우저의 allowed/role/TTL 값은 입력으로 받지 않는다.
 
 중앙이 정책 판정의 권위자다. 로컬에는 immutable client/origin binding과 안전 상한만 둔다. `member`→`guest` 전환은 보안 완화이므로 운영자 검토·미리보기·감사 후 정책 버전을 증가시킨다. 기존 런타임에 적용되었다고 표시하지 않는다.
 
 기간을 늘릴 때 이미 만료된 토큰은 부활하지 않는다. 기간을 줄일 때 기존 쿠키의 만료 필드를 소급 편집할 수는 없으므로 정책 버전/차단 채널로 재평가한다. 관리자 화면에 신규 발급 적용과 기존 세션의 최대 반영 시점을 함께 표시한다.
+
+앱 소유자는 사이트 session idle/absolute 및 lease를 위임 범위 내에서 선택한다. 2시간 로그인 유지는 absolute=2시간, idle≤2시간으로 표현하며 access token TTL과 구분한다. 전역 상한·member 필수 조건·권한 source를 바꾸는 조치는 AUTH 운영자 권한이다. 서버가 매 저장 시 owner/capability/범위를 검사하고 UI 제한만 신뢰하지 않는다. 저장된 값, 실효값, 신규 세션 적용, 기존 세션 재평가 기한, 마지막 관측 버전, 미지원 runtime을 따로 표시한다. 소유자별 capability 축소/확대도 감사하며 만료 세션은 정책 확대 후에도 부활하지 않는다.
 
 ## 7. 빠른 차단과 로컬 성능의 양립
 
@@ -211,12 +227,15 @@ bounded-control은 성능 합격 전 기존 사이트의 기본값으로 강제 
 
 ### 서버 갱신 보안
 
-- 브라우저 JS에 장기 refresh token을 주지 않는다. 사이트 전용 키로 암호화한 HttpOnly 쿠키 또는 서버 저장소를 사용하며 서버 키가 포함된 번들 배포는 검사에서 실패시킨다.
-- 앱/사이트별 confidential credential을 발급한다. Discord secret이나 중앙 운영자 키를 각 사이트에 배포하지 않는다.
-- 중앙은 refresh token 해시/family/세대/만료/revocation을 관리한다. 토큰 회전과 재사용 감지, 앱/origin binding을 적용한다.
-- 여러 탭·300동시 요청·isolate 간 갱신 경합을 정상 공격으로 오인하지 않도록 short-lived idempotency key와 중앙 CAS/암호화된 재전송 결과를 설계한다. 서로 다른 재사용은 family 폐기. 응답 유실 시에도 한 번만 회전된 동일 결과를 제한 시간 내 재사용한다.
-- 동일 site 세션을 다른 브라우저가 복제했을 때 범위를 줄이되 IP고정/과도한 기기 지문으로 정상 사용자를 막지 않는다.
-- refresh가 전역 SSO 로그아웃/차단을 우회하지 않도록 중앙 session family에 종속시킨다. 별도 '이 사이트 로그아웃'과 '전체 서비스 로그아웃'을 명시한다.
+- 브라우저 JS에 장기 credential을 주지 않는다. 브라우저에는 **안정적인 사이트 session handle과 짧은 로컬 승인 proof**를 HttpOnly/Secure/SameSite=Lax host-only 쿠키로 둔다. proof는 사이트 키로 AES-GCM 봉인하며 client/origin/subject/sessionId/generation/source/verifiedAt/leaseUntil/sessionExpiresAt를 검증한다. handle 쿠키도 사이트 AEAD로 clientId/siteOrigin/sessionId와 충분한 난수 bearer를 함께 봉인하며 중앙에는 bearer 해시로 저장한다. 사이트 키가 번들/로그에 들어가면 검사 실패다.
+- 앱/사이트별 confidential credential을 발급한다. 중앙 갱신은 handle과 등록된 site credential을 함께 요구한다. handle만으로 공개 브라우저 refresh endpoint에서 발급하지 않는다. Discord secret이나 중앙 운영자 키를 각 사이트에 배포하지 않는다.
+- 중앙은 session family, 현재 generation, idle/absolute 만료, revocation, client/origin binding을 관리한다. 브라우저가 회전 refresh token을 저장하는 방식은 기본안에서 제외한다. 필요한 upstream 회전 credential은 중앙 서버 내부에서만 암호화 관리한다.
+- 유효 proof hot path는 쿠키 검증→자산 제공이다. 매 자산의 handle 조회/D1/KV/R2 접근은 금지. proof가 만료됐을 때에만 handle로 중앙 갱신한다. handle과 proof의 sessionId가 다르면 거부한다.
+- 갱신 식별자는 중앙이 정규화한 `(clientId, siteOrigin, sessionId, expectedGeneration)`이다. isolate가 만든 무작위 request ID를 동시 갱신의 동일성으로 사용하지 않는다. 활성 session에 대한 CAS로 generation을 한 번 전진시키고 후속 경쟁 요청은 최신 상태를 반환한다. D1 원자성 또는 T08과 독립적으로 작동하는 조정 계층을 T06 fixture로 입증한다.
+- 짧은 재전송 캐시는 최적화일 뿐 승인 근거가 아니다. 30초 이상 늦은 응답이 오래된 proof를 덮어써도 다음 갱신은 같은 handle로 최신 세대를 받아 복구한다. 오래된 generation만으로 family를 공격으로 분류하거나 폐기하지 않는다. 클라이언트가 보낸 만료/권한으로 수명을 재설정하지 않는다.
+- proof 응답은 handle을 교체하거나 지우지 않는다. cookie clear는 사용자 logout/명시적 종료 경로에서 수행한다. 갱신과 revoke는 같은 세션의 단조 증가 상태로 순서화하며 회수된 handle은 다시 활성화하지 않는다. 회수 전에 발급됐으나 늦게 도착한 proof는 새 세션을 만들 수 없고, 잔여 접근은 local-lease/bounded-control의 공시된 회수 상한에 묶인다.
+- 안정 handle 자체의 탈취는 bearer 탈취다. IP고정이나 과도한 지문 대신 앱/origin 바인딩, 절대 만료, 앱 단위 회수, site credential/쿠키 키의 분리·회전을 적용한다. 중앙 SSO family 폐기와 전역 deny는 이후 갱신을 거부한다.
+- 이 구조는 **선택한 설계이며 아직 실행 증명이 없다**. 다중 isolate, 30초 초과 지연, 세대 역전, 응답 유실, 동시 logout/deny 시험을 T06 출시 차단 조건으로 둔다. 하나라도 실패하면 서버 자동 갱신을 정식 활성화하지 않는다.
 - callback은 CSRF state, PKCE, 브라우저 transaction cookie, 정확한 redirect URI, code 일회성 원자 소비를 검증한다. return URL은 같은 origin 상대경로만, 외부 redirect 금지. callback HTML/API에는 no-store와 Referrer-Policy를 적용한다.
 - 여러 탭 transaction을 구분하고 만료/상한을 둔다. 콜백이 원래 경로를 덮어쓰지 않는다. 해시는 HTTP로 오지 않으므로 링크 SDK/최소 bootstrap이 sessionStorage에 저장하고 성공 후 한 번 복원한다.
 
@@ -237,15 +256,15 @@ bounded-control은 성능 합격 전 기존 사이트의 기본값으로 강제 
 - freshness 경계 전 active 사용자에 한해 갱신하고, 휴면 사용자는 접근 시 갱신한다. 별도 사용자 식별로 조회가 가능한 봇을 로그인 필수로 만들지 않는다.
 - 429 Retry-After/일시 장애/invalid_grant/서버 탈퇴/역할 제거를 구분한다. 조회 오류를 역할 없음으로 DB에 덮어쓰지 않는다. 마지막 정상 결과와 확인 실패를 별도로 보관한다.
 - 역할 증거가 hard expiry를 넘으면 차단. 정상 조회 성공이면 사용자의 재로그인 없이 갱신. invalid_grant만 재동의 안내.
-- 새 세션의 lease는 membershipValidUntil을 넘지 않는다. 이로써 새 프로토콜의 역할 제거 반영 상한은 역할 freshness+clock skew이며, 기존 24시간+5분과 구분된다. Discord 응답 자체의 지연은 별도 의존성이다.
+- 역할 기반으로 승인한 새 세션의 lease는 membershipValidUntil을 넘지 않는다. 다른 승인 source는 §6의 증거별 만료 계약을 적용한다. 이로써 새 프로토콜의 역할 제거 반영 상한은 역할 freshness+clock skew이며, 기존 24시간+5분과 구분된다. Discord 응답 자체의 지연은 별도 의존성이다.
 - 기존 사용자에게 refresh credential이 없으면 다음 정상 로그인에서 수집한다. 전환일까지 legacy24시간 프로필로 표시하고 silent renewal 지원을 허위 표시하지 않는다.
 - 선택적 Discord 이벤트 봇은 후속 보완 기능이다. 연결 끊김/이벤트 누락 시 OAuth 정기 조회가 근거이며 봇 없이도 기본 기능을 사용할 수 있다.
 
-## 10. 관리자 운영 콘솔
+## 10. 중앙 운영과 서비스 개발자 관리
 
 ### 사용자×서비스 진단
 
-Discord ID/지원 코드로 조회해 아래 정보를 한 화면에서 보여 준다.
+AUTH 운영자는 Discord ID/지원 코드로 조회해 아래 정보를 한 화면에서 보여 준다. 서비스 소유자 화면에는 이 상세 응답을 재사용하지 않고 아래 owner 전용 DTO만 제공한다.
 
 - 중앙 계정/사이트/앱 상태, 마지막 로그인/역할 확인, 실제 정책 버전, 부족한 역할, 수동 허가/차단 사유와 만료.
 - 중앙 세션/앱 토큰/사이트 세션 구분, 지원되는 범위의 관측값과 마지막 관측시각. 모든 사용자 세션이 온라인인 것처럼 표시하지 않는다.
@@ -269,7 +288,60 @@ Discord ID/지원 코드로 조회해 아래 정보를 한 화면에서 보여 �
 
 현재 `/me`는 상세 판정 대신 일반 `ACCESS_DENIED`를 반환한다. 새 서버 프로토콜에서는 안정적인 reason code와 support trace ID를 제공하고, 사용자용 설명과 운영자용 상세 진단을 분리한다. trace ID만 안다고 다른 사용자의 이벤트나 역할 목록을 조회할 수 있어서는 안 된다.
 
-AUTH 운영자와 서비스 개발자 권한을 분리한다. 운영자는 전역 정책/강제 조치, 개발자는 소유 앱의 상태/제한된 진단만. 민감 조치는 최근 재인증을 요구하고 last-operator lockout을 막는다.
+### 서비스 소유자의 권한 계약
+
+| 기능 | AUTH 운영자 | 해당 앱 소유자 | 다른 앱 소유자 |
+|---|---|---|---|
+| 사용자 목록·상세·관측 | 운영 목적 범위 | 자기 앱 최소 정보 | 불가 |
+| 앱 차단/해제·앱 세션 종료 | 가능 | 자기 앱만 | 불가 |
+| 전역 차단·전체 로그아웃·시즌3/admin 기준 | 가능 | 불가 | 불가 |
+| 임시 허가 | 감사·기한 필수 | 플랫폼이 위임한 앱 조건만 | 불가 |
+| UI·로그인/대기 화면 | 가능 | 자기 앱 편집/게시/복원 | 불가 |
+| 유지 시간·재확인 간격 | 전역 상한/기본값 | 위임 범위의 자기 앱 | 불가 |
+| 사용자 관계 삭제 | 보존 정책 준수 | 자기 앱 관계만 | 불가 |
+
+임시 허가는 플랫폼이 지정한 `grantableConditions`에만 적용한다. 외부 owner는 시즌3 필수 조건이나 중앙 deny를 임의 면제하지 못한다. AUTH 운영자의 감사 가능한 예외와 앱 자체 제한 해제를 구분한다. owner의 앱 차단은 역할 기반 정상 승인에도 우선한다.
+
+관리 API는 actor의 **현재 소유권**과 target user/session/operation의 clientId를 모두 검사한다. 관리 토큰에 담긴 과거 owner 정보만 신뢰하지 않는다. 소유권 회수 후 기존 토큰으로 수정 불가. site credential은 서버 인증·보고용이며 사람의 owner 관리 권한을 대체하지 않는다. 민감 변경은 최근 재인증·CSRF·사유·감사·속도 제한을 적용하고 last-operator lockout을 막는다.
+
+기존 `src/access-support.ts` reauthenticate는 중앙 세션과 여러 앱 토큰을 회수하므로 owner API에서 호출하지 않는다. 별도의 app-scoped revoke를 구현하고 A의 조치가 B의 SSO/사이트 세션을 지우지 않는 시험을 통과시킨다. 팀 support/viewer 위임은 후속 확장으로 두며 기본 owner 기능을 지연시키지 않는다.
+
+### 서비스 사용자 목록·개인정보·관측
+
+- `(clientId, subject)` 관계에 최초 승인, 마지막 인증, 마지막 접근 관측, 앱 접근 상태, 앱 차단/허가 만료를 둔다. 인증 거부 시도는 별도 상태이며 접근 성공으로 표시하지 않는다. ID 사전등록은 초대/사전등록으로 표시한다.
+- 목록은 cursor 페이지네이션(기본50/최대100), 자기 앱 관계 내 ID/표시명 검색과 상태 필터를 제공한다. owner DTO는 app-scoped subject, 운영에 필요한 Discord ID/표시명, 위 상태·시각·관측 출처/지연으로 한정한다. 알려진 신규 Discord ID의 사전등록은 허용해도 중앙 가입 여부나 타 앱 활동은 반환하지 않는다.
+- 중앙 로그인/토큰 발급과 실제 게이트 통과는 다르다. 비로그인 요청은 Discord 신원을 알 수 없으므로 익명 거부 집계로 처리한다. 마지막 관측을 실시간 온라인이라고 표시하지 않는다.
+- 게이트 접근 관측은 앱·사용자·5분 구간당 대표 이벤트로 합치고 비동기로 보낸다. isolate 내 중복 억제와 수신측 idempotency, bounded queue/drop·재시도 상한을 둔다. 다중 isolate 전송 수와 유실을 측정하며 전체 사이트 단 한 번 전송이라고 약속하지 않는다. 정상 자산마다 중앙 쓰기/원격조회 금지.
+- 관측 장애/누락은 승인 여부에 영향을 주지 않는다. 승인 이벤트는 관측 지연과 별도로 표시하고 정책 판단은 인증 데이터만 사용한다. clientId/site credential 바인딩과 서버 승인 결과로 이벤트를 만들며 브라우저가 보낸 userId를 신뢰하지 않는다.
+- owner에게 다른 앱 이력·전체 역할·중앙 내부 제재 사유·중앙 세션/credential을 내보내지 않는다. 목록/검색/상세/내보내기/operation/지원 코드 전부 같은 귀속 검사를 적용한다. 지원 코드만으로 중앙 사용자 열거 금지.
+- 관계 삭제는 앱 관계/관측 자료 삭제이며 중앙 계정/타 앱 자료를 삭제하지 않는다. 차단 tombstone은 별도 보존해 삭제가 접근 재허용이 되지 않게 한다. 보존 목적·기간을 콘솔에 표시하고 §12의 삭제/감사 정책을 적용한다.
+
+
+### UI 편집과 설정 배포
+
+정책과 별도인 versioned `presentation`을 제공한다. `schemaVersion`, `version`, `widget`, `theme`, `screens`, `support`로 구성하며 중앙에서 검증한 데이터만 렌더링한다.
+
+| 영역 | 설정과 필수 동작 |
+|---|---|
+| widget | visible/hidden, button/compact/menu, inline/fixed/sticky, 위치/여백/표시명 |
+| theme | light/dark/system 및 검증된 색·반경·크기 토큰 |
+| screens | login/checking/denied/unavailable의 서비스명·로고·제목·안내·제한된 배경/레이아웃 |
+| support | 검증된 HTTPS 지원 링크; 로그인/재시도/복구 동작은 런타임이 제공 |
+| 게시 | draft→preview→publish→새 버전으로 rollback, expectedVersion CAS |
+
+hidden은 위젯 표시만 끄며 서버 보호와 실제 오류·복구 안내는 유지한다. headless에서는 서비스가 제공할 로그인/로그아웃/복구 연결을 검사한다. '내 낙월 계정' 메뉴를 강제 노출하지 않는다. checking은 §8 상태 전이/250ms/8초 계약을 유지하고 디자인 편집으로 실제 상태를 거짓 성공으로 바꿀 수 없다.
+
+임의 HTML/JS/CSS·SVG를 기본 입력으로 허용하지 않는다. 로고/배경은 검증된 PNG/WebP/JPEG, 파일당 최대512KiB·최대2048px, 허용된 저장 origin으로 제한한다. 원격 import가 필요하면 §5 SSRF 검사를 적용하며 기본 편집 흐름은 업로드다. 텍스트는 escape하고 URL 스킴·용도·길이를 검증한다. 공개 bootstrap에는 서비스 브랜드만 포함하며 private path·사용자·비밀값은 없다. 보호 앱 bundle 없이 login/checking 화면을 렌더링한다.
+
+초안 preview는 owner 인증 범위에서만 접근한다. 공개 bootstrap은 게시된 버전만 제공하며 version/ETag와 최대60초 설정 캐시를 사용한다. 이 캐시는 공개 브랜드 데이터에만 적용하고 보호 자산 캐시를 완화하지 않는다. 로딩 실패/알 수 없는 schema는 내장 안전 테마로 복구한다. 자산 요청마다 설정을 조회하지 않고 UI 변경으로 auth lease를 폐기하지 않는다. 구 runtime은 미지원 필드를 경고하며 지원하지 않는 디자인을 적용 완료로 표시하지 않는다.
+
+미리보기에는 정상/미로그인/checking/거부/장애/모바일 상태를 제공한다. fixed와 sticky를 구분하고 safe area·키보드 focus·reduced-motion·콘텐츠/버튼 가림을 검증한다.
+
+### 초기 설치·재설정
+
+서비스 생성/선택 → 호스팅/origin → UI 프리셋과 상태 미리보기 → 정책·실효값 → 변경 요약/저장 → CLI 설치·배포·차단검증 순서다. 기존 앱은 설정을 가져와 diff를 보여 주며 앱/credential을 중복 생성하지 않는다. UI 설치 단계가 완료됐다고 보호 검증을 생략하지 않는다.
+
+브라우저 마법사와 비대화형 CLI JSON이 동일한 스키마를 사용한다. schemaVersion/clientId/origin/provider/presentationVersion/policyVersion으로 재개하고 secret은 JSON/소스에 포함하지 않는다. 저장은 CAS, 충돌409에서는 최신 diff를 보여 준다. 설치/빌드/배포/미인증 차단/정상 사용자 수용을 각각 표시한다. 이미 지원되는 정책·presentation 변경은 재설치 없이 반영하고 새 renderer/adapter 기능은 runtime 업데이트가 필요함을 구분한다.
 
 ### 관리자 자신이 잠겼을 때
 
@@ -297,7 +369,7 @@ AUTH 운영자와 서비스 개발자 권한을 분리한다. 운영자는 전�
 
 대략 N자산×P페이지 방문이면 게이트 호출도 N×P다. lease는 중앙 AUTH 호출을 줄이지 사이트 Worker 호출 자체를 제거하지 않는다. P=1,000,N=312라면 자산요청312,000회가 기준이다. provider별 청구 단가를 고정해 문서에 박지 말고 검사 시점의 요금/한도와 지역/콜드스타트 비율을 기록한다.
 
-AUTH 비용은 활성 session 수/lease, Discord는 활성 사용자 수/freshness, 제어 문서는 활성 isolate 수/30초에 주로 비례한다. 각 항목을 따로 계측한다. 과금 한도를 넘으면 공개로 전환하지 않는다. quota 경고와 증설/호스팅 전환 선택을 제공한다.
+AUTH 비용은 활성 session 수/lease, Discord는 활성 사용자 수/freshness, 제어 문서는 활성 isolate 수/30초에 주로 비례한다. 각 항목을 따로 계측한다. 접근 관측의 앱·사용자·시간 구간 수, 다중 isolate 중복/유실, presentation bootstrap 요청·바이트·캐시 hit도 포함한다. 관측과 디자인 편집을 위해 자산별 AUTH 호출을 다시 추가하지 않는다. 과금 한도를 넘으면 공개로 전환하지 않는다. quota 경고와 증설/호스팅 전환 선택을 제공한다.
 
 기본 보안 시험은 작은 고정 fixture로 빠르게 수행하되 성능 시험은 실제 크기 분포를 반영한다. 작은 이미지300개만으로 이미지가 많은 사이트의 전송량·디코딩 성능을 대표하지 않는다. 신규 인프라의 예상 비용과 기존 계정 한도를 먼저 제출하고, 유료 플랜 전환이나 구독 구매는 이 계획에 자동 포함하지 않는다.
 
@@ -317,6 +389,8 @@ AUTH 비용은 활성 session 수/lease, Discord는 활성 사용자 수/freshne
 
 정식 v1은 Workers/Pages/Vercel static의 **인증된 어댑터**에 한정한다. 미지원 Netlify/Next SSR 등을 범용 Web API라는 이유만으로 인증 완료로 표시하지 않는다. API 보호 공통 hook은 제공하되 해당 서비스의 데이터 소유권 검사는 별도 계약이다.
 
+첫 외부 개발자 정식 배포에는 서비스 관리 권한·사용자 목록/조치·UI 편집/게시·초기 설치 마법사(D01~D04)를 포함한다. 소유자 A/B의 격리, 조치 후 타 앱 세션 유지, UI 숨김/악성 입력/설정 장애, 정책 적용 상태, 관측 비용/유실 시험도 필수다.
+
 필수 통과: 콘텐츠 비노출, 일반 시즌3/비멤버/차단 사용자, A→B SSO, lease/토큰/역할 경계, 다중 탭/다중 isolate, 정책 전환, 임시허가 만료, 키 회전, 중앙/Discord 장애, 비용 상한, 관리 복구, 이전 배포 우회, canary rollback.
 
 현재 공통 gate 유지+검증 강화가 우선이다. JWТ 전면 전환, 모든 사이트 중앙 프록시, 필수 봇, 모든 이미지 DB 조회, 전체 공개 임시 버튼, 별도 덱/즐겨찾기 제품 개발은 이 계획의 기본 범위가 아니다.
@@ -328,3 +402,18 @@ AUTH 비용은 활성 session 수/lease, Discord는 활성 사용자 수/freshne
 - Discord OAuth는 refresh token과 guilds.members.read를 제공한다. 중앙 자동 갱신 제안은 이 기능에 기반하며 현재 제품 구현 완료를 뜻하지 않는다. [공식 문서](https://docs.discord.com/developers/topics/oauth2)
 - 토큰 회전·재사용·redirect/PKCE 위협 모델의 기준. [OAuth 2.0 Security BCP RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
 - Durable Object는 앱별 제어 상태를 조정할 후보이며 추가 성능/비용 검증을 전제로 한다. [공식 문서](https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/)
+
+## 15. 독립 리뷰 반영 추적
+
+| 리뷰 | 개정 계약 | 개발 작업 |
+|---|---|---|
+| R1 소유자 관리 권한 | §10 권한표·app-scoped 조치·현재 소유권 검사 | D01/D02/T09 |
+| R2 접속 사용자 의미 | §10 관계·관측·비동기 수집 | D02/T11 |
+| R3 UI 편집 | §10 presentation·안전 bootstrap·미리보기 | D03/T03 |
+| R4 개인정보 경계 | §10 owner DTO·열거 금지·삭제/tombstone | D01/D02/T12 |
+| R5 갱신 경합 | §8 안정 handle·세대 조정·늦은 응답 계약 | T06/T11 |
+| R6 증거별 만료 | §6 승인 source별 validUntil·deny 우선 | T05/T07 |
+| R7 설치 편의 | §10 마법사·공통 스키마·중단 재개 | D04/T03/T12 |
+| R8 정책 위임 | §6 시간 단위 범위·실효값·적용 상태 | T05/D01/D04 |
+
+이 표는 문서 반영 추적이며 기능 합격 증거가 아니다. 각 작업의 실제 시험·운영 검증은 개발 계획의 완료 조건에 따른다.
