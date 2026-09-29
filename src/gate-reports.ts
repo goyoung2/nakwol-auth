@@ -3,13 +3,14 @@ import { requirePrincipal, requireOwnedApp } from './connect-cli-apps';
 import { requireManager } from './connect';
 import { randomToken, sha256Base64Url } from './crypto';
 import type { Env } from './types';
+import { parseProtectionEvidence, type ProtectionEvidenceSummary } from './protection-inventory';
 
 const MAX_BYTES = 16 * 1024;
 const TOKEN_TTL = 90 * 24 * 60 * 60 * 1000;
-const FIELDS = new Set(['schema_version', 'installed_version', 'runtime_version', 'commit_sha', 'status', 'checked_count', 'failure_count', 'service_url', 'deployment_id', 'previous_deployment_id']);
+const FIELDS = new Set(['schema_version', 'installed_version', 'runtime_version', 'commit_sha', 'status', 'checked_count', 'failure_count', 'service_url', 'deployment_id', 'previous_deployment_id', 'release_accepted', 'manifest_hash', 'build_hash', 'authenticated_checked_count']);
 const STATUSES = new Set(['verified', 'failed', 'indeterminate', 'recovered', 'rollback-failed']);
 
-type GateSummary = {
+type GateSummary = ProtectionEvidenceSummary & {
   readonly schema_version: 1;
   readonly installed_version: string;
   readonly runtime_version: string | null;
@@ -49,15 +50,17 @@ function parseSummary(value: unknown, origins: ReadonlySet<string>): GateSummary
   if (typeof value.status !== 'string' || !STATUSES.has(value.status)) return null;
   const checked = value.checked_count;
   const failures = value.failure_count;
-  if (typeof checked !== 'number' || !Number.isSafeInteger(checked) || checked < 0 || checked > 10000) return null;
+  if (typeof checked !== 'number' || !Number.isSafeInteger(checked) || checked < 0 || checked > 10000000) return null;
   if (typeof failures !== 'number' || !Number.isSafeInteger(failures) || failures < 0 || failures > checked) return null;
   if (['verified', 'recovered'].includes(value.status) && (checked === 0 || failures !== 0 || value.runtime_version === null)) return null;
   if (value.status === 'failed' && failures === 0) return null;
   if (!deploymentId(value.deployment_id) || !deploymentId(value.previous_deployment_id)) return null;
+  const evidence = parseProtectionEvidence(value);
+  if (!evidence) return null;
   const service = url(value.service_url);
   if (!service || !origins.has(service.origin) || service.username || service.password || service.search || service.hash || service.pathname !== '/') return null;
   return {
-    schema_version: 1, installed_version: value.installed_version, runtime_version: value.runtime_version,
+    ...evidence, schema_version: 1, installed_version: value.installed_version, runtime_version: value.runtime_version,
     commit_sha: value.commit_sha.toLowerCase(), status: value.status, checked_count: checked, failure_count: failures,
     service_url: service.origin, deployment_id: value.deployment_id ?? null, previous_deployment_id: value.previous_deployment_id ?? null,
   };

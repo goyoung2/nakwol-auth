@@ -42,12 +42,17 @@ export function summarizeGateReport(report, config, options = {}) {
   if (!/^[a-f0-9]{40}$/i.test(options.commit || '')) throw new Error('--commit requires the deployed 40-character Git SHA.');
   if (!Array.isArray(report.checks) || !report.origins?.includes(config.protection.siteUrl)) throw new Error('The verification report must belong to the configured site.');
   const failures = report.checks.filter(check => check.ok !== true);
-  const complete = report.checks.length > 0 && report.requestCount === report.checks.length && report.inspectionScope === 'installed-assets';
+  const complete = report.checks.length > 0 && (report.probeCount ?? report.requestCount) === report.checks.length + (report.authenticatedChecks?.length || 0) && report.inspectionScope === 'installed-assets';
   const versions = report.observedRuntimeVersions || [];
   const observed = versions.length===1 && /^[0-9]+[.][0-9]+[.][0-9]+$/.test(versions[0]) ? versions[0] : null;
   const verified = complete && !failures.length && report.ok === true && report.expectedRuntime === config.protection.runtimeVersion && observed === report.expectedRuntime;
-  const status = verified ? 'verified' : complete && failures.some(check => /^HTTP [234][0-9]{2};/.test(check.detail || '')) ? 'failed' : 'indeterminate';
+  const status = verified ? 'verified' : failures.some(check => check.classification === 'exposed' || (check.classification === undefined && /^HTTP [23][0-9]{2};/.test(check.detail || ''))) ? 'failed' : 'indeterminate';
+  const binding = report.evidenceBinding;
+  const validBinding = binding?.schemaVersion === 1 && /^[a-f0-9]{64}$/.test(binding.manifestHash || '') && /^[a-f0-9]{64}$/.test(binding.buildHash || '') && binding.deploymentId === options.deploymentId && binding.runtimeVersion === report.expectedRuntime;
+  const accepted = verified && report.releaseAccepted === true && validBinding && report.authenticatedChecks?.length > 0 && report.authenticatedChecks.every(check => check.ok === true);
   return {schema_version:1,installed_version:config.protection.runtimeVersion,runtime_version:observed,commit_sha:options.commit,status,checked_count:report.checks.length,failure_count:failures.length,service_url:new URL(config.protection.siteUrl).origin,
+    release_accepted:Boolean(accepted),
+    ...(validBinding ? {manifest_hash:binding.manifestHash,build_hash:binding.buildHash,authenticated_checked_count:report.authenticatedChecks?.length || 0} : {}),
     ...(options.deploymentId ? {deployment_id:options.deploymentId} : {})};
 }
 
@@ -63,7 +68,9 @@ export async function reportProtection(options = {}) {
     summary = summarizeGateReport(report.recoveryVerification || report.failedVerification,config,options);
     const recovery = report.recoveryVerification;
     const previous = config.protection.rollback?.previousVerified;
-    const recovered = recovery?.ok === true && recovery.requestCount > 0 && recovery.checks?.length === recovery.requestCount && recovery.checks.every(check=>check.ok===true) && recovery.expectedRuntime === previous?.runtimeVersion && recovery.observedRuntimeVersions?.length === 1 && recovery.observedRuntimeVersions[0] === previous?.runtimeVersion;
+    const binding = recovery?.evidenceBinding;
+    const recovered = recovery?.ok === true && recovery.releaseAccepted === true && recovery.manifestUnchanged === true && binding?.deploymentId === previous?.deploymentId && binding.runtimeVersion === previous?.runtimeVersion && binding.buildHash === previous?.report?.evidenceBinding?.buildHash && binding.manifestHash === previous?.report?.evidenceBinding?.manifestHash && recovery.authenticatedChecks?.length > 0 && recovery.authenticatedChecks.every(check=>check.ok===true) && recovery.requestCount > 0 && recovery.checks?.length + recovery.authenticatedChecks.length === (recovery.probeCount ?? recovery.requestCount) && recovery.checks.every(check=>check.ok===true) && recovery.expectedRuntime === previous?.runtimeVersion && recovery.observedRuntimeVersions?.length === 1 && recovery.observedRuntimeVersions[0] === previous?.runtimeVersion;
+    summary.release_accepted = false;
     summary.status = recovered ? 'recovered' : 'rollback-failed';
     summary.deployment_id = report.recoveryDeploymentId || report.targetDeploymentId;
     summary.previous_deployment_id = report.failedDeploymentId;

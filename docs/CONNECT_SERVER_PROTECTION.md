@@ -165,7 +165,7 @@ export function handle(request, sessionSecret, serveProtectedContent) {
 }
 ```
 
-**0.7.1 설정 주의:** `authOrigin`은 위 예시처럼 끝에 `/` 없이 입력하세요. 현재 로그인 스크립트 경로가 문자열로 합쳐지므로 `/`를 붙이면 `//sdk/`가 되어 404로 로그인이 실패합니다. 실제 SDK 로딩까지 확인해야 하며 401 차단 검사만으로는 이 오류를 발견할 수 없습니다. 복수 사이트는 각 콜백을 등록하고 각 배포 origin으로 게이트를 구성하세요.
+**0.8.0 설정:** `authOrigin`은 HTTPS origin이며 마지막 `/` 유무는 정규화됩니다. SDK 경로는 URL로 구성합니다. SDK 로드 실패 시 다시 확인 버튼과 계정 복구 링크가 표시됩니다.
 
 `serveProtectedContent(request)`는 Web Response를 반환하며, 공통 게이트가 권한을 승인한 경우에만 호출됩니다. 모든 보호 경로와 `/__nakwol/*`를 이 핸들러로 연결하고 원본 파일을 별도로 공개하지 마세요. AUTH OAuth를 따로 구현하지 않습니다.
 
@@ -185,3 +185,7 @@ export function handle(request, sessionSecret, serveProtectedContent) {
 업데이트 PR 흐름을 선택할 수 있습니다. 이 모드에서는 위의 범위 기반 빌드 훅
 대신 설치된 로컬 CLI를 사용합니다. 설정 후 별도의 npm 잠금 파일 갱신/커밋과
 사이트 배포 연결이 필요합니다. [운영 절차](MANAGED_GATE_UPDATES.md)를 따르세요.
+
+## Connect 0.8.0 설치·증거 계약
+
+Vercel 정적 빌드 공식 어댑터, manifest 기반 검증, 정상 인증 파일 확인과 출시 판정은 [서버 보호 증거 안내](PROTECTION_EVIDENCE.md)를 따릅니다. 0.7.x는 명시적 갱신과 재배포가 필요합니다.

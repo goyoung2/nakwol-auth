@@ -129,7 +129,7 @@ export async function protectionStatus(options = {}) {
   const root = options.root || process.cwd();
   const config = await readProjectConfig(root);
   const local = await inspectProtection(root, config);
-  const result = {ok:local.ok, local, installedPackageVersion:version, configuredRuntime:config?.protection?.runtimeVersion || null, updateChannel:config?.protection?.updateChannel || null, deployed:{status:'not-checked', runtimeVersion:null}};
+  const result = {schemaVersion:1, capabilities:local.capabilities || [], ok:local.ok, local, installedPackageVersion:version, configuredRuntime:config?.protection?.runtimeVersion || null, updateChannel:config?.protection?.updateChannel || null, deployed:{status:'not-checked', runtimeVersion:null}};
   if (!local.ok || options.offline) return result;
   try {
     const url = new URL(config.protection.siteUrl); url.searchParams.set('__nakwol_version',Date.now().toString());

@@ -248,3 +248,7 @@ observed deployment version; `protect verify --expect-runtime installed` require
 both anonymous blocking and the expected gate version. No auto-merge, deployment
 credentials or automated rollback are installed. See
 [managed update operations](../../docs/MANAGED_GATE_UPDATES.md) for setup and limits.
+
+### 0.8.0 static adapters and release evidence
+
+Adds `protect install --provider vercel` for static builds with full-path middleware using the shared gate. Existing routing/SSR configurations are not overwritten. `protect manifest --deployment-id ID --output-file evidence.json` records the exact build; `protect verify --manifest evidence.json --origins-file origins.json --session-cookie-env NAKWOL_VERIFY_COOKIE` checks anonymous blocking and authenticated file hashes separately. Legacy header-only reports cannot approve automatic rollback. Existing 0.7.x installations require explicit version selection and redeployment. See [evidence contract and limits](../../docs/PROTECTION_EVIDENCE.md). Source changes are not npm publication or production deployment evidence.

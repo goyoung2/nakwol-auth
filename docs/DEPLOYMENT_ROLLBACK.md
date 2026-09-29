@@ -1,6 +1,6 @@
 # Opt-in deployment recovery
 
-`rollbackProtection(options)` in `packages/connect-cli/src/deployment-rollback.mjs` supports Cloudflare Workers and Pages. It does not run during ordinary verification. The deployment job must explicitly invoke it after an observed anonymous HTTP 2xx response on a protected path. Timeouts, DNS failures and HTTP 5xx are ineligible.
+`rollbackProtection(options)` in `packages/connect-cli/src/deployment-rollback.mjs` supports Cloudflare Workers and Pages. It does not run during ordinary verification. The deployment job must explicitly invoke it after concrete exposure (anonymous 2xx/304, a private canary/hash in a denial body, or a same-origin redirect exposing content) on a protected path. Timeouts, DNS failures and HTTP 5xx are ineligible.
 
 `readCurrentDeployment(config, { apiToken, fetchImpl })` returns the current deployment object, including `id` and `created_on`, using only GET requests. It validates the opt-in provider/resource/serialization settings but permits an absent baseline. A release job can read before and after live verification and require unchanged identity before attaching the deployment ID to the report and saving a baseline. The configured rollback provider must match the installed protection provider.
 
@@ -15,17 +15,18 @@ Store the policy inside `.nakwol-connect.json` under `protection.rollback`:
   "serializedDeployments": true,
   "previousVerified": {
     "deploymentId": "PREVIOUS_VERIFIED_DEPLOYMENT_ID",
-    "runtimeVersion": "0.7.1",
+    "runtimeVersion": "0.8.0",
+    "manifestFile": "trusted-evidence/baseline-manifest.json",
     "report": "REPLACE_WITH_COMPLETE_SUCCESSFUL_VERIFICATION_REPORT_OBJECT"
   }
 }
 ```
 
-For Pages use `provider: "cloudflare-pages"` and `projectName` instead of `scriptName`. The report must be the actual successful installed-assets verification, including checks, request count, timestamp, origins, exact expected/observed runtime version and the deployment ID attached by the deployment job. A minimal `{ "ok": true }` is rejected. Capture it after verifying the baseline production deployment and confirming its ID stayed current through verification. Keep this trusted artifact under the same access controls as deployment credentials. The code validates the report structure; it does not provide cryptographic attestation.
+For Pages use `provider: "cloudflare-pages"` and `projectName` instead of `scriptName`. The report must be the actual successful installed-assets verification, including checks, request count, timestamp, origins, exact expected/observed runtime version and the deployment ID attached by the deployment job. A minimal `{ "ok": true }` and legacy header-only evidence are rejected. The baseline must include `releaseAccepted: true`, unchanged manifest/build bindings and successful authenticated file checks. Capture it after verifying the baseline production deployment and confirming its ID stayed current through verification. Keep this trusted artifact under the same access controls as deployment credentials. The code validates the report structure; it does not provide cryptographic attestation.
 
 Pass `failedDeploymentId` and `failureReport` (the full failed verification report plus its bound `deploymentId`). Hold the same deployment concurrency lock from deployment through verification and rollback. Set `CLOUDFLARE_API_TOKEN` in the job secret environment with access to the specific account/resource; never commit it. Supply `config` directly for embedding, or let the module read project configuration. Tests can inject `fetchImpl` for the management API, `verificationFetchImpl` for HTTP probes and `verifyImpl` for the recovery verifier.
 
-The function reads the current deployment twice, refuses mismatched IDs, retrieves only the explicitly selected older baseline, and never chooses history automatically. Workers baselines must contain exactly one version at 100%; Pages baselines must be successful production deployments. It submits one rollback and calls `verifyProtection` with the baseline runtime version. `rollbackAccepted` records API acceptance; `recoveryVerification` and `status` separately record recovery success, failure or indeterminate verification. A failed recovery does not trigger another rollback.
+The function reads the current deployment twice, refuses mismatched IDs, retrieves only the explicitly selected older baseline, and never chooses history automatically. Workers baselines must contain exactly one version at 100%; Pages baselines must be successful production deployments. It submits one rollback. Recovery verification requires the retained baseline manifest (exact digest) and an explicitly supplied session-cookie environment variable. Without those it records `recovery-unverified`, never verified. The target artifact ID remains bound to its manifest; the new serving deployment ID is checked separately before and after verification. `rollbackAccepted` records API acceptance; `recoveryVerification` and `status` separately record recovery success, failure or indeterminate verification. A failed recovery does not trigger another rollback.
 
 Cloudflare's endpoints do not expose an atomic compare-and-swap deployment precondition. `serializedDeployments: true` is an operator assertion that all deployment writers share a lock, including dashboard/manual changes; it is not a lock supplied by this package. Without that external serialization, a deployment can race the final read and POST. Do not enable this policy in such an environment.
 
@@ -44,11 +45,11 @@ Validation: `node --test packages/connect-cli/test/deployment-rollback.test.mjs`
 
 ```sh
 # First known-good deployment: read its provider ID, verify it, save full baseline.
-nakwol-connect protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --output-file baseline.json --baseline --json
+nakwol-connect protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --manifest baseline-manifest.json --session-cookie-env NAKWOL_VERIFY_COOKIE --output-file baseline.json --baseline --json
 # Keep baseline.json in trusted deployment storage and set previousVerified from it.
 
 # After the next provider deployment, in that SAME serialized job:
-nakwol-connect protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --output-file release.json --json
+nakwol-connect protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --manifest release-manifest.json --session-cookie-env NAKWOL_VERIFY_COOKIE --output-file release.json --json
 ```
 
 Example steps appended to an existing GitHub deployment job (the job must use a protected `environment: production` and share the deployment concurrency group with every writer):
@@ -58,9 +59,11 @@ Example steps appended to an existing GitHub deployment job (the job must use a 
   env:
     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     PROVIDER_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+    NAKWOL_VERIFY_COOKIE: ${{ secrets.NAKWOL_VERIFY_COOKIE }}
   run: |
     mkdir -p .nakwol/reports
-    node node_modules/nakwol-connect/bin/nakwol-connect.mjs protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --output-file .nakwol/reports/release.json --json
+    node node_modules/nakwol-connect/bin/nakwol-connect.mjs protect manifest --deployment-id "$PROVIDER_DEPLOYMENT_ID" --output-file .nakwol/reports/manifest.json
+    node node_modules/nakwol-connect/bin/nakwol-connect.mjs protect release-check --deployment-id "$PROVIDER_DEPLOYMENT_ID" --manifest .nakwol/reports/manifest.json --session-cookie-env NAKWOL_VERIFY_COOKIE --output-file .nakwol/reports/release.json --json
 - name: Report attempted release and recovery
   if: always() && hashFiles('.nakwol/reports/release.json') != ''
   env:

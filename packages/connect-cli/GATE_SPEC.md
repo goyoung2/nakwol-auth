@@ -1,6 +1,6 @@
 # NAKWOL 공통 서버 게이트 기능 명세
 
-명세 버전: 0.7.0 / 대상: Connect 0.7.0, AUTH의 24시간 역할 재확인 정책.
+명세 버전: 0.8.0 / 대상: Connect 0.8.0, AUTH의 24시간 역할 재확인 정책.
 본 문서는 구현 계약이다. 운영 적용 여부는 배포 기록과 검증 결과로 별도 확인한다.
 
 ## 1. 책임과 보호 경계
@@ -75,7 +75,7 @@
 
 ## 7. 업데이트, 호환성, 롤백
 
-- 공식 설치: npm 빌드 훅으로 `nakwol-connect@~0.7.0 protect update` 실행. 0.7.x 패치 업데이트를 따라가며 다음 minor/major는 검토 후 명시적 전환.
+- 공식 설치: npm 빌드 훅으로 `nakwol-connect@~0.8.0 protect update` 실행. 0.8.x 패치 업데이트를 따라가며 다음 minor/major는 검토 후 명시적 전환.
 - 기존 `~0.6.3` 빌드 훅은 0.7.0을 자동 적용하지 않는다. 5분 권한 회수 지연을 검토한 뒤 `npx --yes nakwol-connect@0.7.0 protect update`와 사이트 빌드·배포·검증을 수행한다. AUTH만 배포해서 기존 사이트 게이트가 바뀌지 않는다.
 - 기존 공식 설치는 최신 CLI의 protect update로 최초 1회 전환. 자체 호스팅은 공통 API와 패키지 업데이트를 빌드 파이프라인에 연결.
 - 앱/정책/주소 보존, 파일 해시 검증, 수정된 설치 파일은 덮어쓰기 거부. Pages clean build의 누락 생성물만 재생성 허용. 실제 사용한 runtimeVersion 기록.
@@ -98,7 +98,7 @@
 | G09 | 패키지 API import, Workers/Pages 런타임, 빌드 훅 갱신, 수정 파일 보호 |
 | G10 | 운영 원본·이전 배포·별도 도메인 목록 확인 및 각 주소 차단/폐쇄 증거 |
 
-protect verify는 열거한 주소·경로만 검증한다. 401/403 + gate header + no-store만 합격; 200/206/302/404/503은 차단 검사 합격이 아니다. 삭제된 주소는 별도 폐쇄 증거로 기록한다. 실사용 OAuth와 호스팅별 라우팅은 운영 검증을 별도로 기록한다.
+protect verify는 열거한 주소·경로만 검증한다. 401/403 + gate header + no-store와 bounded body 검사로 익명 차단을 판정한다. 이 결과만으로 출시 합격을 표시하지 않는다; 200/206/302/404/503은 차단 검사 합격이 아니다. 삭제된 주소는 별도 폐쇄 증거로 기록한다. 실사용 OAuth와 호스팅별 라우팅은 운영 검증을 별도로 기록한다.
 
 ### 자동 접속 확인 안내
 
@@ -117,3 +117,9 @@ responses. Managed update PRs require review; no production auto-merge. Optional
 release-check rollback requires a pinned verified baseline, current deployment
 identity checks and externally serialized deployments. Report-only credentials
 never authorize users; all deployment summaries remain informational.
+
+## 0.8.0 호스팅·증거 확장
+
+공식 어댑터는 Workers, Pages, Vercel static이며 동일 공통 게이트 소스를 사용합니다. Vercel은 모든 경로를 matcher에 포함하고 기존 라우팅 설정을 덮어쓰지 않습니다. Next/SSR 자동 설치는 미지원입니다. AUTH origin은 정규화하며 SDK 실패 시 동작하는 재시도·계정 복구 수단을 제공합니다.
+
+`protect manifest`와 `verify --manifest --origins-file --session-cookie-env`는 빌드 경로·크기·SHA256, 배포 ID, runtime을 묶습니다. bounded body와 canary/hash, 원주소 캐시/304, 정상 인증 파일을 검사합니다. 단순 익명 차단(ok)과 출시 증명(releaseAccepted)을 분리합니다. 기존 헤더 검사 보고서는 자동 롤백 승인의 근거로 쓰지 않으며 재검증해야 합니다. 세부 계약은 [보호 증거 안내](../../docs/PROTECTION_EVIDENCE.md)를 따릅니다.

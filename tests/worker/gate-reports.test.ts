@@ -113,3 +113,14 @@ test('history is bounded, owner/admin restricted and informational without token
     assert.equal(f.db.prepare("SELECT access_policy FROM application_settings WHERE client_id='site'").get()?.access_policy,'member');
   } finally { f.db.close(); }
 });
+
+test('central history accepts bounded evidence digests but rejects incomplete release claims', async () => {
+ const f=await fixture();
+ try {
+  const token=await f.issue();
+  const evidence={...summary,release_accepted:true,manifest_hash:'b'.repeat(64),build_hash:'c'.repeat(64),authenticated_checked_count:3,deployment_id:'deploy'};
+  assert.equal((await f.request('/connect/gate-reports/site','POST',token,evidence)).status,201);
+  for(const invalid of [{...summary,release_accepted:true},{...evidence,authenticated_checked_count:0},{...evidence,build_hash:'private/path'},{...evidence,files:[{path:'/private'}]},{...evidence,release_accepted:'true'}]) assert.equal((await f.request('/connect/gate-reports/site','POST',token,invalid)).status,400);
+  const row=f.db.prepare('SELECT summary_json FROM gate_reports').get();assert.equal(JSON.parse(String(row?.summary_json)).manifest_hash,evidence.manifest_hash);
+ } finally {f.db.close();}
+});

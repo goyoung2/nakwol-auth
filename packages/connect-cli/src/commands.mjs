@@ -175,7 +175,7 @@ export async function doctorProject(options = {}) {
   const blocking = (requiresProtection || config?.protection) && verifyUrl && !options.offline ? await verifyProtection({ ...options, root, url:verifyUrl }) : null;
   if (requiresProtection) checks.push({ name:'anonymous_blocking', ok:blocking?.ok === true, detail:blocking ? blocking.protectionStatus : '배포 사이트의 비로그인 차단 검증이 필요합니다. 로컬 설정만으로 설치를 완료하지 않습니다.' });
   if (blocking) checks.push(...blocking.checks);
-  return { ok:checks.every((item) => item.ok), checks, config, project, marker,
+  return { schemaVersion:1, capabilities:protection.capabilities || [], ok:checks.every((item) => item.ok), checks, config, project, marker,
     protectionStatus: blocking?.protectionStatus || (protection.ok ? 'configured-not-verified' : 'unprotected'),
     protection: blocking || protection };
 }

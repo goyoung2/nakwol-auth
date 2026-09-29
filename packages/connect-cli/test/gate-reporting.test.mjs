@@ -34,3 +34,18 @@ test('CI reporting is opt-in, environment-bound and requires trusted ancestry be
   await automateProtection({root,reports:true});const deployed=await readFile(join(root,'.github/workflows/nakwol-gate-deployed.yml'),'utf8');const pr=await readFile(join(root,'.github/workflows/nakwol-gate-check.yml'),'utf8');
   assert.ok(deployed.includes('environment: production'));assert.ok(deployed.includes("steps.trusted.outcome == 'success'"));assert.ok(deployed.includes('git merge-base --is-ancestor HEAD FETCH_HEAD'));assert.ok(deployed.includes('${{ secrets.NAKWOL_GATE_REPORT_TOKEN }}'));assert.ok(!pr.includes('secrets.'));
 });
+test('release evidence summary is bounded and does not include private inventory or cookies',()=>{
+ const evidenceBinding={schemaVersion:1,manifestHash:'b'.repeat(64),buildHash:'c'.repeat(64),deploymentId:'deploy',runtimeVersion:'0.7.1',capabilities:['all-assets']};
+ const value=summarizeGateReport({...report,releaseAccepted:true,evidenceBinding,requestCount:5,authenticatedChecks:[{ok:true,name:'/private/user'}],cookie:'secret'},config,{...options,deploymentId:'deploy'});
+ assert.equal(value.release_accepted,true);assert.equal(value.build_hash,evidenceBinding.buildHash);assert.equal(value.manifest_hash,evidenceBinding.manifestHash);assert.ok(!JSON.stringify(value).includes('/private'));
+ assert.equal(summarizeGateReport(report,config,options).release_accepted,false);
+ assert.equal(summarizeGateReport({...report,releaseAccepted:true,evidenceBinding,requestCount:5,authenticatedChecks:[{ok:true}]},config,{...options,deploymentId:'other'}).release_accepted,false);
+ assert.equal(summarizeGateReport({...report,ok:false,checks:[{ok:false,classification:'exposed',detail:'HTTP 401; private canary'}]},config,options).status,'failed');
+});
+test('anonymous-only rollback recovery is never reported as recovered',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'gate-recovery-report-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeProjectConfig(root,{...config,protection:{...config.protection,rollback:{previousVerified:{deploymentId:'old',runtimeVersion:'0.7.1'}}}});
+ const path=join(root,'report.json');await writeFile(path,JSON.stringify({rollbackAccepted:true,failedVerification:report,recoveryVerification:report,targetDeploymentId:'old',recoveryDeploymentId:'recovery',failedDeploymentId:'failed'}));
+ const result=await reportProtection({...options,root,report:path,reportToken:'secret',reportAuthOrigin:'https://auth.test',fetchImpl:async()=>Response.json({ok:true})});
+ assert.equal(result.summary.status,'rollback-failed');assert.equal(result.summary.release_accepted,false);
+});

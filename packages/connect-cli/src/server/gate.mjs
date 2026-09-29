@@ -1,6 +1,6 @@
 import { loginPage } from './login.mjs';
 
-export const RUNTIME_VERSION = '0.7.1';
+export const RUNTIME_VERSION = '0.8.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -209,11 +209,14 @@ export async function serveProtected(request, env, settings) {
 
 // Public server API: hosts provide only their secret and protected content handler.
 export function createGate(settings) {
-  const config = Object.freeze({ ...settings });
+  const config = { ...settings };
   for (const name of ['siteUrl', 'authOrigin']) {
     const url = new URL(config[name]);
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error(`${name} must be HTTPS`);
   }
+  config.authOrigin = new URL(config.authOrigin).origin;
+  config.siteUrl = new URL(config.siteUrl).href;
+  Object.freeze(config);
   if (!config.clientId || !['member', 'guest', 'admin'].includes(config.accessPolicy)) throw new Error('clientId and accessPolicy are required');
   return (request, { sessionSecret, serveAsset }) => serveProtected(request, {
     NAKWOL_SESSION_SECRET: sessionSecret,
