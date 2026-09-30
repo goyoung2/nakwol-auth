@@ -1,5 +1,7 @@
 상세 기능 계약: [공통 게이트 명세](../packages/connect-cli/GATE_SPEC.md)
 
+서비스 설치·재설정은 [개발자 마법사 안내](DEVELOPER_SETUP.md)를 참고하세요. Connect 0.14.0은 저장한 setup JSON으로 변경 비교와 서버 보호 설치를 지원합니다.
+
 # Connect 서버 보호 설치와 차단 검증
 
 Connect 0.7.1 기준. LLM에게는 [복사용 설치·업데이트 지시문](LLM_INSTALLATION.md)을 전달하세요.

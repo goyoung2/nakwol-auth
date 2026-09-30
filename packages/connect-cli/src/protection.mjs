@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readProjectConfig, writeProjectConfig } from './config.mjs';
 import { detectProject } from './project.mjs';
 import { installIntegration } from './integration.mjs';
+import { prepareSetup } from './setup.mjs';
 import { protectionBuildHash, sha256 } from './protection-inventory.mjs';
 import * as workers from './adapters/cloudflare-workers.mjs';
 import * as pages from './adapters/cloudflare-pages.mjs';
@@ -13,7 +14,7 @@ const adapters = {'cloudflare-workers':workers,'cloudflare-pages':pages,vercel};
 export const WRANGLER_FILE = 'wrangler.nakwol.json';
 const GENERATED = '.nakwol/server';
 const { version: runtimeVersion } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.13.0 protect update';
+const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.14.0 protect update';
 // Git may convert generated text to CRLF on Windows; line endings are not a gate change.
 const hash = value => createHash('sha256').update(value.toString().replaceAll('\r\n', '\n')).digest('hex');
 
@@ -65,11 +66,13 @@ export async function inspectProtection(root, config, options = {}) {
   }
   const adapterInspection = await adapters[p.provider].inspect(root, p);
   if (!adapterInspection.ok) return {installed:true, ...adapterInspection};
-  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.13.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
+  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.14.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
 }
 export async function installProtection(options = {}) {
   const root = options.root || process.cwd();
-  const config = await readProjectConfig(root);
+  const prepared = options.setupFile ? await prepareSetup(options) : null;
+  if (prepared) options = prepared.options;
+  const config = prepared?.config || await readProjectConfig(root);
   if (!config?.clientId) throw new Error('먼저 nakwol-connect init을 실행하세요.');
   if (!Object.hasOwn(adapters,options.provider)) throw new Error('자동 설치 지원 환경: --provider cloudflare-workers, cloudflare-pages 또는 vercel (정적 빌드). Netlify 등은 nakwol-connect/server 공통 게이트를 호스팅에 연결한 뒤 protect verify --provider custom --url https://SITE/ --paths /,/data.json 으로 검사하세요. GitHub Pages는 서버 게이트를 실행할 수 없으므로 보호 콘텐츠를 서버가 있는 호스팅으로 옮겨야 합니다. Embed만으로는 파일을 보호하지 못합니다.');
   if (config.protection && config.protection.provider !== options.provider) throw new Error('기존 배포의 공개 경로를 남길 수 있으므로 provider를 자동 변경하지 않습니다.');
@@ -107,7 +110,7 @@ export async function installProtection(options = {}) {
   await writeFile(join(root, 'package.json'), JSON.stringify(buildPackage, null, 2) + String.fromCharCode(10));
   const protection = { schemaVersion:1, capabilities:adapters[options.provider].capabilities, runtimeVersion, updateChannel:config.protection?.updateChannel === 'managed' ? 'managed' : 'latest', ...(config.protection?.automation ? {automation:config.protection.automation} : {}), ...(config.protection?.rollback ? {rollback:config.protection.rollback} : {}), provider: options.provider, projectName, siteUrl: url, clientId:config.clientId, accessPolicy, authOrigin, assetsDirectory: inventory.directory, files: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, hash(content)])) };
   await writeProjectConfig(root, { ...config, accessPolicy, authOrigin, protection });
-  return { ok: true, protectionStatus: 'configured', protection, nextSteps: [
+  return { ok: true, protectionStatus: 'configured', protection, ...(prepared ? {setupDiff:prepared.diff,setupStatus:{...prepared.status,localInstallation:'configured'}} : {}), nextSteps: [
     'npm run build는 설정된 버전의 공식 공통 게이트를 반영합니다. 별도 빌드 도구/배포 명령은 빌드 후 npm run nakwol:gate를 실행하세요.',
     'Connect의 서버 로그아웃 연동이 반영되도록 사이트를 다시 빌드하세요.',
     '서버 자동 갱신은 별도 활성화입니다. 등록된 /__nakwol/callback과 해당 origin의 서버 credential을 NAKWOL_SITE_CREDENTIAL Secret에 설정하세요. 자세한 절차: docs/SERVER_SESSION_REFRESH.md. Secret이 없으면 기존 1시간 세션을 유지합니다.',
@@ -128,7 +131,7 @@ async function updateBuildHook(root, managed = false) {
     if (scripts['nakwol:gate'] !== 'nakwol-connect protect update') throw new Error('Managed gate hook was changed; refusing network-based fallback.');
     return pkg;
   }
-  if (scripts['nakwol:gate'] && scripts['nakwol:gate'] !== UPDATE_COMMAND && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.12.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.11.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.10.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.9.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.8.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.7.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@latest protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.6.3 protect update') throw new Error('기존 nakwol:gate 스크립트를 덮어쓰지 않습니다.');
+  if (scripts['nakwol:gate'] && scripts['nakwol:gate'] !== UPDATE_COMMAND && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.13.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.12.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.11.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.10.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.9.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.8.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.7.0 protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@latest protect update' && scripts['nakwol:gate'] !== 'npx --yes nakwol-connect@~0.6.3 protect update') throw new Error('기존 nakwol:gate 스크립트를 덮어쓰지 않습니다.');
   scripts['nakwol:gate'] = UPDATE_COMMAND;
   if (!scripts.build) scripts.build = 'npm run nakwol:gate';
   else if (scripts.build !== 'npm run nakwol:gate' && !(scripts.postbuild || '').includes('npm run nakwol:gate')) {

@@ -86,6 +86,7 @@ async function resolveApp(root, project, existingConfig, api, options) {
 }
 
 export async function initProject(options = {}) {
+  if (options.setupFile) return installProtection(options);
   const root = options.root || process.cwd();
   const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
   const output = options.output || console.log;
@@ -135,7 +136,7 @@ export async function doctorProject(options = {}) {
   if (config?.clientId && marker.present) {
     checks.push({ name:'marker_client_id', ok:marker.clientId === config.clientId, detail:marker.clientId || 'missing' });
     checks.push({ name:'marker_auth_mode', ok:marker.authMode === config.authMode, detail:marker.authMode || 'required' });
-    if (config.version === 2) {
+    if (config.version === 2 && (config.dataIntegration !== 'none' || config.dataScopes.length > 0)) {
       checks.push({ name:'marker_data_origin', ok:marker.dataOrigin === config.dataOrigin, detail:marker.dataOrigin || 'missing' });
       checks.push({ name:'marker_data_scopes', ok:sameScopes(marker.dataScopes, config.dataScopes), detail:marker.dataScopes.join(',') });
     }
@@ -154,7 +155,7 @@ export async function doctorProject(options = {}) {
         const requestedPolicy = normalizeAccessPolicy(options.accessPolicy || config.accessPolicy);
         if (requestedPolicy) checks.push({ name:'central_access_policy', ok:(app.access_policy === 'public' ? 'guest' : app.access_policy) === requestedPolicy, detail:app.access_policy || 'missing' });
       } catch (error) { checks.push({ name:'central_app', ok:false, detail:error.message }); }
-      if (config.version === 2) {
+      if (config.version === 2 && (config.dataIntegration !== 'none' || config.dataScopes.length > 0)) {
         try {
           const dataApi = new ConnectDataApi({ dataOrigin:config.dataOrigin, accessToken:session.accessToken, fetchImpl });
           const state = (await dataApi.getScopes(config.clientId)).data;
@@ -254,7 +255,7 @@ export async function dataSetProject(scopes, options = {}) {
   };
   const dataState = (await ctx.dataApi.setScopes(ctx.config.clientId, desired.dataScopes)).data;
   const install = await installIntegration(ctx.root, ctx.project, ctx.config.clientId, desired);
-  const config = await writeProjectConfig(ctx.root, { ...ctx.config, integration:install.integration, ...desired });
+  const config = await writeProjectConfig(ctx.root, { ...ctx.config, dataIntegration:undefined, integration:install.integration, ...desired });
   return { ok:true, clientId:ctx.config.clientId, config, data:dataState, changedFiles:install.changedFiles };
 }
 export async function dataAddProject(scopes, options = {}) {

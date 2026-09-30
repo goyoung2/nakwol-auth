@@ -1,4 +1,6 @@
-# NAKWOL Connect CLI 0.13.0
+# NAKWOL Connect CLI 0.14.0
+
+설치·재설정 마법사와 `protect plan/install/update --setup-file nakwol-setup.json`은 [개발자 설치 안내](docs/DEVELOPER_SETUP.md)를 따릅니다. 최초 정적 빌드 후 게이트를 설치하고 다시 빌드하세요.
 
 NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 프로젝트에 연결하고, 현재 DATA API 계약까지 자동 발견하는 공식 도구입니다.
 

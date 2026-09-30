@@ -1,4 +1,8 @@
 import { registerServerSessionRoutes } from './server-session-routes';
+import { registerDeveloperSetupRoutes } from './developer-setup';
+import {developerSetupPage} from './developer-setup-page';
+import developerSetupSource from './assets/nakwol-developer-setup.js.txt';
+import setupSchemaSource from './assets/setup-schema.js.txt';
 import { registerGateControlRoutes,publishPendingControl } from './gate-control';
 import type { Env } from './types';
 export { GateControlObject } from './gate-control-object';
@@ -33,6 +37,10 @@ import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 
 registerServerSessionRoutes(app);
+registerDeveloperSetupRoutes(app);
+app.get('/developer/setup',c=>c.html(developerSetupPage(),200,{'Cache-Control':'no-store'}));
+app.get('/developer/setup.js',c=>c.text(developerSetupSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
+app.get('/presentation/v1/setup-schema.mjs',c=>c.text(setupSchemaSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'public, max-age=60','Access-Control-Allow-Origin':'*'}));
 registerGateControlRoutes(app);
 registerServiceManagementRoutes(app);
 registerPresentationRoutes(app);

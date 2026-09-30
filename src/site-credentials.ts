@@ -31,16 +31,23 @@ const authority = `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND u.status='activ
  (EXISTS(SELECT 1 FROM auth_operators o WHERE o.user_id=u.id) OR
  EXISTS(SELECT 1 FROM application_owners o JOIN connect_developers d ON d.user_id=o.user_id
  WHERE o.user_id=u.id AND o.client_id=? AND d.status='active')))`;
-export async function issueSiteCredential(env: Env, actor: string, clientId: string, siteOrigin: string, reason: string) {
+export async function issueSiteCredential(env: Env, actor: string, clientId: string, siteOrigin: string, reason: string, setup?:{readonly id:string;readonly version:number}) {
   try { await requireRegisteredSite(env, clientId, siteOrigin); }
   catch(error) { if(error instanceof ServerSessionError) throw new ServiceManagementError(error.code,403); throw error; }
   const id = 'sc_' + randomToken(18), secret = randomToken(32), now = Date.now();
+  const receiptGuard=setup?` AND EXISTS(SELECT 1 FROM service_setups WHERE id=? AND actor_id=? AND client_id=? AND version=? AND json_extract(document_json,'$.siteOrigin')=?) AND NOT EXISTS(SELECT 1 FROM service_setup_credentials WHERE setup_id=?)`:'';
+  const receiptParams=setup?[setup.id,actor,clientId,setup.version,siteOrigin,setup.id]:[];
   const result = await env.DB.batch([
-    env.DB.prepare(`INSERT INTO site_credentials SELECT ?,?,?,?,?,NULL WHERE ${authority}`).bind(id, await sha256Base64Url(secret), clientId, siteOrigin, now, actor, clientId),
+    env.DB.prepare(`INSERT INTO site_credentials SELECT ?,?,?,?,?,NULL WHERE ${authority}${receiptGuard}`).bind(id, await sha256Base64Url(secret), clientId, siteOrigin, now, actor, clientId,...receiptParams),
     env.DB.prepare("INSERT INTO site_credential_audit SELECT ?,id,client_id,?,'issue',?,? FROM site_credentials WHERE id=?").bind(randomToken(18), actor, reason, now, id),
+    ...(setup?[env.DB.prepare('INSERT INTO service_setup_credentials SELECT ?,id FROM site_credentials WHERE id=?').bind(setup.id,id)]:[]),
   ]);
-  if (result[0].meta.changes !== 1) throw new ServiceManagementError('FORBIDDEN', 403);
-  return { credentialId: id, clientId, siteOrigin, secret };
+  if (result[0].meta.changes !== 1) {
+    const receipt=setup?await env.DB.prepare(`SELECT c.id,c.revoked_at FROM service_setup_credentials r JOIN site_credentials c ON c.id=r.credential_id JOIN service_setups s ON s.id=r.setup_id WHERE s.id=? AND s.actor_id=? AND s.client_id=? AND s.version=? AND c.site_origin=? AND ${authority}`).bind(setup.id,actor,clientId,setup.version,siteOrigin,actor,clientId).first<{id:string;revoked_at:number|null}>():null;
+    if(receipt)return {credentialId:receipt.id,clientId,siteOrigin,secretAvailable:false,revoked:receipt.revoked_at!==null};
+    throw new ServiceManagementError('FORBIDDEN', 403);
+  }
+  return { credentialId: id, clientId, siteOrigin, secret, secretAvailable:true };
 }
 export async function revokeSiteCredential(env: Env, actor: string, clientId: string, credentialId: string, reason: string) {
   const now = Date.now(), operation = randomToken(18);

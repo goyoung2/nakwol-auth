@@ -21,7 +21,7 @@ for (const provider of ['cloudflare-workers','cloudflare-pages']) test(`${provid
   const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
   assert.equal(pkg.scripts.build,'vite build');
   assert.equal(pkg.scripts.postbuild,'npm run nakwol:gate && node existing-task.mjs');
-  assert.equal(pkg.scripts['nakwol:gate'],'npx --yes nakwol-connect@~0.13.0 protect update');
+  assert.equal(pkg.scripts['nakwol:gate'],'npx --yes nakwol-connect@~0.14.0 protect update');
   await writeFile(join(root,'package.json'),JSON.stringify({...pkg,scripts:{...pkg.scripts,'nakwol:gate':'npx --yes nakwol-connect@~0.12.0 protect update'}}));
   if(provider==='cloudflare-pages') {
     await rm(join(root,'dist/_worker.js'));
@@ -29,7 +29,7 @@ for (const provider of ['cloudflare-workers','cloudflare-pages']) test(`${provid
   }
   const cli=fileURLToPath(new URL('../bin/nakwol-connect.mjs',import.meta.url));
   const result=JSON.parse(execFileSync(process.execPath,[cli,'protect','update','--root',root,'--json'],{encoding:'utf8'}));
-  assert.equal(result.protection.runtimeVersion,'0.13.0');
+  assert.equal(result.protection.runtimeVersion,'0.14.0');
   assert.equal(result.protection.provider,provider);
   assert.equal(result.protection.siteUrl,'https://site.test/');
   assert.equal((await inspectProtection(root,await readProjectConfig(root))).ok,true);

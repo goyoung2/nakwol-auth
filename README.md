@@ -1,5 +1,7 @@
 # NAKWOL Platform Core
 
+서비스 설치·재설정은 [개발자 마법사 안내](docs/DEVELOPER_SETUP.md)를 참고하세요. Connect 0.14.0은 저장한 setup JSON으로 변경 비교와 서버 보호 설치를 지원합니다.
+
 낙월(落月) 서비스들이 **로그인과 공통 게임 데이터를 같은 방식으로 재사용**하도록 만든 중앙 플랫폼입니다.
 
 새 서비스에서 Discord OAuth를 직접 구현하지 않습니다. 공식 **NAKWOL Connect**를 붙이면 NAKWOL AUTH의 중앙 로그인/SSO와, 필요한 경우 NAKWOL DATA까지 연결됩니다.

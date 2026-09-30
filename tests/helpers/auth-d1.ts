@@ -16,6 +16,8 @@ export async function authFixture(script = 'export default {fetch(){return new R
   for (const statement of usersSql.replace(/^--.*$/gm, '').match(/\s*CREATE TRIGGER[\s\S]*?END;|[^;]+;/gi) ?? []) await DB.prepare(statement).run();
   const presentationSql = await readFile(new URL('../../migrations/0021_service_presentation.sql', import.meta.url), 'utf8');
   for (const statement of presentationSql.replace(/^--.*$/gm, '').match(/\s*CREATE TRIGGER[\s\S]*?END;|[^;]+;/gi) ?? []) await DB.prepare(statement).run();
+  const setupSql = await readFile(new URL('../../migrations/0022_service_setup.sql', import.meta.url), 'utf8');
+  for (const statement of setupSql.replace(/^--.*$/gm, '').match(/[^;]+;/g) ?? []) await DB.prepare(statement).run();
   const env = { DB, NAKWOL_GUILD_ID: 'guild-fixture', NAKWOL_MEMBER_ROLE_ID: 'season3',
     DISCORD_CLIENT_ID: 'fixture', DISCORD_CLIENT_SECRET: 'fixture', AUTH_ORIGIN: 'https://auth.test' } satisfies Env;
   await DB.prepare("INSERT INTO users VALUES ('member', 'Member', NULL, 'active', 0, 0)").run();

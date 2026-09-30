@@ -13,7 +13,7 @@ const ssoB64 = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-')
 const ssoBytes = value => { if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('encoding'); return Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/')), c => c.charCodeAt(0)); };
 const ssoRandom = () => ssoB64(crypto.getRandomValues(new Uint8Array(32)));
 function ssoResponse(body, status = 200, headers = {}) {
-  return new Response(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'X-Nakwol-Gate': 'v1', 'X-Nakwol-Runtime': '0.13.0', 'X-Nakwol-Session-Mode': 'server-refresh-v1', ...headers } });
+  return new Response(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'X-Nakwol-Gate': 'v1', 'X-Nakwol-Runtime': '0.14.0', 'X-Nakwol-Session-Mode': 'server-refresh-v1', ...headers } });
 }
 function ssoRemember(map, id, value) { if (!map.has(id) && map.size >= 512) map.delete(map.keys().next().value); map.set(id, value); }
 async function ssoKey(secret) {
@@ -202,7 +202,7 @@ export async function serveServerSession(request, env, settings) {
   const observations=observeApproval(env,settings,activeProof);
   headers.set('X-Nakwol-Observations',observations?'background-v1':'unsupported');
   headers.set('Cache-Control', asset.headers.has('ETag') && [200, 304].includes(asset.status) ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
-  headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', ')); headers.set('X-Nakwol-Gate', 'v1'); headers.set('X-Nakwol-Runtime', '0.13.0'); headers.set('X-Nakwol-Session-Mode', 'server-refresh-v1'); headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', ')); headers.set('X-Nakwol-Gate', 'v1'); headers.set('X-Nakwol-Runtime', '0.14.0'); headers.set('X-Nakwol-Session-Mode', 'server-refresh-v1'); headers.set('X-Content-Type-Options', 'nosniff');
   if (renewed) headers.append('Set-Cookie', renewed);
   return new Response(asset.body, { status: asset.status, headers });
 }

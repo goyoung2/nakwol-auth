@@ -47,7 +47,7 @@ test('signed control expiry, binding, replay, outages and 300-asset hot path',as
   const conditional=await serveProtected(request('/image',cookie,{headers:{'If-None-Match':'"fixture"'}}),env,settings);assert.equal(conditional.status,304);assert.match(conditional.headers.get('Cache-Control'),/^private, no-cache/);
   const before=controlCalls;for(const extra of [{},{method:'HEAD'},{headers:{Range:'bytes=0-1'}}])for(const path of ['/','/image.webp','/data.json','/font.woff2','/app.js','/style.css','/download.bin'])assert.equal((await serveProtected(request(path,'',extra),env,settings)).status,401);
   assert.equal(controlCalls,before);
-  const verified=await verifyProtection({provider:'custom',url:'https://site.test/',paths:'/image.webp,/data.json,/font.woff2,/app.js,/style.css,/download.bin',expectRuntime:'0.13.0',fetchImpl:(url,init)=>serveProtected(new Request(url,init),env,settings)});
+  const verified=await verifyProtection({provider:'custom',url:'https://site.test/',paths:'/image.webp,/data.json,/font.woff2,/app.js,/style.css,/download.bin',expectRuntime:'0.14.0',fetchImpl:(url,init)=>serveProtected(new Request(url,init),env,settings)});
   assert.equal(verified.ok,true,JSON.stringify(verified.checks.filter(c=>!c.ok)));
   assert.equal(verified.requestCount,28);assert.equal(controlCalls,before);
   assert.equal((await serveProtected(request('/image',cookie.replace('v3.','v9.')),env,settings)).status,401);

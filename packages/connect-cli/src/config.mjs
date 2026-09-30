@@ -29,6 +29,8 @@ export async function writeProjectConfig(root, config) {
     accessPolicy: config.accessPolicy || 'member',
     authOrigin: config.authOrigin || 'https://nakwol-auth.sepsd21.workers.dev',
     ...(config.protection ? { protection: config.protection } : {}),
+    ...(config.setup ? {setup:config.setup} : {}),
+    ...(config.dataIntegration === 'none' ? {dataIntegration:'none'} : {}),
   };
   await writeFile(join(root, PROJECT_CONFIG_FILE), `${JSON.stringify(value, null, 2)}\n`);
   return value;
