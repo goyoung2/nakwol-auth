@@ -1,6 +1,6 @@
 {
   "name": "nakwol-connect",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Official agent-first installer and management CLI for NAKWOL Connect",
   "type": "module",
   "bin": { "nakwol-connect": "bin/nakwol-connect.mjs" },
@@ -11,6 +11,6 @@
   "homepage": "https://nakwol-auth.sepsd21.workers.dev/llms.txt",
   "keywords": ["nakwol", "authentication", "oauth", "discord", "data", "openapi", "cli", "agent", "codex", "cloudflare"],
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
-  "exports": { "./server": "./src/server/gate.mjs" },
+  "exports": { "./server": "./src/server/gate.mjs", "./presentation": {"types":"./src/shared/presentation-schema.d.mts","default":"./src/shared/presentation-schema.mjs"}, "./presentation/render": "./src/shared/presentation-renderer.mjs" },
   "private": false
 }

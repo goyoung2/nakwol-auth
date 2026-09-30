@@ -3,6 +3,7 @@
   "name": "nakwol-auth",
   "main": "src/sdk-entry.ts",
   "compatibility_date": "2026-08-24",
+  "images": {"binding":"PRESENTATION_IMAGES"},
   "durable_objects": {"bindings": [{"name":"GATE_CONTROL","class_name":"GateControlObject"}]},
   "migrations": [{"tag":"gate-control-v1","new_sqlite_classes":["GateControlObject"]}],
   "triggers": {"crons":["* * * * *"]},

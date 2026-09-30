@@ -3,6 +3,12 @@ import { registerGateControlRoutes,publishPendingControl } from './gate-control'
 import type { Env } from './types';
 export { GateControlObject } from './gate-control-object';
 import { registerServiceManagementRoutes } from './service-management-routes';
+import { registerPresentationRoutes,cleanupPresentation } from './service-presentation';
+import presentationSchemaSource from './assets/presentation-schema.js.txt';
+import presentationRendererSource from './assets/presentation-renderer.js.txt';
+import {presentationPage,presentationPreviewPage} from './service-presentation-page';
+import presentationEditorSource from './assets/nakwol-developer-presentation.js.txt';
+import presentationPreviewSource from './assets/nakwol-presentation-preview.js.txt';
 import { registerServiceUserRoutes } from './service-user-routes';
 import { registerServiceObservationRoutes } from './service-observations';
 import { cleanupServiceUsers } from './service-users';
@@ -29,6 +35,13 @@ import { registerRoleAdminRoutes } from './role-admin';
 registerServerSessionRoutes(app);
 registerGateControlRoutes(app);
 registerServiceManagementRoutes(app);
+registerPresentationRoutes(app);
+app.get('/presentation/v1/presentation-schema.mjs',c=>c.text(presentationSchemaSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'public, max-age=60','Access-Control-Allow-Origin':'*'}));
+app.get('/presentation/v1/renderer.mjs',c=>c.text(presentationRendererSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'public, max-age=60','Access-Control-Allow-Origin':'*'}));
+app.get('/developer/presentation',c=>c.html(presentationPage(),200,{'Cache-Control':'no-store'}));
+app.get('/developer/presentation-preview',c=>c.html(presentationPreviewPage(),200,{'Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; script-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'"}));
+app.get('/developer/presentation.js',c=>c.text(presentationEditorSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
+app.get('/developer/presentation-preview.js',c=>c.text(presentationPreviewSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
 registerServiceUserRoutes(app);
 registerServiceObservationRoutes(app);
 registerAuthPolicyAdminRoutes(app);
@@ -52,5 +65,6 @@ registerRoleAdminRoutes(app);
 
 export default Object.assign(app, {scheduled(_controller:ScheduledController,env:Env,ctx:ExecutionContext) {
   ctx.waitUntil(cleanupServiceUsers(env));
+  ctx.waitUntil(cleanupPresentation(env));
   if(env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID)ctx.waitUntil(publishPendingControl(env));
 }});

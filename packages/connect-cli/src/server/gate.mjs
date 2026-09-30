@@ -1,7 +1,7 @@
 import { loginPage } from './login.mjs';
 import { serveServerSession } from './session.mjs';
 
-export const RUNTIME_VERSION = '0.12.0';
+export const RUNTIME_VERSION = '0.13.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();

@@ -55,7 +55,7 @@ export async function getServiceCapabilities(env: Env, actor: ServiceActor, clie
     grantableConditions: policy.effective.grantableConditions, userManagementAvailable: true };
 }
 
-export async function requireManagementMutation(c: Context<{ Bindings: Env }>, actor: ServiceActor, scope: string): Promise<Record<string, unknown>> {
+export async function requireManagementMutation(c: Context<{ Bindings: Env }>, actor: ServiceActor, scope: string, maxBytes = 8192): Promise<Record<string, unknown>> {
   if (c.req.header('Origin') !== new URL(c.env.AUTH_ORIGIN).origin) throw new ServiceManagementError('INVALID_ORIGIN', 403);
   await managementAuthenticatedAt(c,actor.userId);
   const now = Date.now();
@@ -63,7 +63,7 @@ export async function requireManagementMutation(c: Context<{ Bindings: Env }>, a
   if (!reader) throw new ServiceManagementError('INVALID_BODY', 400);
   const chunks: Uint8Array[] = []; let length = 0;
   try { for (;;) { const next = await reader.read(); if (next.done) break; length += next.value.byteLength;
-    if (length > 8192) { await reader.cancel(); throw new ServiceManagementError('BODY_TOO_LARGE', 413); } chunks.push(next.value); } }
+    if (length > maxBytes) { await reader.cancel(); throw new ServiceManagementError('BODY_TOO_LARGE', 413); } chunks.push(next.value); } }
   finally { reader.releaseLock(); }
   const bytes = new Uint8Array(length); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   let body: unknown; try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new ServiceManagementError('INVALID_BODY', 400); }

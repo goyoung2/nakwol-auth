@@ -25,6 +25,20 @@
   let activeClient = null;
   let authGuard = null;
   let bodyLock = null;
+  let presentationModule = null;
+  let presentation = null;
+  let guardState = 'checking';
+  const brandGuard = () => {
+    if (!authGuard || !presentationModule || !presentation) return;
+    if (!authGuard.renderer) authGuard.renderer = presentationModule.mountPresentationScreen(authGuard.root, {clientId,authOrigin,presentation,state:guardState,startedAt:authGuard.startedAt,actions:{login:()=>activeClient?.login(),retry:()=>location.reload()}});
+    else authGuard.renderer.setPresentation(presentation);
+  };
+  const branding = import(`${authOrigin}/presentation/v1/renderer.mjs`).then(async module => {
+    presentationModule = module;
+    presentation = await module.loadPresentation(authOrigin,clientId);
+    brandGuard();
+    return presentation;
+  }).catch(() => null);
 
   const lockBody = () => {
     if (!authRequired || bodyLock || !document.body) return;
@@ -97,9 +111,14 @@
     recovery.hidden = true;
     Object.assign(recovery.style, { display: 'none', marginTop: '16px', color: '#c7d2fe', fontSize: '14px' });
     card.append(title, copy, button, recovery);
+    card.hidden=true;
     root.appendChild(card);
     document.documentElement.appendChild(root);
-    authGuard = { root, title, copy, button, recovery };
+    authGuard = { root, title, copy, button, recovery,card,startedAt:Date.now() };
+    const guard=authGuard;
+    guard.delay=setTimeout(()=>{if(authGuard===guard&&!guard.renderer)card.hidden=false;},250);
+    guard.slow=setTimeout(()=>{if(authGuard===guard&&!guard.renderer&&guardState==='checking'){copy.hidden=false;copy.textContent='확인이 지연되고 있습니다. 새로고침하거나 계정 상태를 확인하세요.';recovery.hidden=false;recovery.style.display='block';}},8000);
+    brandGuard();
     lockBody();
     return authGuard;
   };
@@ -107,6 +126,9 @@
   const setAuthGuardState = (state, error = null) => {
     const guard = ensureAuthGuard();
     if (!guard) return;
+    guard.card.hidden=false;
+    guardState = state === 'login' || state === 'loggedout' ? 'login' : state === 'error' ? (['access_denied','ACCESS_DENIED'].includes(error?.code) ? 'denied' : 'unavailable') : 'checking';
+    guard.renderer?.setState(guardState);
     guard.recovery.hidden = state !== 'error';
     guard.recovery.style.display = state === 'error' ? 'block' : 'none';
     guard.copy.hidden = false;
@@ -137,6 +159,8 @@
 
   const releaseAuthGuard = () => {
     if (!authRequired) return;
+    authGuard?.renderer?.destroy();
+    clearTimeout(authGuard?.delay);clearTimeout(authGuard?.slow);
     authGuard?.root.remove();
     authGuard = null;
     if (bodyLock && document.body) {
@@ -400,6 +424,10 @@
         dispatch('nakwol-error', event.detail || null);
       });
       if (uiMode === 'none' || uiMode === 'headless') {
+        void branding.then(() => {
+          const bindings = presentationModule?.bindHeadless(client);
+          dispatch('nakwol-headless-bindings', bindings ? {ok:bindings.ok,missing:bindings.missing} : {ok:false,missing:['renderer']});
+        });
         const user = await enforceRequiredAuth(await client.bootstrap());
         api.user = user || null;
         if (user) window.NAKWOL_AUTH_USER = user;
@@ -420,6 +448,15 @@
         top: '14px',
         right: '14px',
         zIndex: '2147483000',
+      });
+      widget.element.hidden = true;
+      void branding.then(config => {
+        if (config && presentationModule) {
+          widget.element.dataset.variant = config.widget.variant;
+          // showName belongs to the real SDK user renderer; change only its presentation.
+          widget.element.classList.toggle('nakwol-hide-name', !config.widget.showName);
+          presentationModule.applyWidgetPresentation(widget.element,config);
+        } else widget.element.hidden = false;
       });
       api.widget = widget;
       const user = await enforceRequiredAuth(await widget.ready);

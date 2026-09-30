@@ -1,4 +1,5 @@
 export interface Env {
+  PRESENTATION_IMAGES?: ImagesBinding;
   DB: D1Database;
   GATE_CONTROL?: DurableObjectNamespace;
   GATE_CONTROL_SIGNING_JWK?: string;

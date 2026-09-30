@@ -1,0 +1,12 @@
+import {NakwolAuthClient,mountNakwolIdentityMenu} from '/sdk/v0.3.2/nakwol-auth-web.js';
+import {mountPresentationScreen,applyWidgetPresentation,safePresentation} from '/presentation/v1/renderer.mjs';
+let current=null,widget=null;const root=document.getElementById('preview');
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='nakwol-presentation-preview')return;
+ const {clientId,presentation,state,assets}=event.data,p=safePresentation(presentation);current?.destroy();widget?.destroy();current=null;widget=null;root.replaceChildren();
+ if(state==='connected'){
+  const content=document.createElement('main');content.style.cssText='padding:24px;min-height:1400px;font:16px system-ui';content.textContent='정상 사용자 위젯 미리보기 · 아래로 스크롤하여 배치를 확인하세요.';const slot=document.createElement('div');slot.dataset.nakwolWidget='';root.append(slot,content);
+  const auth=new NakwolAuthClient({clientId,authOrigin:location.origin,autoSso:false});auth.bootstrap=async()=>({id:'preview-user',display_name:'미리보기 사용자'});auth.login=async()=>{};auth.logout=async()=>{auth.emit('logout',null);};
+  widget=mountNakwolIdentityMenu(auth,{container:slot,variant:p.widget.variant,theme:p.theme.mode==='system'?'inherit':p.theme.mode,showName:p.widget.showName,showAccountLinks:false});applyWidgetPresentation(widget.element,p);
+ }else current=mountPresentationScreen(root,{clientId,authOrigin:location.origin,presentation:p,state,assetResolver:id=>assets?.[id]||'',actions:{login:()=>{},retry:()=>{}}});
+});
