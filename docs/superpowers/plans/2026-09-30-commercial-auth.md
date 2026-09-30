@@ -208,11 +208,11 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 
 **인터페이스:** 기존grant/revoke/reauthenticate 유지. 새actions `deny`,`clear-deny`,`refresh-membership`,`revoke-session`,`lock-app`,`restore-policy`. operationId와status는T08공유. 이전revoke는deny로의미를바꾸지않는다.
 
-- [ ] 운영자/앱 owner/다른앱 owner/일반 user,자신을마지막 운영자로차단,만료된임시허가,operation중복재시도테스트.
-- [ ] 운영자 사용자×앱 진단에실제판정reason+역할갱신시각+site버전+관측시각을표시한다. owner 응답은 D01 최소 DTO로 제한한다. 요청별traceId는원문PII없이발급, support UI에노출.
-- [ ] 영향미리보기→version CAS저장→접수/발행/관측/시간상한표시. 자동복구가role조건을낮추거나서비스를guest/public으로바꾸지못하게한다.
-- [ ] 중앙에서 차단한유저의실제 요청 실패와권한 복구 후정상 요청을공통 fixture로검증. support사용자에게관리자상세역할목록/다른 회원 정보노출금지.
-- [ ] 일회성운영복구코드와오프라인호스팅rollback runbook. 최근운영자재인증/속도제한/사유필수/감사기록. recovery기능으로자료접근을직접허용하지않는다.
+- [x] 운영자/앱 owner/다른앱 owner/일반 user,자신을마지막 운영자로차단,만료된임시허가,operation중복재시도테스트.
+- [x] 운영자 사용자×앱 진단에실제판정reason+역할갱신시각+site버전+관측시각을표시한다. owner 응답은 D01 최소 DTO로 제한한다. 요청별traceId는원문PII없이발급, support UI에노출.
+- [x] 영향미리보기→version CAS저장→접수/발행/관측/시간상한표시. 자동복구가role조건을낮추거나서비스를guest/public으로바꾸지못하게한다.
+- [x] 중앙에서 차단한유저의실제 요청 실패와권한 복구 후정상 요청을공통 fixture로검증. support사용자에게관리자상세역할목록/다른 회원 정보노출금지.
+- [x] 일회성운영복구코드와오프라인호스팅rollback runbook. 최근운영자재인증/속도제한/사유필수/감사기록. recovery기능으로자료접근을직접허용하지않는다.
 
 **실행:** `npx tsx --test tests/worker/admin-operations.test.ts tests/worker/access-support.test.ts tests/worker/gate-reports.test.ts`; 실제 브라우저운영자/비운영자 조치 시나리오.
 **합격:** '잘못된정책으로막힌사용자'를코드수정없이원인확인→기한부 조치→결과확인가능. 즉시회수불가사이트는미지원으로명확히표시.
@@ -428,3 +428,11 @@ D02 등 후속 관리 기능과 상용 전체 출시 완료를 의미하지 않�
 독립 리뷰 Important3건 수정과 RED/GREEN 확인 후 전체 통과. T09 migration은0019로 조정했다.
 운영 배포·원격 migration·npm 게시·실제 Discord/운영 지역 성능·프로필 활성화는 하지 않았다.
 다음 단계는T09이며 D02, T11 등 상용 전체 범위는 남아 있다.
+
+## 개발 체크포인트 — T09 (2026-09-30)
+
+중앙 운영자 진단·기한부 조치·자기 복구를 로컬 구현·검증했다. migration0019, 실제 최근 OAuth 경계, preview/CAS/idempotency, 명시적 차단·세션 종료·앱 잠금·안전한 정책 복원, 일회성 운영 복구와 본인 지원 코드를 추가했다. 독립 리뷰 Important4건 및 완료한 refresh의 게시 재시도 결함을 RED/GREEN으로 수정했다. 전체325/325, tsc/CLI pack/Worker dry-run 통과. 실제 HTTP 공식 게이트에서 비로그인28/28, 운영자 차단 후300개 자산 요청 모두 거부/asset0, 해제 후200; 실제 브라우저 운영자·비운영자·복구·본인 지원 코드 확인.
+
+영향 미리보기의 단일 세션/미가입 대상 수 과대 표시 Minor1건은 후속 정밀화로 유보했다. 운영 배포/원격 DB migration/실계정 Discord 검증은 이번 단계에서 수행하지 않았다. 상세 근거는 `docs/audits/2026-09-30-commercial-admin-operations.md`, 복구 절차는 `docs/ADMIN_RECOVERY.md`.
+
+다음 단계는D02 서비스별 사용자 관리다. D03/D04/T10/T11/T12와 상용 출시 수용 검증은 남아 있다.

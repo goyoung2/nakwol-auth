@@ -27,3 +27,13 @@
 - Empty, loading and API-error states are distinct. Never present missing reports as a healthy deployment. Reports are publisher observations, not central attestation.
 - Switching apps invalidates pending responses; render report values through textContent only. Refresh is keyboard accessible, results use a polite live region.
 - This is an operator surface; do not add deployment details to ordinary users' account page.
+
+## Administrator diagnosis and recovery
+
+- Extend the existing operator card and `field`, `actions`, `event-row`, `muted`, `error-text`, `el()` primitives. No new palette or motion.
+- Discord ID or support trace → actual decision and role freshness → reported runtime and last receipt → central/token/site session boundaries → explicit action.
+- Preview shows scope and affected active site-session count. Commit requires confirmation; a lost response reuses its idempotency key. Changing app invalidates pending screen responses.
+- Grant expiry is explicit. Deny, clear deny, grant withdrawal and global reauthentication are separate labeled controls.
+- Applied, pending, failed, published and observed use text labels; observed never means all users are online or all gates upgraded. Missing runtime/control-profile evidence is unconfirmed.
+- Recovery code is shown once in a password-style field, cleared on navigation, never put in a URL or local storage. The separate recovery page has no protected product content and grants no data access.
+- Controls have associated labels; result areas use polite live regions. Reuse account palette, 720px column and 44px controls on the separate recovery page.

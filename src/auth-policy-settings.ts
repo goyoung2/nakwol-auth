@@ -93,6 +93,18 @@ export async function saveAuthPolicy(env: Env, input: SaveAuthPolicyInput) {
     env.DB.prepare('UPDATE auth_policy_revision SET version=version+1 WHERE id=1 AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)').bind(operationId),
     env.DB.prepare('INSERT INTO auth_policy_settings SELECT scope,version,?,actor,created_at FROM auth_policy_operations WHERE id=? ON CONFLICT(scope) DO UPDATE SET version=excluded.version,settings_json=excluded.settings_json,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(JSON.stringify(merged), operationId),
     env.DB.prepare("INSERT INTO application_settings(client_id,framework,access_policy,created_at,updated_at) SELECT ?,'other',?,?,? WHERE ? IS NOT NULL AND ? IS NOT NULL AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?) ON CONFLICT(client_id) DO UPDATE SET access_policy=excluded.access_policy,updated_at=excluded.updated_at").bind(clientId, typeof accessPolicy === 'string' ? accessPolicy : null, now, now, clientId, typeof accessPolicy === 'string' ? accessPolicy : null, operationId),
+    ...policyBoundaryStatements(env, {clientId, operationId}),
+    env.DB.prepare('DELETE FROM auth_policy_previews WHERE token=? AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)').bind(input.previewToken ?? '', operationId),
+  ]);
+  if (results[0].meta.changes !== 1) throw new AuthPolicyError(409, 'POLICY_VERSION_CONFLICT');
+  const control=clientId===null&&env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID
+    ? await publishPendingControl(env) : clientId!==null ? await deliverControl(env,clientId) : {published:0,failed:0};
+  return { ...await resolveAuthPolicy(env, clientId), preview: false, operationId, control };
+}
+
+export function policyBoundaryStatements(env: Env, input: {readonly clientId: string | null; readonly operationId: string}): D1PreparedStatement[] {
+  const {clientId, operationId}=input;
+  return [
     env.DB.prepare(`UPDATE access_tokens SET expires_at=MIN(expires_at,created_at+1000*MIN(
       COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='global'),3600),
       COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='app:'||access_tokens.client_id),3600)))
@@ -106,10 +118,5 @@ export async function saveAuthPolicy(env: Env, input: SaveAuthPolicyInput) {
       WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
     env.DB.prepare(`UPDATE server_sessions SET lease_until=MIN(lease_until,idle_expires_at,absolute_expires_at)
       WHERE (? IS NULL OR client_id=?) AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)`).bind(clientId,clientId,operationId),
-    env.DB.prepare('DELETE FROM auth_policy_previews WHERE token=? AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)').bind(input.previewToken ?? '', operationId),
-  ]);
-  if (results[0].meta.changes !== 1) throw new AuthPolicyError(409, 'POLICY_VERSION_CONFLICT');
-  const control=clientId===null&&env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID
-    ? await publishPendingControl(env) : clientId!==null ? await deliverControl(env,clientId) : {published:0,failed:0};
-  return { ...await resolveAuthPolicy(env, clientId), preview: false, operationId, control };
+  ];
 }

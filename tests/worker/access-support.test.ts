@@ -27,6 +27,7 @@ test('operator support actions use real D1 and preserve service and identity bou
   const discordId = '1553600098661957644';
   for (const id of ['operator', 'ordinary', 'target']) {
     await DB.prepare(`INSERT INTO users VALUES (?, ?, NULL, 'active', 0, 0)`).bind(id, id).run();
+    if (id === 'operator') await createSession(env, id);
     await DB.prepare(`INSERT INTO access_tokens VALUES (?, ?, 'nakwol-connect-admin', ?, NULL, ?)`).bind(await sha256Base64Url(id), id, Date.now() + 60000, Date.now()).run();
   }
   await DB.prepare(`INSERT INTO auth_operators(user_id,created_at) VALUES ('operator',0)`).run();
@@ -38,6 +39,14 @@ test('operator support actions use real D1 and preserve service and identity bou
     body: JSON.stringify({ action, discord_user_id: targetId, reason: 'fixture support request' }),
   }, env);
   const status = () => diagnoseApplicationAccess(env, 'target', 'site');
+
+  await t.test('legacy support mutations also require recent real OAuth authentication', async () => {
+    await DB.prepare(`UPDATE auth_sessions SET created_at=? WHERE user_id='operator'`).bind(Date.now()-900001).run();
+    const response = await request('grant');
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'RECENT_AUTH_REQUIRED');
+    await DB.prepare(`UPDATE auth_sessions SET created_at=? WHERE user_id='operator'`).bind(Date.now()-60000).run();
+  });
 
   await t.test('anonymous and non-operator cannot grant; malformed identity rejected', async () => {
     assert.equal((await request('grant', 'missing')).status, 401);

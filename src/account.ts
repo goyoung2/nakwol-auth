@@ -35,6 +35,7 @@ export function accountPageHtml(): string {
     </header>
     <section id="service-recovery" class="card recovery" hidden aria-live="polite">
       <h2 id="recovery-title">접속 문제 해결</h2><p id="recovery-message"></p>
+      <p id="recovery-trace" class="small" hidden></p>
       <a id="return-service" class="button secondary" hidden>서비스로 돌아가기</a>
     </section>
     <p id="loading" class="muted" role="status">계정 정보를 불러오는 중입니다…</p>
@@ -130,6 +131,9 @@ export function accountPageHtml(): string {
         history.replaceState({}, document.title, recoveryLocation.pathname + recoveryLocation.search + recoveryLocation.hash);
         document.querySelector('#recovery-title').textContent = payload.data.name + ' 접속 문제 해결';
         message.textContent = payload.data.message;
+        const trace = document.querySelector('#recovery-trace');
+        trace.textContent = payload.data.traceId ? '관리자에게 전달할 지원 코드: ' + payload.data.traceId : '';
+        trace.hidden = !payload.data.traceId;
         const back = document.querySelector('#return-service');
         if (payload.data.url) { back.href = payload.data.url; back.hidden = false; }
         back.addEventListener('click', () => { try { sessionStorage.removeItem(recoveryKey); } catch {} });

@@ -8,12 +8,14 @@ import { registerAuthPolicyAdminRoutes } from '../../src/auth-policy-admin';
 import { requireAppTarget } from '../../src/service-management-auth';
 import { getConnectPrincipal } from '../../src/connect-cli-store';
 import type { Env } from '../../src/types';
+import { createSession } from '../../src/store';
 
 async function fixture() {
   const f = await authFixture();
   await f.env.DB.prepare("INSERT OR IGNORE INTO applications VALUES ('nakwol-connect-admin','Admin','[]','active',0,0)").run();
   for (const id of ['owner-a', 'owner-b', 'operator', 'ordinary']) {
     await f.env.DB.prepare("INSERT INTO users VALUES (?, ?, NULL, 'active', 0, 0)").bind(id, id).run();
+    await createSession(f.env,id);
     await f.env.DB.prepare("INSERT INTO memberships(user_id,guild_id,is_guild_member,role,status,checked_at) VALUES (?, ?, 1, 'member', 'active', ?)").bind(id, f.env.NAKWOL_GUILD_ID, Date.now()).run();
     await f.env.DB.prepare('INSERT INTO access_tokens(token_hash,user_id,client_id,expires_at,created_at) VALUES (?,?,?,?,?)').bind(await sha256Base64Url(id), id, 'nakwol-connect-admin', Date.now()+3600000, Date.now()).run();
   }
@@ -51,11 +53,23 @@ test('management mutation rejects CSRF, stale OAuth, overflow and foreign target
   for (const key of ['clientId','subject','sessionId','operationId','cursor','supportCode']) {
     assert.equal((await f.req('/developer/v1/apps/a/policy','owner-a',{...body,[key]:'b'})).status,400);
   }
-  await f.env.DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='owner-a'").bind(Date.now()-900001).run();
+  await f.env.DB.prepare("UPDATE auth_sessions SET created_at=? WHERE user_id='owner-a'").bind(Date.now()-900001).run();
+  await f.env.DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='owner-a'").bind(Date.now()).run();
   assert.equal((await f.req('/developer/v1/apps/a/policy','owner-a',body)).status,403);
-  await f.env.DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='owner-a'").bind(Date.now()+900000).run();
+  await f.env.DB.prepare("UPDATE auth_sessions SET created_at=? WHERE user_id='owner-a'").bind(Date.now()+900000).run();
   assert.equal((await f.req('/developer/v1/apps/a/policy','owner-a',body)).status,403);
   await assert.rejects(requireAppTarget(f.env,'a',{operationId:'foreign'}), /NOT_FOUND/);
+});
+
+test('policy mutation rejects stale bearer even after a new real OAuth family exists',async t=>{
+  const f=await fixture();t.after(f.dispose);
+  await f.env.DB.prepare("UPDATE auth_sessions SET created_at=? WHERE user_id='operator'").bind(Date.now()-900001).run();
+  const body={expectedVersion:0,patch:{leaseSeconds:60},reason:'real OAuth boundary'};
+  assert.equal((await f.req('/admin/api/auth-policy/a','operator',body)).status,403);
+  await createSession(f.env,'operator');
+  assert.equal((await f.req('/admin/api/auth-policy/a','operator',body)).status,403);
+  await f.env.DB.prepare("UPDATE access_tokens SET created_at=? WHERE user_id='operator'").bind(Date.now()).run();
+  assert.equal((await f.req('/admin/api/auth-policy/a','operator',body)).status,200);
 });
 
 test('atomic management rate limiter bounds concurrent mutation requests', async t => {

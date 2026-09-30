@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import type { Env } from './types';
 import { getApplication, getRedirectUris, jsonError } from './http';
-import { authenticateAccessToken } from './store';
+import { authenticateAccessToken, logAuthEvent } from './store';
 import { diagnoseApplicationAccess } from './policy';
 
 export function recoveryMessage(reason: string): string {
@@ -29,6 +29,7 @@ export function registerAccountRecoveryRoutes(app: Hono<{ Bindings: Env }>, acco
     const application = await getApplication(c.env, clientId);
     if (!application) return jsonError(c, 404, 'UNKNOWN_SERVICE', '등록된 서비스를 찾을 수 없습니다.');
     let reason = application.status === 'active' ? '' : 'APP_DISABLED';
+    let traceId: string | undefined;
     const header = c.req.header('Authorization');
     if (header) {
       const token = header.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -36,11 +37,16 @@ export function registerAccountRecoveryRoutes(app: Hono<{ Bindings: Env }>, acco
       if (!userId) return jsonError(c, 401, 'INVALID_ACCOUNT_TOKEN', '다시 로그인해 주세요.');
       const diagnosis = await diagnoseApplicationAccess(c.env, userId, clientId);
       reason = diagnosis.reason;
+      if (!diagnosis.allowed) {
+        traceId = 'tr_' + crypto.randomUUID();
+        await logAuthEvent(c.env, 'access.support', userId, clientId, { trace_id: traceId, reason });
+      }
     }
     return c.json({ ok: true, data: {
       name: application.name,
       url: application.status === 'active' ? registeredRecoveryUrl(getRedirectUris(application)) : null,
       message: recoveryMessage(reason),
+      ...(traceId ? { traceId } : {}),
     } });
   });
 }

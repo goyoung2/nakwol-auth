@@ -5,6 +5,7 @@ import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin 
 import { randomToken } from './crypto';
 import { ensureFreshMembership } from './membership-refresh';
 import { deliverControl } from './gate-control';
+import { AdminOperationError, operatorAuthenticatedAt } from './admin-operations';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -49,6 +50,11 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
   app.post('/admin/api/access/:clientId', async (c) => {
     const actor = await operator(c);
     if (actor instanceof Response) return actor;
+    try { await operatorAuthenticatedAt(c, actor); }
+    catch (error) {
+      if (error instanceof AdminOperationError) return c.json({ error: { code: error.code, message: 'Discord 운영자 재인증이 필요합니다.' } }, error.status);
+      throw error;
+    }
     const origin = c.req.header('Origin');
     if (origin && origin !== new URL(c.req.url).origin) return c.json({ error: { message: '허용되지 않은 요청 출처입니다.' } }, 403);
     const clientId = c.req.param('clientId');

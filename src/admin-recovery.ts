@@ -1,0 +1,30 @@
+import type { Hono } from 'hono';
+import type { Env } from './types';
+import { randomToken, sha256Base64Url } from './crypto';
+import { adminActor,adminBody,adminRate,adminResponse,AdminOperationError,previewAdminAction,commitAdminAction, type AdminAction } from './admin-operations';
+
+export function registerAdminRecoveryRoutes(app:Hono<{Bindings:Env}>):void {
+  app.get('/admin/recovery',c=>c.html(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>낙월 · 운영 설정 복구</title><style>:root{font-family:system-ui,sans-serif;background:#0b1020;color:#f1f5f9}body{max-width:720px;margin:auto;padding:20px}main{background:#111a2b;border:1px solid #29364b;border-radius:16px;padding:24px}label{display:block;margin-top:16px}input,select,button{box-sizing:border-box;min-height:44px;padding:12px;margin-top:8px;width:100%;font:inherit}button{background:#5865f2;color:#f1f5f9;border:0;border-radius:8px}a{color:#a6b3c7}:focus-visible{outline:2px solid #f1f5f9;outline-offset:2px}#status{white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><p><a href="/admin/apps">운영 콘솔로 돌아가기</a></p><main><h1>운영 설정 복구</h1><p>미리 발급한 10분짜리 일회성 코드로 선택 서비스 설정만 복원합니다. 사용자에게 자료 접근 권한을 부여하지 않습니다.</p><form id="recovery"><label for="code">복구 코드</label><input id="code" type="password" autocomplete="off" required maxlength="60"><label for="action">복구할 설정</label><select id="action"><option value="unlock-app">서비스 잠금 해제</option><option value="restore-policy">코드 발급 때 지정한 정책 복원</option></select><label for="reason">복구 사유</label><input id="reason" minlength="3" maxlength="500" required><button type="submit">한 번 복원하기</button></form><p id="status" role="status" aria-live="polite"></p></main><script>const form=document.querySelector('#recovery'),status=document.querySelector('#status');form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;try{const response=await fetch('/admin/api/recovery/consume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.querySelector('#code').value,action:document.querySelector('#action').value,reason:document.querySelector('#reason').value})});const data=await response.json();if(!response.ok)throw new Error(data.error?.code||'복구 실패');document.querySelector('#code').value='';status.textContent='설정을 복원했습니다. 조치 ID: '+data.operationId+' · 전파: '+data.delivery.status+String.fromCharCode(10)+'자료 접근 권한은 부여하지 않았습니다.';}catch(error){status.textContent=error instanceof Error?error.message:'복구 실패';}finally{button.disabled=false;}};</script></body></html>`,200,{'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"}));
+  app.post('/admin/api/recovery/issue',c=>adminResponse(c,async()=>{
+    const actor=await adminActor(c,true),body=await adminBody(c);await adminRate(c.env,actor.userId+':recovery-issue',3);
+    if(Object.keys(body).some(k=>!['reason','clientId','policyOperationId'].includes(k))||typeof body.clientId!=='string')throw new AdminOperationError('INVALID_BODY',400);
+    const clientId=body.clientId,policyId=typeof body.policyOperationId==='string'?body.policyOperationId:null;
+    if(!await c.env.DB.prepare('SELECT 1 FROM applications WHERE client_id=?').bind(clientId).first())throw new AdminOperationError('APP_NOT_FOUND',404);
+    if(policyId&&!await c.env.DB.prepare('SELECT 1 FROM auth_policy_operations WHERE id=? AND scope=?').bind(policyId,'app:'+clientId).first())throw new AdminOperationError('POLICY_OPERATION_NOT_FOUND',404);
+    const code='nwrec_'+randomToken(32),hash=await sha256Base64Url(code),now=Date.now();
+    await c.env.DB.batch([c.env.DB.prepare('INSERT INTO admin_recovery_codes VALUES(?,?,?,?,?,?,NULL,?)').bind(hash,actor.userId,clientId,policyId,now,now+600000,String(body.reason).trim()),c.env.DB.prepare('INSERT INTO auth_events VALUES(?,NULL,?,?,?,?)').bind('evt_'+randomToken(12),clientId,'admin.recovery.issue',JSON.stringify({actor_user_id:actor.userId,reason:String(body.reason).trim()}),now)]);
+    return {code,expiresAt:now+600000,clientId,actions:policyId?['unlock-app','restore-policy']:['unlock-app'],message:'한 번만 표시됩니다. 복구는 사이트 자료 접근 권한을 발급하지 않습니다.'};
+  }));
+  app.post('/admin/api/recovery/consume',c=>adminResponse(c,async()=>{
+    const body=await adminBody(c);await adminRate(c.env,'recovery-ip:'+await sha256Base64Url(c.req.header('CF-Connecting-IP')??'local'),5);
+    if(Object.keys(body).some(k=>!['code','reason','action'].includes(k))||typeof body.code!=='string'||!/^nwrec_[\w-]{43}$/.test(body.code)||!['unlock-app','restore-policy'].includes(String(body.action)))throw new AdminOperationError('INVALID_RECOVERY',403);
+    const hash=await sha256Base64Url(body.code),now=Date.now();
+    const row=await c.env.DB.prepare('SELECT * FROM admin_recovery_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>?').bind(hash,now).first<{actor:string;client_id:string;policy_operation_id:string|null}>();
+    if(!row||!await c.env.DB.prepare("SELECT 1 FROM auth_operators o JOIN users u ON u.id=o.user_id WHERE o.user_id=? AND u.status='active'").bind(row.actor).first())throw new AdminOperationError('INVALID_RECOVERY',403);
+    if(body.action==='restore-policy'&&!row.policy_operation_id)throw new AdminOperationError('INVALID_RECOVERY',403);
+    const input:AdminAction={action:body.action==='restore-policy'?'restore-policy':'unlock-app',scope:'app',reason:String(body.reason).trim(),...(row.policy_operation_id?{policyOperationId:row.policy_operation_id}:{})};
+    const actor={userId:row.actor,authenticatedAt:0},preview=await previewAdminAction(c.env,actor,row.client_id,input);
+    const result=await commitAdminAction(c.env,actor,row.client_id,input,{previewToken:preview.previewToken,expectedVersion:preview.version,idempotencyKey:'recovery:'+hash,recoveryHash:hash});
+    return {ok:true,operationId:result.id,delivery:result.delivery,contentAccessGranted:false};
+  }));
+}

@@ -295,7 +295,10 @@ app.get('/me', async (c) => {
   const access = await evaluateAccess(c.env, userId, clientId, {requireMember:c.req.header('X-Nakwol-Require-Member') === 'true' && !c.req.header('X-Nakwol-Capabilities')?.split(',').includes('policy-v1'),expiresAt:tokenInfo.expiresAt});
   if (!access.allowed) {
     const unavailable = access.reason === 'MEMBERSHIP_UNAVAILABLE';
+    const traceId = 'tr_' + crypto.randomUUID();
+    await logAuthEvent(c.env, 'access.support', userId, clientId, { trace_id: traceId, reason: access.reason });
     const response = c.json({ ok: false, error: { code: unavailable ? 'MEMBERSHIP_UNAVAILABLE' : 'ACCESS_DENIED',
+      trace_id: traceId, reason_code: access.reason,
       message: unavailable ? 'Discord 역할 확인이 지연됐습니다. 잠시 후 다시 시도해 주세요.' : '이 앱을 사용할 권한이 없습니다.' } }, unavailable ? 503 : 403);
     return origin ? withCorsHeaders(response, origin) : response;
   }

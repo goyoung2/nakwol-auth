@@ -3,6 +3,15 @@ import type { Env } from './types';
 import { authenticateAccessToken } from './store';
 import { resolveAuthPolicy } from './auth-policy-settings';
 import { ServiceManagementError, type AppTarget, type ServiceActor } from './service-management-types';
+import { sha256Base64Url } from './crypto';
+
+export async function managementAuthenticatedAt(c:Context<{Bindings:Env}>,userId:string,fresh=true):Promise<number> {
+  const row=await c.env.DB.prepare(`SELECT MAX(s.created_at) AS authenticated_at FROM auth_sessions s WHERE s.user_id=? AND s.expires_at>? AND s.created_at<=COALESCE((SELECT created_at FROM access_tokens WHERE token_hash=?),0)`)
+    .bind(userId,Date.now(),await sha256Base64Url(c.req.header('Authorization')?.replace(/^Bearer\s+/i,'')??'')).first<{authenticated_at:number|null}>();
+  const authenticatedAt=row?.authenticated_at??0;
+  if(fresh&&(authenticatedAt>Date.now()||authenticatedAt<Date.now()-900000))throw new ServiceManagementError('RECENT_AUTH_REQUIRED',403);
+  return authenticatedAt;
+}
 
 export async function authenticateServiceActor(c: Context<{ Bindings: Env }>): Promise<ServiceActor> {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
@@ -48,9 +57,8 @@ export async function getServiceCapabilities(env: Env, actor: ServiceActor, clie
 
 export async function requireManagementMutation(c: Context<{ Bindings: Env }>, actor: ServiceActor, scope: string): Promise<Record<string, unknown>> {
   if (c.req.header('Origin') !== new URL(c.env.AUTH_ORIGIN).origin) throw new ServiceManagementError('INVALID_ORIGIN', 403);
-  const membership = await c.env.DB.prepare('SELECT checked_at FROM memberships WHERE user_id=? AND guild_id=?').bind(actor.userId, c.env.NAKWOL_GUILD_ID).first<{ checked_at: number }>();
-  const checked = Number(membership?.checked_at), now = Date.now();
-  if (!Number.isFinite(checked) || checked > now || now - checked > 900000) throw new ServiceManagementError('RECENT_AUTH_REQUIRED', 403);
+  await managementAuthenticatedAt(c,actor.userId);
+  const now = Date.now();
   const reader = c.req.raw.body?.getReader();
   if (!reader) throw new ServiceManagementError('INVALID_BODY', 400);
   const chunks: Uint8Array[] = []; let length = 0;

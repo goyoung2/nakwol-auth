@@ -105,9 +105,13 @@ test('credential management checks current ownership, recent auth and CSRF; revo
   assert.equal((await request(path,body,'https://evil.test')).status,403);
   assert.equal((await request('/developer/v1/apps/b/site-credentials',{...body,siteOrigin:'https://b.test'})).status,403);
   assert.equal((await request(path,{...body,siteOrigin:'https://unregistered.test'})).status,403);
-  await f.env.DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='member'").bind(Date.now()-900001).run();
+  await f.env.DB.prepare("UPDATE auth_sessions SET created_at=? WHERE user_id='member'").bind(Date.now()-900001).run();
   assert.equal((await request(path,body)).status,403);
   await upsertMembership(f.env,'member',true,'member',['season3']);
+  assert.equal((await request(path,body)).status,403,'membership refresh is not OAuth reauthentication');
+  await createSession(f.env,'member');
+  assert.equal((await request(path,body)).status,403,'old bearer cannot use the new OAuth family');
+  await f.env.DB.prepare("UPDATE access_tokens SET created_at=? WHERE user_id='member' AND client_id='nakwol-connect-admin'").bind(Date.now()).run();
   const issued=await request(path,body);assert.equal(issued.status,200);
   const data=await issued.json<{data:{credentialId:string;secret:string}}>();
   assert.ok(data.data.secret.length>=43);
