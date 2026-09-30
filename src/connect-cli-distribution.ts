@@ -3,9 +3,13 @@ import type { Hono } from 'hono';
 import cliPackageBase64 from './assets/nakwol-connect-cli.tgz.b64.js.txt';
 import type { Env } from './types';
 
-export const CONNECT_CLI_VERSION = '0.10.0';
+export const CONNECT_CLI_VERSION = '0.11.0';
 export const CONNECT_CLI_PACKAGE_NAME = 'nakwol-connect';
-const SERVER_PROTECTION_GUIDANCE = `Full normative gate specification: /connect/gate-spec.md (also GATE_SPEC.md in the npm package). Role-based access requires Discord verification within 24 hours.
+const SERVER_PROTECTION_GUIDANCE = `Full normative gate specification: /connect/gate-spec.md (also GATE_SPEC.md in the npm package). Member role evidence is refreshed centrally with encrypted Discord OAuth credentials; active evidence has a 15-minute hard bound. Legacy credentials follow the documented migration deadline.
+
+## Optional bounded control
+
+Runtime 0.11.0 supports opt-in bounded-control for server-session mode: pinned P-256 public keys, fixed 30-second signed control snapshots, isolate-local single-flight, no per-asset network while valid. Cold isolates and expiry add a round trip. Expired control plus AUTH failure denies with503. DB mutations use transactional outbox and monotonic app epochs; every change can force one per-session refresh. Publication and observation are distinct. Existing default remains local-lease (max300s). See docs/BOUNDED_GATE_CONTROL.md; activate only after regional performance acceptance.
 
 ## Managed updates
 
@@ -17,13 +21,13 @@ Opt-in protect automate pins a local npm CLI dependency and generates GitHub pat
 
 Offer an explicit "계정 확인·접속 문제 해결" link to AUTH /account?client_id=YOUR_CLIENT_ID&recovery=1 alongside login retry. Do not automatically redirect errors. AUTH resolves the return destination exclusively from registered redirect URIs; never pass arbitrary return URLs. Role refresh cannot resolve administrator restrictions or disabled services.
 
-Central /connect/v1.js includes this error link. Existing generated server gates must regenerate with Connect CLI 0.10.0 and redeploy; custom error pages must add the link. The AUTH-hosted /connect/cli/v0.10.0/package.tgz provides this version independently of npm registry publication.
+Central /connect/v1.js includes this error link. Existing generated server gates must regenerate with Connect CLI 0.11.0 and redeploy; custom error pages must add the link. The AUTH-hosted /connect/cli/v0.11.0/package.tgz provides this version independently of npm registry publication.
 
 For Netlify or custom servers, import createGate from nakwol-connect/server and supply a protected Request/Response content handler; do not reimplement authentication logic. Automatic generation supports Cloudflare Workers/Pages and Vercel static builds. GitHub Pages cannot execute this gate; move protected content to server-capable hosting and close old public URLs. See docs/CONNECT_SERVER_PROTECTION.md in the official repository for the gate contract. Run protect verify --provider custom --url https://YOUR-SITE/ --paths /,/data.json,/images/private.png to inspect explicitly listed paths without local installer metadata. This checks anonymous blocking only, not full implementation correctness, and does not replace doctor for official installations.
 
-Connect 0.10.0 preserves the original path, query and fragment across login. Its AES-GCM site/app/auth-origin/policy-bound session contains an authorization lease of 60 to 300 seconds negotiated from central policy-v1 (five minutes for legacy AUTH responses). Initial session creation, expired leases and legacy-cookie upgrades call AUTH /me; valid leases use only local cryptographic checks before all protected assets, including ETag/304. Bounded isolate-local completed-result caching and single-flight suppress concurrent renewal checks; different isolates can each revalidate. No per-asset D1/KV/R2 lookup is used. AUTH failures deny expired leases (503), but valid leases remain usable until expiry. Central revocation can therefore take up to five additional minutes; Discord OAuth role freshness can take 24 hours plus that lease. Browser cache headers remain private, no-cache, max-age=0, must-revalidate for ETag responses, otherwise no-store.
+Connect 0.11.0 preserves the original path, query and fragment across login. Its AES-GCM site/app/auth-origin/policy-bound session contains an authorization lease of 60 to 300 seconds negotiated from central policy-v1 (five minutes for legacy AUTH responses). Legacy sessions use AUTH /me for creation or lease renewal. Explicit site credentials enable central /server/v1/code-exchange and /server/v1/session/refresh with stable encrypted handle/proof cookies; valid leases use only local cryptographic checks before all protected assets, including ETag/304. Bounded isolate-local completed-result caching and single-flight suppress concurrent renewal checks; different isolates can each revalidate. No per-asset D1/KV/R2 lookup is used. AUTH failures deny expired leases (503), but valid leases remain usable until expiry. Central revocation can therefore take up to five additional minutes; Discord OAuth role freshness follows the central 15-minute evidence bound plus that lease (legacy migration is separate). Browser cache headers remain private, no-cache, max-age=0, must-revalidate for ETag responses, otherwise no-store.
 
-Existing ~0.6.3, ~0.7.0 and ~0.8.0 build hooks do not automatically adopt 0.10.0. After accepting the revocation-delay contract, explicitly run npx --yes nakwol-connect@0.10.0 protect update and rebuild/redeploy/verify. The new hook follows compatible ~0.10.0 releases. Custom hosts update the same official package. No running deployment changes from an AUTH-only deployment. This source version is a release candidate until publication and deployment are recorded.
+Existing ~0.6.3, ~0.7.0 and ~0.8.0 build hooks do not automatically adopt 0.11.0. After accepting the revocation-delay contract, explicitly run npx --yes nakwol-connect@0.11.0 protect update and rebuild/redeploy/verify. The new hook follows compatible ~0.11.0 releases. Custom hosts update the same official package. No running deployment changes from an AUTH-only deployment. This source version is a release candidate until publication and deployment are recorded.
 
 member means the centrally configured Season 3 role (1553600098661957643). Developers choose member, not a Discord role ID. Active developers manage owned apps with member/guest; admin policy and additional role requirements are operator-only.
 

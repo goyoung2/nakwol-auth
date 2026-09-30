@@ -1,4 +1,5 @@
 import type { Env } from './types';
+import { controlVersion } from './gate-control';
 import { randomToken, safeEqual, sha256Base64Url } from './crypto';
 import { evaluateAccess } from './policy';
 import type { RoleEvidence } from './policy';
@@ -10,7 +11,7 @@ interface SessionRow {
   readonly generation: number; readonly created_at: number; readonly last_used_at: number;
   readonly idle_expires_at: number; readonly absolute_expires_at: number; readonly idle_seconds: number;
   readonly absolute_seconds: number; readonly revoked_at: number | null; readonly source: string;
-  readonly verified_at: number; readonly lease_until: number; readonly evidence_until: number; readonly policy_version: number;
+  readonly verified_at: number; readonly lease_until: number; readonly evidence_until: number; readonly policy_version: number; readonly control_version:number;
 }
 export interface ServerSessionBinding { readonly clientId: string; readonly siteOrigin: string; readonly credential: string }
 export interface ServerSessionHandle extends ServerSessionBinding { readonly sessionId: string; readonly handle: string }
@@ -18,7 +19,7 @@ function proof(row: SessionRow) {
   return { sessionId: row.id, generation: row.generation, userId: row.user_id, clientId: row.client_id,
     siteOrigin: row.site_origin, source: row.source, verifiedAt: row.verified_at, leaseUntil: row.lease_until,
     authorizationEvidenceValidUntil: row.evidence_until, sessionExpiresAt: row.idle_expires_at,
-    absoluteExpiresAt: row.absolute_expires_at, policyVersion: row.policy_version };
+    absoluteExpiresAt: row.absolute_expires_at, policyVersion: row.policy_version,controlVersion:row.control_version };
 }
 // This predicate is executed inside the same D1 write transaction as issuance/CAS.
 // Policy evaluation can precede a revocation, but cannot mint a proof after its guard fails.
@@ -66,6 +67,7 @@ export async function exchangeServerCode(env: Env, args: ServerSessionBinding & 
   const family = await env.DB.prepare('SELECT created_at FROM auth_sessions WHERE token_hash=? AND user_id=? AND expires_at>?')
     .bind(code.auth_session_hash,code.user_id,started).first<{created_at:number}>();
   if (!family) throw new ServerSessionError('INVALID_CODE');
+  const control=await controlVersion(env,args.clientId);
   const version = await revision(env), access = await evaluateAccess(env, code.user_id, args.clientId, {now:started});
   if (!access.allowed) throw new ServerSessionError(access.reason, access.reason === 'MEMBERSHIP_UNAVAILABLE' ? 503 : 403);
   if (access.requiresRoleEvidence && !access.roleEvidence) throw new ServerSessionError('VERIFICATION_EXPIRED', 503);
@@ -76,12 +78,12 @@ export async function exchangeServerCode(env: Env, args: ServerSessionBinding & 
   if (lease <= now) throw new ServerSessionError('VERIFICATION_EXPIRED', 503);
   const membershipGuard = roleGuard('auth_codes.user_id',access.roleEvidence,now,access.validUntil);
   const results = await env.DB.batch([
-    env.DB.prepare(`INSERT INTO server_sessions SELECT ?,?,user_id,client_id,?,?,auth_session_hash,0,?,?,?,?,?,?,NULL,?,?,?,?,?
+    env.DB.prepare(`INSERT INTO server_sessions SELECT ?,?,user_id,client_id,?,?,auth_session_hash,0,?,?,?,?,?,?,NULL,?,?,?,?,?,?
       FROM auth_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>? AND client_id=? AND redirect_uri=? AND code_challenge=?
-      AND (SELECT version FROM auth_policy_revision WHERE id=1)=? AND ${activeGuard('auth_codes.user_id','auth_codes.auth_session_hash','?')}
+      AND (SELECT version FROM auth_policy_revision WHERE id=1)=? AND COALESCE((SELECT MAX(seq) FROM gate_control_outbox WHERE client_id=?),0)=? AND ${activeGuard('auth_codes.user_id','auth_codes.auth_session_hash','?')}
       AND ${membershipGuard.sql}`)
       .bind(id,await sha256Base64Url(handle),args.siteOrigin,credential.id,started,started,idle,absolute,access.effectivePolicy.sessionIdleSeconds,access.effectivePolicy.sessionAbsoluteSeconds,
-        access.source,started,lease,access.validUntil,access.policyVersion,hash,now,args.clientId,args.redirectUri,challenge,version,credential.id,now,now,'app:'+args.clientId,now,args.clientId,...membershipGuard.values),
+        access.source,started,lease,access.validUntil,access.policyVersion,control,hash,now,args.clientId,args.redirectUri,challenge,version,args.clientId,control,credential.id,now,now,'app:'+args.clientId,now,args.clientId,...membershipGuard.values),
     env.DB.prepare('UPDATE auth_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL AND EXISTS(SELECT 1 FROM server_sessions WHERE id=?)').bind(now,hash,id),
   ]);
   if (results[0].meta.changes !== 1 || results[1].meta.changes !== 1) throw new ServerSessionError('INVALID_CODE');
@@ -92,6 +94,7 @@ export async function exchangeServerCode(env: Env, args: ServerSessionBinding & 
 export async function refreshServerSession(env: Env, args: ServerSessionHandle & {readonly expectedGeneration:number}) {
   const started=Date.now(), row=await checkedSession(env,args);
   if (!Number.isSafeInteger(args.expectedGeneration) || args.expectedGeneration < 0 || args.expectedGeneration > row.generation) throw new ServerSessionError('INVALID_GENERATION',409);
+  const control=await controlVersion(env,args.clientId);
   const version=await revision(env), access=await evaluateAccess(env,row.user_id,args.clientId,{now:started});
   if (!access.allowed) throw new ServerSessionError(access.reason,access.reason === 'MEMBERSHIP_UNAVAILABLE' ? 503 : 403);
   if (access.requiresRoleEvidence && !access.roleEvidence) throw new ServerSessionError('VERIFICATION_EXPIRED',503);
@@ -104,13 +107,13 @@ export async function refreshServerSession(env: Env, args: ServerSessionHandle &
   const idle=Math.min(absolute,started+idleSeconds*1000),lease=Math.min(idle,access.validUntil,started+Math.min(300,access.effectivePolicy.leaseSeconds)*1000);
   if (lease<=now) throw new ServerSessionError('SESSION_EXPIRED');
   const membershipGuard=roleGuard('server_sessions.user_id',access.roleEvidence,now,access.validUntil);
-  const targetGeneration = row.lease_until <= started ? row.generation : args.expectedGeneration;
+  const targetGeneration = row.lease_until <= started || row.control_version < control ? row.generation : args.expectedGeneration;
   await env.DB.batch([env.DB.prepare(`UPDATE server_sessions SET generation=generation+1,last_used_at=?,idle_expires_at=MIN(?,absolute_expires_at),
-    source=?,verified_at=?,lease_until=?,evidence_until=?,policy_version=?
+    source=?,verified_at=?,lease_until=?,evidence_until=?,policy_version=?,control_version=?
     WHERE id=? AND generation=? AND revoked_at IS NULL AND idle_expires_at>? AND absolute_expires_at>?
-      AND (SELECT version FROM auth_policy_revision WHERE id=1)=? AND ${activeGuard('server_sessions.user_id','server_sessions.auth_session_hash','server_sessions.credential_id')}
+      AND (SELECT version FROM auth_policy_revision WHERE id=1)=? AND COALESCE((SELECT MAX(seq) FROM gate_control_outbox WHERE client_id=?),0)=? AND ${activeGuard('server_sessions.user_id','server_sessions.auth_session_hash','server_sessions.credential_id')}
       AND ${membershipGuard.sql}`)
-    .bind(started,idle,access.source,started,lease,access.validUntil,access.policyVersion,row.id,targetGeneration,now,now,version,now,now,'app:'+args.clientId,now,args.clientId,...membershipGuard.values),
+    .bind(started,idle,access.source,started,lease,access.validUntil,access.policyVersion,control,row.id,targetGeneration,now,now,version,args.clientId,control,now,now,'app:'+args.clientId,now,args.clientId,...membershipGuard.values),
     env.DB.prepare(`UPDATE auth_sessions SET last_used_at=?,expires_at=MIN(created_at+2592000000,?+864000000)
       WHERE token_hash=? AND expires_at>? AND EXISTS(SELECT 1 FROM server_sessions WHERE id=? AND generation=? AND verified_at=? AND revoked_at IS NULL)`)
       .bind(started,started,row.auth_session_hash,now,row.id,targetGeneration+1,started),

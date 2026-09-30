@@ -1,5 +1,6 @@
 import type { Env } from './types';
 import { randomToken } from './crypto';
+import { deliverControl,publishPendingControl } from './gate-control';
 
 export interface AuthPolicySettings {
   leaseSeconds: number;
@@ -108,5 +109,7 @@ export async function saveAuthPolicy(env: Env, input: SaveAuthPolicyInput) {
     env.DB.prepare('DELETE FROM auth_policy_previews WHERE token=? AND EXISTS(SELECT 1 FROM auth_policy_operations WHERE id=?)').bind(input.previewToken ?? '', operationId),
   ]);
   if (results[0].meta.changes !== 1) throw new AuthPolicyError(409, 'POLICY_VERSION_CONFLICT');
-  return { ...await resolveAuthPolicy(env, clientId), preview: false, operationId };
+  const control=clientId===null&&env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID
+    ? await publishPendingControl(env) : clientId!==null ? await deliverControl(env,clientId) : {published:0,failed:0};
+  return { ...await resolveAuthPolicy(env, clientId), preview: false, operationId, control };
 }

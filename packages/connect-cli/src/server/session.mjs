@@ -1,15 +1,17 @@
+import { readControl } from './control.mjs';
 const ssoEncoder = new TextEncoder();
 const ssoHandleCookie = '__Host-nakwol_handle';
 const ssoProofCookie = '__Host-nakwol_proof';
 const ssoPending = new Map();
 const ssoCompleted = new Map();
+const ssoFailures = new Map();
 const ssoRevoked = new Map();
 const ssoKeys = new Map();
 const ssoB64 = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 const ssoBytes = value => { if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('encoding'); return Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/')), c => c.charCodeAt(0)); };
 const ssoRandom = () => ssoB64(crypto.getRandomValues(new Uint8Array(32)));
 function ssoResponse(body, status = 200, headers = {}) {
-  return new Response(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'X-Nakwol-Gate': 'v1', 'X-Nakwol-Runtime': '0.10.0', 'X-Nakwol-Session-Mode': 'server-refresh-v1', ...headers } });
+  return new Response(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'X-Nakwol-Gate': 'v1', 'X-Nakwol-Runtime': '0.11.0', 'X-Nakwol-Session-Mode': 'server-refresh-v1', ...headers } });
 }
 function ssoRemember(map, id, value) { if (!map.has(id) && map.size >= 512) map.delete(map.keys().next().value); map.set(id, value); }
 async function ssoKey(secret) {
@@ -75,6 +77,7 @@ function ssoValidProof(p, settings, handle) {
     && typeof p.userId === 'string' && p.userId.length > 0 && p.userId.length <= 256
     && ['role', 'manual-grant', 'guest', 'admin', 'lab'].includes(p.source)
     && Number.isSafeInteger(p.generation) && p.generation >= 0 && Number.isSafeInteger(p.policyVersion) && p.policyVersion >= 0
+    && (p.controlVersion===undefined || Number.isSafeInteger(p.controlVersion)&&p.controlVersion>=0)
     && numbers.every(n => Number.isSafeInteger(p[n]) && p[n] > 0) && p.verifiedAt <= Date.now()
     && p.leaseUntil > p.verifiedAt && p.leaseUntil <= p.verifiedAt + 300000
     && p.leaseUntil <= p.authorizationEvidenceValidUntil && p.leaseUntil <= p.sessionExpiresAt
@@ -94,16 +97,21 @@ async function ssoRemote(path, data, env, settings) {
 }
 function ssoId(handle, env, settings) { return JSON.stringify([ssoAudience(settings, 'refresh'), env.NAKWOL_SITE_CREDENTIAL, handle.sessionId, handle.handle]); }
 function ssoIsRevoked(id) { const until = ssoRevoked.get(id); if (until > Date.now()) return true; ssoRevoked.delete(id); return false; }
-async function ssoRefresh(handle, proof, env, settings) {
+async function ssoRefresh(handle, proof, env, settings, minimumControl=0) {
   const id = ssoId(handle, env, settings);
   if (ssoIsRevoked(id)) return { status: 401 };
+  const failure=ssoFailures.get(id);
+  if(minimumControl>0&&failure?.until>Date.now()&&failure.controlVersion===minimumControl)return {status:failure.status};
   const cached = ssoCompleted.get(id);
-  if (cached?.session.leaseUntil > Date.now() && cached.session.generation >= (proof?.generation ?? 0)) return cached;
+  if (cached?.session.leaseUntil > Date.now() && (cached.session.controlVersion??0)>=minimumControl && cached.session.generation >= (proof?.generation ?? 0)) return cached;
   if (ssoPending.has(id)) return ssoPending.get(id);
   if (ssoPending.size >= 256) return { status: 503 };
+  ssoCompleted.delete(id);
   const task = ssoRemote('session/refresh', { session_id: handle.sessionId, handle: handle.handle, expected_generation: proof?.generation ?? 0 }, env, settings).then(result => {
     if (ssoIsRevoked(id)) return { status: 401 };
+    if(minimumControl>0&&[401,403].includes(result.status))ssoRemember(ssoFailures,id,{status:result.status,until:Date.now()+30000,controlVersion:minimumControl});
     if (result.status === 200 && (!ssoValidProof(result.session, settings, handle) || result.session.leaseUntil <= Date.now())) return { status: 503 };
+    if(result.status===200 && (result.session.controlVersion??0)<minimumControl)return {status:503};
     if (result.status === 200) ssoRemember(ssoCompleted, id, result);
     return result;
   }).finally(() => ssoPending.delete(id));
@@ -163,9 +171,16 @@ export async function serveServerSession(request, env, settings) {
   const id = ssoId(handle, env, settings); if (ssoIsRevoked(id)) return ssoDeny(request, 401);
   const proof = await ssoOpen(request, ssoProofCookie, env, settings, 'proof');
   if (proof === null || (proof !== undefined && !ssoValidProof(proof, settings, handle))) return ssoDeny(request, 401);
+  let control;
+  if(env.NAKWOL_CONTROL_PROFILE==='bounded-control'){
+    const result=await readControl(env,settings);
+    if(result.status!==200)return ssoDeny(request,result.status);
+    control=result.document;
+    if(control.appStatus!=='active'||control.revocations.includes(handle.sessionId))return ssoDeny(request,403);
+  }
   let renewed, activeProof = proof;
-  if (!proof || proof.leaseUntil <= Date.now()) {
-    const result = await ssoRefresh(handle, proof, env, settings);
+  if (!proof || proof.leaseUntil <= Date.now() || (proof.controlVersion??0)<(control?.appEpoch??0) || proof.policyVersion<(control?.policyFloor??0)) {
+    const result = await ssoRefresh(handle, proof, env, settings,control?.appEpoch??0);
     if (result.status !== 200) return ssoDeny(request, result.status);
     activeProof = result.session;
     renewed = ssoCookie(ssoProofCookie, await ssoSeal(result.session, env, settings, 'proof'), handle.absoluteExpiresAt);
@@ -180,7 +195,7 @@ export async function serveServerSession(request, env, settings) {
   if (ssoIsRevoked(id)) return ssoDeny(request, 401);
   const headers = new Headers(asset.headers);
   headers.set('Cache-Control', asset.headers.has('ETag') && [200, 304].includes(asset.status) ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
-  headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', ')); headers.set('X-Nakwol-Gate', 'v1'); headers.set('X-Nakwol-Runtime', '0.10.0'); headers.set('X-Nakwol-Session-Mode', 'server-refresh-v1'); headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', ')); headers.set('X-Nakwol-Gate', 'v1'); headers.set('X-Nakwol-Runtime', '0.11.0'); headers.set('X-Nakwol-Session-Mode', 'server-refresh-v1'); headers.set('X-Content-Type-Options', 'nosniff');
   if (renewed) headers.append('Set-Cookie', renewed);
   return new Response(asset.body, { status: asset.status, headers });
 }

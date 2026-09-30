@@ -1,4 +1,7 @@
 import { registerServerSessionRoutes } from './server-session-routes';
+import { registerGateControlRoutes,publishPendingControl } from './gate-control';
+import type { Env } from './types';
+export { GateControlObject } from './gate-control-object';
 import { registerServiceManagementRoutes } from './service-management-routes';
 import { registerAuthPolicyAdminRoutes } from './auth-policy-admin';
 import { serviceManagementPage } from './service-management-page';
@@ -17,6 +20,7 @@ import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 
 registerServerSessionRoutes(app);
+registerGateControlRoutes(app);
 registerServiceManagementRoutes(app);
 registerAuthPolicyAdminRoutes(app);
 app.get('/developer/apps', c => c.html(serviceManagementPage(),200,{'Cache-Control':'no-store'}));
@@ -33,4 +37,6 @@ registerAccountRoutes(app);
 registerLabRoutes(app);
 registerRoleAdminRoutes(app);
 
-export default app;
+export default Object.assign(app, {scheduled(_controller:ScheduledController,env:Env,ctx:ExecutionContext) {
+  if(env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID)ctx.waitUntil(publishPendingControl(env));
+}});

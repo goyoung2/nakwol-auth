@@ -4,6 +4,7 @@ import { authenticateAccessToken } from './store';
 import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin } from './policy';
 import { randomToken } from './crypto';
 import { ensureFreshMembership } from './membership-refresh';
+import { deliverControl } from './gate-control';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -73,7 +74,8 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
       await c.env.DB.prepare(`INSERT INTO auth_events(id,user_id,client_id,event_type,detail,created_at) VALUES (?,?,?,?,?,?)`)
         .bind(`evt_${randomToken(10)}`, target.user_id, clientId, 'admin.access.refresh_membership',
           JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), result: refresh.kind }), Date.now()).run();
-      return c.json({ ok: refresh.kind === 'fresh', status: refresh.kind, checked_at: refresh.checkedAt,
+      const control=await deliverControl(c.env,clientId,target.user_id);
+      return c.json({ ok: refresh.kind === 'fresh', status: refresh.kind, control, checked_at: refresh.checkedAt,
         valid_until: refresh.validUntil, ...(refresh.kind === 'reauth-required' ? { recovery_url: `${c.env.AUTH_ORIGIN}/account` } : {}) });
     }
     const now = Date.now();
@@ -108,7 +110,8 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
       .bind(`evt_${randomToken(10)}`, target?.user_id ?? null, clientId, `admin.access.${body.action}`,
         JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), ...(body.action === 'grant' ? { expires_at: expiresAt } : {}) }), now));
     await c.env.DB.batch(statements);
-    return c.json({ ok: true, message: body.action === 'reauthenticate'
+    const control=await deliverControl(c.env,clientId,body.action==='reauthenticate'?target?.user_id:undefined);
+    return c.json({ ok: true, control, message: body.action === 'reauthenticate'
       ? '모든 서비스의 기존 AUTH 토큰을 회수했습니다. 다음 접속 시 Discord 재인증이 필요합니다.'
       : body.action === 'grant' ? '이 서비스에 수동 접근을 허가했습니다.' : '수동 허가를 회수했습니다. 원래 역할 조건을 충족하면 계속 접근할 수 있습니다.' });
   });

@@ -1,5 +1,8 @@
 export interface Env {
   DB: D1Database;
+  GATE_CONTROL?: DurableObjectNamespace;
+  GATE_CONTROL_SIGNING_JWK?: string;
+  GATE_CONTROL_KID?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   DISCORD_BOT_TOKEN?: string;

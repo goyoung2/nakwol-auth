@@ -202,7 +202,7 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 ## T09. 관리자 진단·기한부 조치·자기 복구 — P3
 
 **수정:** `src/access-support.ts`, `src/account-recovery.ts`, `src/gate-reports.ts`, `src/assets/nakwol-connect-admin.js.txt`, `src/role-admin.ts`.
-**신규:** `src/admin-operations.ts`, `src/admin-recovery.ts`, `migrations/0018_admin_operations.sql`, `tests/worker/admin-operations.test.ts`.
+**신규:** `src/admin-operations.ts`, `src/admin-recovery.ts`, `migrations/0019_admin_operations.sql`, `tests/worker/admin-operations.test.ts`.
 
 **범위:** 중앙 운영자 콘솔과 D01/D02 개발자 콘솔은 권한·DTO·조치를 분리한다. owner는 자기 앱 사용자 조회/차단/세션 종료를 D02에서 수행하며 기존 중앙 reauthenticate를 재사용하지 않는다.
 
@@ -417,3 +417,14 @@ T08의 35초 전파, T07 역할 자동 갱신, 운영 배포는 완료 처리하
 타입 검사 및 독립 보안 재검토 통과, 실제 로컬 HTTP 정상200/역할제거403 확인.
 운영 배포·원격 migration·실제 Discord·UI 브라우저 확인은 별도다. 다음 단계는 T08이며
 D02 등 후속 관리 기능과 상용 전체 출시 완료를 의미하지 않는다.
+
+### T08 구현 체크포인트 (2026-09-30)
+
+선택형 bounded-control source0.11.0을 구현했다. 고정30초 서명 문서, 앱별 SQLite DO,
+트랜잭션 outbox, global fanout/실패 재시도/수신 확인, 앱 epoch와 proof D1 CAS 경계를 추가했다.
+작은 변경도 앱 전체 증명을 재검증하는 보수적인 초기 구현이며 기본 local-lease는 유지한다.
+전체308/308, tsc/pack/Worker dry-run, 실제HTTP protect verify28/28, 게시 후31.273초에
+300개 요청 차단을 확인했다. [실행 기록](../../audits/2026-09-30-commercial-bounded-control.md).
+독립 리뷰 Important3건 수정과 RED/GREEN 확인 후 전체 통과. T09 migration은0019로 조정했다.
+운영 배포·원격 migration·npm 게시·실제 Discord/운영 지역 성능·프로필 활성화는 하지 않았다.
+다음 단계는T09이며 D02, T11 등 상용 전체 범위는 남아 있다.
