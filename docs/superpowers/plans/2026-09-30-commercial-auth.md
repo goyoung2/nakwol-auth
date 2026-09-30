@@ -252,19 +252,21 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 ## D03. 인증 UI 편집·미리보기·게시 — P3, R3
 
 **선행:** D01/T03. **수정:** `src/index.ts`, `src/assets/nakwol-connect-v1.js.txt`, `packages/connect-cli/src/server/login.mjs`.
-**신규:** `packages/connect-cli/src/shared/presentation-schema.mjs`, `src/service-presentation.ts`, `src/assets/nakwol-developer-presentation.js.txt`, `migrations/0020_service_presentation.sql`, `tests/worker/service-presentation.test.ts`, `packages/connect-cli/test/presentation.test.mjs`.
+**신규:** `packages/connect-cli/src/shared/presentation-schema.mjs`, `src/service-presentation.ts`, `src/assets/nakwol-developer-presentation.js.txt`, `migrations/0021_service_presentation.sql`, `tests/worker/service-presentation.test.ts`, `packages/connect-cli/test/presentation.test.mjs`.
 
 **스키마:** 설계안§10의 schemaVersion/version/widget/theme/screens/support와 동일. validator는 중앙·CLI가 함께 소비하도록 패키지 export하고 TS 선언을 제공한다. 기존 SDK variant/theme 토큰과 Connect headless 기반을 재사용한다.
 **인터페이스:** owner `GET/PUT .../presentation/draft`, `POST .../presentation/preview|publish|rollback`; PUT/publish/rollback은 expectedVersion CAS. public `GET /public/v1/apps/:clientId/presentation`은 게시된 브랜드 데이터만 제공. preview는 owner 인증 필요. rollback도 새 version을 발행한다.
 
-- [ ] visible/hidden×inline/fixed/sticky×3variant, light/dark/system 및 login/checking/denied/unavailable 상태 fixture를 만든다. hidden에서도 비로그인 HTML/이미지/JSON/HEAD/Range 차단을 재확인한다.
-- [ ] 편집→상태/모바일 미리보기→게시→이전 버전 복원 흐름을 구현. 실제 연결 상태/재시도/지원 동작은 runtime 소유이며 임의 코드·거짓 connected 문구 설정을 허용하지 않는다.
-- [ ] 텍스트 escape, HTTPS 지원 링크, PNG/WebP/JPEG512KiB/2048px 한도와 실제 MIME/decode 확인. SVG/HTML/JS/CSS 주입 거부. 소유 앱별 브랜드 저장소 namespace/업로드 권한을 검사하고 새 저장소가 필요하면 비용을 T11에 포함한다.
-- [ ] 공개 bootstrap에서 PII/secret/private path/초안 노출0. 보호 앱 bundle 없이 화면 렌더. 게시 설정만 ETag/60초 캐시; schema 불일치·깨진 로고·네트워크 실패는 안전 기본 테마. UI 변경으로 인증 세션 폐기0, 자산별 설정 조회0.
-- [ ] headless의 로그인/로그아웃/복구 연결, 키보드 focus/reduced-motion/mobile safe area/클릭 가림을 브라우저로 확인. 상태 깜빡임/8초 복구 안내는 T03/T06과 동일 계약이다.
+- [x] visible/hidden×inline/fixed/sticky×3variant, light/dark/system 및 login/checking/denied/unavailable 상태 fixture를 만든다. hidden에서도 비로그인 HTML/이미지/JSON/HEAD/Range 차단을 재확인한다.
+- [x] 편집→상태/모바일 미리보기→게시→이전 버전 복원 흐름을 구현. 실제 연결 상태/재시도/지원 동작은 runtime 소유이며 임의 코드·거짓 connected 문구 설정을 허용하지 않는다.
+- [x] 텍스트 escape, HTTPS 지원 링크, PNG/WebP/JPEG512KiB/2048px 한도와 실제 MIME/decode 확인. SVG/HTML/JS/CSS 주입 거부. 소유 앱별 브랜드 저장소 namespace/업로드 권한을 검사하고 새 저장소가 필요하면 비용을 T11에 포함한다.
+- [x] 공개 bootstrap에서 PII/secret/private path/초안 노출0. 보호 앱 bundle 없이 화면 렌더. 게시 설정만 ETag/60초 캐시; schema 불일치·깨진 로고·네트워크 실패는 안전 기본 테마. UI 변경으로 인증 세션 폐기0, 자산별 설정 조회0.
+- [x] headless의 로그인/로그아웃/복구 연결, 키보드 focus/reduced-motion/mobile safe area/클릭 가림을 브라우저로 확인. 상태 깜빡임/8초 복구 안내는 T03/T06과 동일 계약이다.
 
 **실행:** `npx tsx --test tests/worker/service-presentation.test.ts`; `node --test packages/connect-cli/test/presentation.test.mjs`; 데스크톱/모바일 상태별 화면과 network 증거.
 **합격:** 자기 앱만 편집, 초안 비공개, 안전 렌더링, 보호 유지, 지원 runtime에 게시 버전 반영 확인.
+
+**로컬 완료 증거:** 최종344/344, 타입·패키징·Worker dry-run 통과; 실제 HTTP 보호28/28 및 정상300자산 refresh0, 실제 SDK 미리보기54조합. `docs/audits/2026-09-30-commercial-service-presentation.md` 참조. Connect0.13은 후보이며 운영 migration/배포/npm 발행은 미실행.
 
 ## D04. 설치·재설정 마법사 — P3, R7/R8
 

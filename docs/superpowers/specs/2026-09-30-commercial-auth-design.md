@@ -417,3 +417,7 @@ AUTH 비용은 활성 session 수/lease, Discord는 활성 사용자 수/freshne
 | R8 정책 위임 | §6 시간 단위 범위·실효값·적용 상태 | T05/D01/D04 |
 
 이 표는 문서 반영 추적이며 기능 합격 증거가 아니다. 각 작업의 실제 시험·운영 검증은 개발 계획의 완료 조건에 따른다.
+
+## 16. D03 로컬 구현 증거
+
+서비스별 인증 화면 editor·private preview·publish/새 버전 rollback과 공통 renderer를 로컬 구현했습니다. 최종344/344 및 실제 browser/HTTP 범위는 `docs/audits/2026-09-30-commercial-service-presentation.md`를 참조합니다. 이는 상용 전체 또는 운영 배포 완료가 아닙니다. migration0021과 Connect0.13 최초 업데이트가 운영 적용의 선행 조건이며 Images upload 비용·실기기/다중 지역/SLO는 T11/T12 수용 범위입니다. D04와 후속 단계는 개발 계획대로 남아 있습니다.

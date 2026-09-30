@@ -155,3 +155,7 @@ isolate 큐128건, batch50건, 작업당3batch, timeout2초/재시도1회/drop �
 ## 선택형 빠른 차단 전파 (0.11.0)
 
 `bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](../../docs/BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.
+
+## Presentation isolation (runtime0.13 candidate)
+
+Published presentation is a separate public brand document (schemaVersion1/version/widget/theme/screens/support). The official login bridge and rolling Connect embed share `/presentation/v1/renderer.mjs`; owner drafts never enter public bootstrap. One document-level request, <=60s cache, <=16KiB, 1.5s timeout; unsupported schema/load failure uses built-in theme. No per-asset settings fetch, policy epoch change, lease invalidation or protection bypass. Widget hidden only hides identity UI. Runtime owns checking250ms/8s, denial/login/retry/recovery and actual authentication state. Existing gate deployments require one update/redeploy to adopt the renderer; brand-only publication then needs no reinstall. See docs/SERVICE_PRESENTATION.md for shared schema, preview/CAS/rollback, bounded decoded uploads and rollout prerequisites.

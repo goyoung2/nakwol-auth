@@ -60,3 +60,7 @@ DB migration이나 설치 사이트 배포를 수행하지 않습니다.
 ## 선택형 빠른 차단 전파 (0.11.0)
 
 `bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.
+
+## 서비스 UI와 서버 차단 분리 (0.13 후보)
+
+브랜드 editor `/developer/presentation`의 hidden/inline/fixed/sticky 설정은 접근 정책이 아닙니다. 로그인 전 HTML뿐 아니라 자산 GET/HEAD/Range 차단을 유지합니다. 공개 브랜드 renderer는 보호 앱 bundle 없이 로그인/확인/거부/장애 화면을 렌더링합니다. 초안은 owner 전용이며 실제 상태/재시도/복구를 브랜드 문구가 대체하지 않습니다. 최초 runtime 업데이트 이후 이미 지원하는 설정은 다음 화면 로드 시 최대60초 내 갱신합니다. [API·스키마·업로드·배포 계약](SERVICE_PRESENTATION.md).

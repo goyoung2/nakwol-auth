@@ -45,3 +45,11 @@
 - Do not label last observation as online. Show observation receipt/delay, retention and unsupported gates; never expose central roles, sessions or secrets.
 - Invalidate responses on service/user switch. Failed response can retry the same operation key. Confirmation names app, Discord ID and action. Deny/clear, grant withdrawal and relationship deletion are separate.
 - Labels, native keyboard controls, polite result region; hide workspace until owner API authorizes it.
+
+## Service presentation editor and renderer (D03)
+
+The owner console reuses Connect content-card, form-grid, field, actions, ghost and primary. Policy, user management and presentation are separate navigation destinations. Draft, published revision and retained publication history are labeled separately; previews never claim real access authorization.
+
+Presentation screen tokens: dark background #0b1020, card #111a2b, text #f1f5f9, muted #a6b3c7, action #5865f2. Light/system-light: background #f6f3eb, card #ffffff, text #182235, muted #475569, same action. Custom six-digit colors require text/background, text/card, muted/card and white/action contrast >=4.5. Radius 8/12/16/24px, size14/16/18px, headings20px, body14px, gaps8/12/16/20/24px. Logos64x64; card image432x120, object-fit cover; card width480px. Safe-area padding and44px controls; visible keyboard focus. No motion is required; reduced-motion disables presentation transitions/animations. Arbitrary CSS/HTML/SVG is never a token.
+
+Checking has one runtime-owned label after250ms and retry/recovery after8s. Configured brand copy supplements login/denied/unavailable; it never replaces real status. Inline follows document flow; sticky occupies a slot and tracks its containing block; fixed uses the selected corner and safe-area margins. Integrators choose a data-nakwol-widget container for inline/sticky. Hidden affects identity widget only; service content gates and recovery screens remain. Preview iframe375px reproduces mobile layout without loading any protected app bundle.

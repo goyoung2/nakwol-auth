@@ -216,3 +216,7 @@ AUTH의 `/developer/apps`에서 현재 소유한 서비스의 권한 재확인 �
 ## 선택형 빠른 차단 전파 (0.11.0)
 
 `bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.
+
+## 인증 화면 편집 (0.13 후보)
+
+서비스별 브랜드 설정은 [SERVICE_PRESENTATION.md](SERVICE_PRESENTATION.md)의 공개 published snapshot만 사용합니다. owner 초안/preview/이미지는 인증 범위 안에 유지합니다. official common gate의 두 로그인 모드가 같은 공개 렌더러를 사용하며 콘텐츠 요청의 인증 경로와 캐시를 변경하지 않습니다. 이미지300개와 같이 승인된 자산 요청에서는 presentation 조회0회입니다. 구0.12 이하 게이트는 최초 protect update/재배포가 필요하며 지원 renderer 설치 후 브랜드-only 게시로 세션을 폐기하거나 재설치하지 않습니다.

@@ -252,3 +252,7 @@ credentials or automated rollback are installed. See
 ### 0.8.0 static adapters and release evidence
 
 Adds `protect install --provider vercel` for static builds with full-path middleware using the shared gate. Existing routing/SSR configurations are not overwritten. `protect manifest --deployment-id ID --output-file evidence.json` records the exact build; `protect verify --manifest evidence.json --origins-file origins.json --session-cookie-env NAKWOL_VERIFY_COOKIE` checks anonymous blocking and authenticated file hashes separately. Legacy header-only reports cannot approve automatic rollback. Existing 0.7.x installations require explicit version selection and redeployment. See [evidence contract and limits](../../docs/PROTECTION_EVIDENCE.md). Source changes are not npm publication or production deployment evidence.
+
+### Service presentation (0.13 candidate)
+
+Owners edit their own service at AUTH `/developer/presentation`. `nakwol-connect/presentation` exports the shared schema validator and TypeScript declarations. Widget hidden does not weaken server protection. Existing gates need one protect update/redeploy to adopt the shared public renderer; supported brand-only updates then require no reinstall. Draft preview is owner-authenticated; public bootstrap contains only published brand data and caches for at most60s, never per asset. Full contract: repository docs/SERVICE_PRESENTATION.md. This is a local release candidate until publication/rollout is recorded.
