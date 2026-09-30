@@ -234,17 +234,17 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 
 ## D02. 서비스 사용자 목록과 앱 단위 조치 — P3, R1/R2/R4
 
-**선행:** D01, T05, T06. **수정:** `src/index.ts`, `src/gate-reports.ts`, `packages/connect-cli/src/server/gate.mjs`.
-**신규:** `src/service-users.ts`, `src/service-user-routes.ts`, `src/assets/nakwol-developer-users.js.txt`, `packages/connect-cli/src/server/observations.mjs`, `migrations/0019_service_users.sql`, `tests/worker/service-users.test.ts`, `packages/connect-cli/test/observations.test.mjs`. migration 번호는 실행 시 재배정한다.
+**선행:** D01, T05, T06. **수정:** `src/sdk-entry.ts`, `src/service-management-{auth,page,types}.ts`, `src/policy.ts`, `src/store.ts`, `src/server-sessions.ts`, `packages/connect-cli/src/server/{gate,session}.mjs`, 공식 provider adapters.
+**신규:** `src/service-users.ts`, `src/service-user-{routes,actions}.ts`, `src/service-observations.ts`, `src/service-users-page.ts`, `src/assets/nakwol-developer-users.js.txt`, `packages/connect-cli/src/server/observations.mjs`, `migrations/0020_service_users.sql`, `tests/worker/service-users.test.ts`, `packages/connect-cli/test/observations.test.mjs`. T09가0019를 사용해0020으로 재배정했다.
 
 **데이터:** app_user_relationships(client_id,subject,first_authorized_at,last_authenticated_at,last_observed_at,status), 익명/식별 가능한 시도 이벤트, 별도 app deny tombstone과 감사. 상세 source/time/지연을 유지한다. 관계 삭제가 중앙 users를 삭제하지 않는다.
 **인터페이스:** `GET /developer/v1/apps/:clientId/users?cursor&limit&state`, `GET .../users/:subject`, `POST .../users/:subject/actions`(deny/clear-deny/revoke-app-sessions/grant/clear-grant/delete-relationship). 사전등록은 `POST .../users`의 검증된 Discord ID 입력이다. `POST /server/v1/observations`는 site credential+app/origin scope로 보호한다. 모든 action은 reason/expectedVersion/idempotencyKey를 받고 operationId 반환. revoke-app-sessions는 해당 client의 family만 회수하며 중앙 reauthenticate를 호출하지 않는다.
 
-- [ ] 최초 승인/로그인했으나 미방문/lease 재방문/거부/익명/사전등록을 구분하는 목록 fixture와 cursor50/최대100, 필터, 상세를 작성한다.
-- [ ] 게이트 승인 결과에서만 관측 생성. 앱·사용자·5분 구간 coalescing, isolate 큐 최대128건, 배치 최대50건, 전송 timeout2초/재시도1회 후 drop 집계. 수신측 같은 구간 upsert로 중복 억제. 인증 응답은 관측 전송을 await하지 않고 provider의 공식 background hook을 사용하며 지원 없는 환경은 관측 미지원으로 표시한다.
-- [ ] 300이미지/10isolate에서 실제 전송·중복·drop·CPU/bytes 기록. AUTH 관측503·큐 포화에도 콘텐츠 승인 지연/판정 영향 없음. 동기 원격 쓰기0. 사용자 목록에는 마지막 관측·지연 표시, 온라인으로 단정 금지.
-- [ ] A app deny 후 B 정상, A session revoke 후 B/중앙 SSO 유지, grant 만료 및 deny 우선, 같은 action 재시도1회 효과를 실제 fixture로 확인한다. local-lease/bounded-control별 반영 기한을 표시한다.
-- [ ] 관계 삭제 후 중앙/타 앱 자료와 deny tombstone 보존. 익명 요청을 가짜 Discord 사용자로 생성하지 않는다. owner가 지원 코드/검색으로 무관한 중앙 사용자를 열거하지 못한다.
+- [x] 최초 승인/로그인했으나 미방문/lease 재방문/거부/익명/사전등록을 구분하는 목록 fixture와 cursor50/최대100, 필터, 상세를 작성한다.
+- [x] 게이트 승인 결과에서만 관측 생성. 앱·사용자·5분 구간 coalescing, isolate 큐 최대128건, 배치 최대50건, 전송 timeout2초/재시도1회 후 drop 집계. 수신측 같은 구간 upsert로 중복 억제. 인증 응답은 관측 전송을 await하지 않고 provider의 공식 background hook을 사용하며 지원 없는 환경은 관측 미지원으로 표시한다.
+- [x] 300이미지/10isolate에서 실제 전송·중복·drop·CPU/bytes 기록. AUTH 관측503·큐 포화에도 콘텐츠 승인 지연/판정 영향 없음. 동기 원격 쓰기0. 사용자 목록에는 마지막 관측·지연 표시, 온라인으로 단정 금지. Windows CPU 해상도와 전체 Worker CPU 측정의 차이는 audit에 명시한다.
+- [x] A app deny 후 B 정상, A session revoke 후 B/중앙 SSO 유지, grant 만료 및 deny 우선, 같은 action 재시도1회 효과를 실제 fixture로 확인한다. local-lease/bounded-control별 반영 기한을 표시한다.
+- [x] 관계 삭제 후 중앙/타 앱 자료와 deny tombstone 보존. 익명 요청을 가짜 Discord 사용자로 생성하지 않는다. owner가 지원 코드/검색으로 무관한 중앙 사용자를 열거하지 못한다.
 
 **실행:** `npx tsx --test tests/worker/service-users.test.ts`; `node --test packages/connect-cli/test/observations.test.mjs`; 두 owner+일반 사용자 브라우저 목록→차단→해제→세션 종료 확인.
 **합격:** owner가 자기 서비스 문제를 조치하며 타 앱 영향0, 관측 실패로 인증 실패0, 자산 수 비례 중앙 기록0.
@@ -436,3 +436,9 @@ D02 등 후속 관리 기능과 상용 전체 출시 완료를 의미하지 않�
 영향 미리보기의 단일 세션/미가입 대상 수 과대 표시 Minor1건은 후속 정밀화로 유보했다. 운영 배포/원격 DB migration/실계정 Discord 검증은 이번 단계에서 수행하지 않았다. 상세 근거는 `docs/audits/2026-09-30-commercial-admin-operations.md`, 복구 절차는 `docs/ADMIN_RECOVERY.md`.
 
 다음 단계는D02 서비스별 사용자 관리다. D03/D04/T10/T11/T12와 상용 출시 수용 검증은 남아 있다.
+
+## D02 실행 체크포인트 — 2026-09-30
+
+앱별 관계와 사용자 관리 API/화면, 별도 owner 추가 역할 허가, 승인 세션에 근거한 비동기 관측을 구현했다. migration은0020이며 Connect runtime 후보는0.12.0이다. 전체333/333, 타입·패키징·Worker dry-run과 두 owner/일반 사용자 브라우저 QA를 통과했다. 실제 로컬 HTTP에서 익명28/28 차단, warm 이미지300개 인증 refresh0회, 관측 보고1회/실제 기록1건, 앱 차단300건과 해제 복구를 확인했다. 독립 리뷰 Important2와 Minor1은 재현 후 수정했다.
+
+근거: [D02 검증 보고서](../../audits/2026-09-30-commercial-service-users.md), [서비스 사용자 관리 계약](../../SERVICE_USER_MANAGEMENT.md). 로컬 개발 완료이며 운영 migration·배포·npm 게시·실제 Discord OAuth는 수행하지 않았다. 다음 단계는D03 UI 편집·미리보기·게시다. D04/T10/T11/T12와 상용 전체 수용 검증은 남아 있다.

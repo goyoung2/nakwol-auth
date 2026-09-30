@@ -49,10 +49,10 @@ export async function getServiceCapabilities(env: Env, actor: ServiceActor, clie
   const policy = await resolveAuthPolicy(env, clientId);
   const global = await resolveAuthPolicy(env, null);
   const operator = Boolean(await env.DB.prepare('SELECT user_id FROM auth_operators WHERE user_id=?').bind(actor.userId).first());
-  return { schemaVersion: 1, clientId, capabilities: ['policy:read', 'policy:write', 'operations:read'],
+  return { schemaVersion: 1, clientId, capabilities: ['policy:read', 'policy:write', 'operations:read','users:read','users:manage'],
     editablePolicy: operator ? ['leaseSeconds', 'sessionIdleSeconds', 'sessionAbsoluteSeconds', 'accessTokenSeconds', 'grantableConditions', 'accessPolicy'] : ['leaseSeconds', 'sessionIdleSeconds', 'sessionAbsoluteSeconds'],
     ranges: { leaseSeconds: { min: 60, max: Math.min(300, global.effective.leaseSeconds) }, sessionIdleSeconds: { min: 3600, max: Math.min(864000, global.effective.sessionIdleSeconds) }, sessionAbsoluteSeconds: { min: 3600, max: Math.min(2592000, global.effective.sessionAbsoluteSeconds) } },
-    grantableConditions: policy.effective.grantableConditions, userManagementAvailable: false };
+    grantableConditions: policy.effective.grantableConditions, userManagementAvailable: true };
 }
 
 export async function requireManagementMutation(c: Context<{ Bindings: Env }>, actor: ServiceActor, scope: string): Promise<Record<string, unknown>> {

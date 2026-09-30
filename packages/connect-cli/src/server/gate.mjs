@@ -1,7 +1,7 @@
 import { loginPage } from './login.mjs';
 import { serveServerSession } from './session.mjs';
 
-export const RUNTIME_VERSION = '0.11.0';
+export const RUNTIME_VERSION = '0.12.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -228,7 +228,8 @@ export function createGate(settings) {
   config.siteUrl = new URL(config.siteUrl).href;
   Object.freeze(config);
   if (!config.clientId || !['member', 'guest', 'admin'].includes(config.accessPolicy)) throw new Error('clientId and accessPolicy are required');
-  return (request, { sessionSecret, serveAsset, siteCredential = config.siteCredential, sessionPreviousSecret = config.sessionPreviousSecret, sessionPreviousUntil = config.sessionPreviousUntil, controlProfile=config.controlProfile, controlPublicKeys=config.controlPublicKeys }) => serveProtected(request, {
+  return (request, { sessionSecret, serveAsset, waitUntil, siteCredential = config.siteCredential, sessionPreviousSecret = config.sessionPreviousSecret, sessionPreviousUntil = config.sessionPreviousUntil, controlProfile=config.controlProfile, controlPublicKeys=config.controlPublicKeys }) => serveProtected(request, {
+    NAKWOL_WAIT_UNTIL:waitUntil,
     NAKWOL_SESSION_SECRET: sessionSecret,
     NAKWOL_SITE_CREDENTIAL: siteCredential,
     NAKWOL_CONTROL_PROFILE:controlProfile,

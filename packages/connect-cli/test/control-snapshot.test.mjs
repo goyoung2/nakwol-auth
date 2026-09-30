@@ -47,7 +47,7 @@ test('signed control expiry, binding, replay, outages and 300-asset hot path',as
   const conditional=await serveProtected(request('/image',cookie,{headers:{'If-None-Match':'"fixture"'}}),env,settings);assert.equal(conditional.status,304);assert.match(conditional.headers.get('Cache-Control'),/^private, no-cache/);
   const before=controlCalls;for(const extra of [{},{method:'HEAD'},{headers:{Range:'bytes=0-1'}}])for(const path of ['/','/image.webp','/data.json','/font.woff2','/app.js','/style.css','/download.bin'])assert.equal((await serveProtected(request(path,'',extra),env,settings)).status,401);
   assert.equal(controlCalls,before);
-  const verified=await verifyProtection({provider:'custom',url:'https://site.test/',paths:'/image.webp,/data.json,/font.woff2,/app.js,/style.css,/download.bin',expectRuntime:'0.11.0',fetchImpl:(url,init)=>serveProtected(new Request(url,init),env,settings)});
+  const verified=await verifyProtection({provider:'custom',url:'https://site.test/',paths:'/image.webp,/data.json,/font.woff2,/app.js,/style.css,/download.bin',expectRuntime:'0.12.0',fetchImpl:(url,init)=>serveProtected(new Request(url,init),env,settings)});
   assert.equal(verified.ok,true,JSON.stringify(verified.checks.filter(c=>!c.ok)));
   assert.equal(verified.requestCount,28);assert.equal(controlCalls,before);
   assert.equal((await serveProtected(request('/image',cookie.replace('v3.','v9.')),env,settings)).status,401);
@@ -59,7 +59,7 @@ test('signed control expiry, binding, replay, outages and 300-asset hot path',as
   assert.ok(concurrent.every(r=>r.status===200));assert.equal(refreshCalls-renewalAt,1);
   deny=true;epoch=9;now+=31000;
   const controlURL=new URL('../src/server/control.mjs?isolate=second',import.meta.url).href;
-  const code=(await readFile(new URL('../src/server/session.mjs',import.meta.url),'utf8')).replace("'./control.mjs'",JSON.stringify(controlURL));
+  const code=(await readFile(new URL('../src/server/session.mjs',import.meta.url),'utf8')).replace("'./control.mjs'",JSON.stringify(controlURL)).replace("'./observations.mjs'",JSON.stringify(new URL('../src/server/observations.mjs?isolate=second',import.meta.url).href));
   const {serveServerSession:second}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
   const callsAt=refreshCalls;const denied=await Promise.all(Array.from({length:300},()=>second(request('/image.webp',cookie),env,settings)));
   assert.ok(denied.every(r=>r.status===403));assert.equal(refreshCalls-callsAt,1);

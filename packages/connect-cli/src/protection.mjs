@@ -13,7 +13,7 @@ const adapters = {'cloudflare-workers':workers,'cloudflare-pages':pages,vercel};
 export const WRANGLER_FILE = 'wrangler.nakwol.json';
 const GENERATED = '.nakwol/server';
 const { version: runtimeVersion } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.11.0 protect update';
+const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.12.0 protect update';
 // Git may convert generated text to CRLF on Windows; line endings are not a gate change.
 const hash = value => createHash('sha256').update(value.toString().replaceAll('\r\n', '\n')).digest('hex');
 
@@ -53,7 +53,8 @@ export async function inspectProtection(root, config, options = {}) {
   if (!options.allowSettingsChange && (p.accessPolicy !== config.accessPolicy || p.clientId !== config.clientId || p.authOrigin !== config.authOrigin)) return { installed:true, ok:false, detail:'앱 정책/주소와 서버 게이트 설정이 다릅니다. protect install로 갱신 후 배포하세요.' };
   const modern = Number((p.runtimeVersion || '0.0.0').split('.')[0]) > 0 || Number((p.runtimeVersion || '0.0.0').split('.')[1]) >= 10;
   const controlled=Number((p.runtimeVersion||'0.0.0').split('.')[0])>0||Number((p.runtimeVersion||'0.0.0').split('.')[1])>=11;
-  const expectedNames = p.provider === 'vercel' ? vercel.files.filter(file => (modern || !file.endsWith('/session.mjs')) && (controlled || !file.endsWith('/control.mjs'))) : p.provider === 'cloudflare-pages' ? pagesFiles(p.assetsDirectory) : [`${GENERATED}/gate.mjs`, `${GENERATED}/login.mjs`, `${GENERATED}/index.mjs`, WRANGLER_FILE, ...(modern ? [`${GENERATED}/session.mjs`] : []), ...(controlled ? [`${GENERATED}/control.mjs`] : [])];
+  const observed=Number((p.runtimeVersion||'0.0.0').split('.')[0])>0||Number((p.runtimeVersion||'0.0.0').split('.')[1])>=12;
+  const expectedNames = p.provider === 'vercel' ? vercel.files.filter(file => (modern || !file.endsWith('/session.mjs')) && (controlled || !file.endsWith('/control.mjs')) && (observed || !file.endsWith('/observations.mjs'))) : p.provider === 'cloudflare-pages' ? pagesFiles(p.assetsDirectory) : [`${GENERATED}/gate.mjs`, `${GENERATED}/login.mjs`, `${GENERATED}/index.mjs`, WRANGLER_FILE, ...(modern ? [`${GENERATED}/session.mjs`] : []), ...(controlled ? [`${GENERATED}/control.mjs`] : []), ...(observed ? [`${GENERATED}/observations.mjs`] : [])];
   if (!Object.hasOwn(adapters,p.provider) || !p.files || Object.keys(p.files).length !== expectedNames.length) return { installed: true, ok: false, detail: '지원하지 않는 보호 설정' };
   for (const file of expectedNames) {
     try { if (hash(await readFile(join(root, file))) !== p.files[file]) return { installed: true, ok: false, detail: `설치 이후 파일 변경: ${file}` }; }
@@ -64,7 +65,7 @@ export async function inspectProtection(root, config, options = {}) {
   }
   const adapterInspection = await adapters[p.provider].inspect(root, p);
   if (!adapterInspection.ok) return {installed:true, ...adapterInspection};
-  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.11.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
+  return { schemaVersion:1, capabilities:adapters[p.provider].capabilities, installed: true, ok: true, runtimeVersion:p.runtimeVersion || 'legacy', updateAvailable:p.runtimeVersion !== runtimeVersion, detail: `서버 게이트 구성 확인 (${p.runtimeVersion || 'legacy'}). ${p.runtimeVersion !== runtimeVersion ? '공통 게이트 갱신: npx --yes nakwol-connect@~0.12.0 protect update 후 재배포. ' : ''}실제 배포 차단은 protect verify로 별도 확인해야 합니다.` };
 }
 export async function installProtection(options = {}) {
   const root = options.root || process.cwd();

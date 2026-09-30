@@ -3,6 +3,11 @@ import { registerGateControlRoutes,publishPendingControl } from './gate-control'
 import type { Env } from './types';
 export { GateControlObject } from './gate-control-object';
 import { registerServiceManagementRoutes } from './service-management-routes';
+import { registerServiceUserRoutes } from './service-user-routes';
+import { registerServiceObservationRoutes } from './service-observations';
+import { cleanupServiceUsers } from './service-users';
+import { serviceUsersPage } from './service-users-page';
+import serviceUsersSource from './assets/nakwol-developer-users.js.txt';
 import { registerAuthPolicyAdminRoutes } from './auth-policy-admin';
 import { serviceManagementPage } from './service-management-page';
 import serviceManagementSource from './assets/nakwol-service-management.js.txt';
@@ -24,8 +29,12 @@ import { registerRoleAdminRoutes } from './role-admin';
 registerServerSessionRoutes(app);
 registerGateControlRoutes(app);
 registerServiceManagementRoutes(app);
+registerServiceUserRoutes(app);
+registerServiceObservationRoutes(app);
 registerAuthPolicyAdminRoutes(app);
 app.get('/developer/apps', c => c.html(serviceManagementPage(),200,{'Cache-Control':'no-store'}));
+app.get('/developer/users',c=>c.html(serviceUsersPage(),200,{'Cache-Control':'no-store'}));
+app.get('/developer/users.js',c=>c.text(serviceUsersSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
 app.get('/developer/service-management.js', c => c.text(serviceManagementSource,200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}));
 registerGateReportRoutes(app);
 registerAccessSupportRoutes(app);
@@ -42,5 +51,6 @@ registerLabRoutes(app);
 registerRoleAdminRoutes(app);
 
 export default Object.assign(app, {scheduled(_controller:ScheduledController,env:Env,ctx:ExecutionContext) {
+  ctx.waitUntil(cleanupServiceUsers(env));
   if(env.GATE_CONTROL_SIGNING_JWK&&env.GATE_CONTROL_KID)ctx.waitUntil(publishPendingControl(env));
 }});

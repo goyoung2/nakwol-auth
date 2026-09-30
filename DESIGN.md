@@ -37,3 +37,11 @@
 - Applied, pending, failed, published and observed use text labels; observed never means all users are online or all gates upgraded. Missing runtime/control-profile evidence is unconfirmed.
 - Recovery code is shown once in a password-style field, cleared on navigation, never put in a URL or local storage. The separate recovery page has no protected product content and grants no data access.
 - Controls have associated labels; result areas use polite live regions. Reuse account palette, 720px column and 44px controls on the separate recovery page.
+
+## Service owner users
+
+- Reuse Connect content-card, form-grid, field, event-row, actions, ghost and primary primitives. Keep current palette and responsive breakpoints.
+- Service selection → state/search → paginated minimum identity list → selected user details → reason and confirmed app-scoped action. Empty, loading, rejected, observed and preregistered are distinct.
+- Do not label last observation as online. Show observation receipt/delay, retention and unsupported gates; never expose central roles, sessions or secrets.
+- Invalidate responses on service/user switch. Failed response can retry the same operation key. Confirmation names app, Discord ID and action. Deny/clear, grant withdrawal and relationship deletion are separate.
+- Labels, native keyboard controls, polite result region; hide workspace until owner API authorizes it.

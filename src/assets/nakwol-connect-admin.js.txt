@@ -523,6 +523,8 @@ ui.refreshEvents.addEventListener('click', () => loadEvents().catch((error) => r
       renderGate();
       return;
     }
+    const usersReturn = sessionStorage.getItem('nakwol.developer.users.return');
+    if (usersReturn !== null) { sessionStorage.removeItem('nakwol.developer.users.return'); location.replace('/developer/users' + (usersReturn ? '?client_id='+encodeURIComponent(usersReturn) : '')); return; }
     const developerReturn = sessionStorage.getItem('nakwol.developer.return');
     if (developerReturn !== null) { sessionStorage.removeItem('nakwol.developer.return'); location.replace('/developer/apps' + (developerReturn ? '?client_id='+encodeURIComponent(developerReturn) : '')); return; }
     await loadSession();

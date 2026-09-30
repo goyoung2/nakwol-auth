@@ -3,7 +3,7 @@ import { connectSharedStyles } from './connect';
 /** Public shell only. All account and policy data comes from owner-authorized APIs. */
 export function serviceManagementPage(): string {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>서비스 정책 · NAKWOL Connect</title><style>${connectSharedStyles()}[hidden]{display:none!important}</style></head><body>
-<header><div class="brand"><div class="mark">落</div><div><b>NAKWOL Connect</b><small>내 서비스 · 인증 정책</small></div></div><a class="ghost" href="/admin/apps">앱 관리</a></header>
+<header><div class="brand"><div class="mark">落</div><div><b>NAKWOL Connect</b><small>내 서비스 · 인증 정책</small></div></div><nav><a class="ghost" href="/developer/users">사용자 관리</a> <a class="ghost" href="/admin/apps">앱 관리</a></nav></header>
 <main><section class="content-card"><h1>서비스 인증 정책</h1><p class="muted">관리 권한이 있는 서비스의 로그인 유지 시간과 권한 재확인 간격을 설정합니다. 중앙 멤버 기준과 접근 정책은 AUTH 운영자가 관리합니다.</p><p id="status" role="status" aria-live="polite">관리 권한 확인 중…</p><button id="login" class="primary" type="button" hidden>관리자 인증 갱신</button><button id="reload" class="ghost" type="button">다시 불러오기</button></section>
 <section id="workspace" class="content-card" hidden><div class="field"><label for="service">서비스</label><select id="service"></select></div><p id="capabilities" class="muted"></p>
 <form id="policy-form"><fieldset id="policy-fields" disabled><legend>사이트 세션 정책</legend><div class="form-grid">

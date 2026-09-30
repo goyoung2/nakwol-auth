@@ -85,6 +85,9 @@ export async function evaluateAccess(env: Env, userId: string, clientId: string,
     JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
     WHERE i.user_id = ? AND g.client_id = ?`).bind(userId, clientId).first<{ status: string; expires_at: number | null }>();
   const grantActive = grant?.status === 'active' && Number.isSafeInteger(grant.expires_at) && Number(grant.expires_at) > now;
+  const delegatedGrant = await env.DB.prepare(`SELECT g.expires_at FROM service_user_grants g JOIN auth_identities i ON i.provider='discord' AND i.provider_user_id=g.discord_id
+    WHERE i.user_id=? AND g.client_id=? AND g.expires_at>? AND EXISTS(SELECT 1 FROM json_each(g.conditions_json) WHERE value='additional-roles')`)
+    .bind(userId,clientId,now).first<{expires_at:number}>();
   const roleEvidence: RoleEvidence | null = membership && membershipSnapshot && freshness && credentialAfterRefresh?.state !== 'reauth_required' ? {
     guildId: env.NAKWOL_GUILD_ID, checkedAt: membershipSnapshot.checked_at, roleIdsJson: membership.role_ids,
     isGuildMember: membershipSnapshot.is_guild_member, role: membershipSnapshot.role, status: membershipSnapshot.status,
@@ -118,12 +121,13 @@ export async function evaluateAccess(env: Env, userId: string, clientId: string,
     else if (!seasonRole) failure = 'SEASON_ROLE_NOT_CONFIGURED';
     else if (!roles.includes(seasonRole)) failure = 'SEASON_ROLE_MISSING';
     else if (!user.membership.is_member) failure = 'MEMBERSHIP_INACTIVE';
-    else if (!requiredRoles.every(id => roles.includes(id))) failure = 'ADDITIONAL_ROLE_MISSING';
+    else if (!requiredRoles.every(id => roles.includes(id)) && !(delegatedGrant && resolved.effective.grantableConditions.includes('additional-roles'))) failure = 'ADDITIONAL_ROLE_MISSING';
     if (failure) {
       if ((policy === 'member' || policy === 'guest') && grantActive) return result(true, 'MANUAL_GRANT', 'manual-grant', Number(grant?.expires_at));
       return result(false, failure);
     }
     roleValidUntil = freshness?.validUntil ?? Math.min(checkedAt + MEMBERSHIP_MAX_AGE_MS, now);
+    if(!requiredRoles.every(id=>roles.includes(id))&&delegatedGrant)roleValidUntil=Math.min(roleValidUntil,delegatedGrant.expires_at);
   }
   switch (policy) {
     case 'guest': return result(true, 'POLICY_ALLOWED', requireMember || requiredRoles.length > 0 ? 'role' : 'guest', roleValidUntil);

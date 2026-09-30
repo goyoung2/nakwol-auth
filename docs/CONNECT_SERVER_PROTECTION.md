@@ -207,6 +207,12 @@ AUTH의 `/developer/apps`에서 현재 소유한 서비스의 권한 재확인 �
 
 공식 공통 게이트는 서버 credential을 명시적으로 설정한 사이트에서 서버 콜백과 장기 세션 갱신을 지원합니다. 상세 계약·활성화 순서·최대 300초 회수 지연·기존 방식과의 호환성은 [서버 세션 갱신](SERVER_SESSION_REFRESH.md)을 참조하세요. 운영 배포·npm 게시 전이며 기존 설치가 자동 전환되지는 않습니다.
 
+## 서비스 사용자 관리와 접근 관측 (0.12.0)
+
+현재 앱 소유자는 `/developer/users`에서 자기 서비스의 사용자 조회, 차단/해제, 앱 세션 종료와 위임된 추가 역할 임시 허가를 관리합니다. 중앙 계정과 다른 앱에는 영향을 주지 않습니다. 자세한 계약은 [SERVICE_USER_MANAGEMENT.md](SERVICE_USER_MANAGEMENT.md)를 참고하세요.
+
+실제 접근 관측은 runtime0.12.0 + site credential + 호스팅의 background hook이 있어야 보고됩니다. 구 버전 사이트는 인증 이력만 표시할 수 있습니다. AUTH 배포만으로 설치 사이트의 server gate가 변경되지는 않으며 `protect update` 후 사이트를 재배포하고 `doctor`/`protect verify`로 검사해야 합니다. 자산마다 중앙 호출하는 방식으로 관측을 구현하지 않습니다.
+
 ## 선택형 빠른 차단 전파 (0.11.0)
 
 `bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.

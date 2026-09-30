@@ -77,16 +77,16 @@ export async function exchangeServerCode(env: Env, args: ServerSessionBinding & 
   const lease = Math.min(idle, access.validUntil, started + Math.min(300,access.effectivePolicy.leaseSeconds) * 1000);
   if (lease <= now) throw new ServerSessionError('VERIFICATION_EXPIRED', 503);
   const membershipGuard = roleGuard('auth_codes.user_id',access.roleEvidence,now,access.validUntil);
-  const results = await env.DB.batch([
+  const results = await env.DB.batch<{id:string}>([
     env.DB.prepare(`INSERT INTO server_sessions SELECT ?,?,user_id,client_id,?,?,auth_session_hash,0,?,?,?,?,?,?,NULL,?,?,?,?,?,?
       FROM auth_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>? AND client_id=? AND redirect_uri=? AND code_challenge=?
       AND (SELECT version FROM auth_policy_revision WHERE id=1)=? AND COALESCE((SELECT MAX(seq) FROM gate_control_outbox WHERE client_id=?),0)=? AND ${activeGuard('auth_codes.user_id','auth_codes.auth_session_hash','?')}
-      AND ${membershipGuard.sql}`)
+      AND ${membershipGuard.sql} RETURNING id`)
       .bind(id,await sha256Base64Url(handle),args.siteOrigin,credential.id,started,started,idle,absolute,access.effectivePolicy.sessionIdleSeconds,access.effectivePolicy.sessionAbsoluteSeconds,
         access.source,started,lease,access.validUntil,access.policyVersion,control,hash,now,args.clientId,args.redirectUri,challenge,version,args.clientId,control,credential.id,now,now,'app:'+args.clientId,now,args.clientId,...membershipGuard.values),
     env.DB.prepare('UPDATE auth_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL AND EXISTS(SELECT 1 FROM server_sessions WHERE id=?)').bind(now,hash,id),
   ]);
-  if (results[0].meta.changes !== 1 || results[1].meta.changes !== 1) throw new ServerSessionError('INVALID_CODE');
+  if (results[0].results.length !== 1 || results[0].results[0]?.id !== id || results[1].meta.changes !== 1) throw new ServerSessionError('INVALID_CODE');
   const row = await readSession(env,id);
   if (!row) throw new ServerSessionError('INVALID_SESSION');
   return {ok:true as const, session:proof(row),handle};

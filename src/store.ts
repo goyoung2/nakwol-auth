@@ -152,7 +152,7 @@ export async function exchangeAuthorizationCode(env: Env, args: { code: string; 
   const tokenHash = await sha256Base64Url(accessToken);
   // D1 executes this batch transactionally: only the first exchange can insert.
   // The UPDATE is bound to that exchange's token hash, not to a shared timestamp.
-  const results = await env.DB.batch([
+  const results = await env.DB.batch<{token_hash:string}>([
     env.DB.prepare(
       `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at)
        SELECT ?, user_id, client_id, ? + 1000 * MIN(
@@ -160,14 +160,14 @@ export async function exchangeAuthorizationCode(env: Env, args: { code: string; 
          COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='app:' || auth_codes.client_id),3600)
        ), NULL, ? FROM auth_codes
         WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
-          AND client_id = ? AND redirect_uri = ? AND code_challenge = ?`
+          AND client_id = ? AND redirect_uri = ? AND code_challenge = ? RETURNING token_hash`
     ).bind(tokenHash, now, now, codeHash, Date.now(), args.clientId, args.redirectUri, expected),
     env.DB.prepare(
       `UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL
          AND EXISTS (SELECT 1 FROM access_tokens WHERE token_hash = ?)`
     ).bind(now, codeHash, tokenHash),
   ]);
-  if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
+  if (results[0]?.results.length !== 1 || results[0].results[0]?.token_hash !== tokenHash || results[1]?.meta.changes !== 1) {
     throw new Error('INVALID_OR_EXPIRED_CODE');
   }
   const issued = await env.DB.prepare('SELECT expires_at FROM access_tokens WHERE token_hash = ?').bind(tokenHash).first<{ expires_at: number }>();
