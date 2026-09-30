@@ -3,11 +3,22 @@ import { getUserWithMembership } from './store';
 import { getAuthLabPrivilege } from './platform-access';
 import { getRequiredRoleIds } from './role-settings';
 import { resolveAuthPolicy } from './auth-policy-settings';
+import { ensureFreshMembership } from './membership-refresh';
+import { readDiscordCredentials } from './discord-credentials';
 
 export const MEMBERSHIP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const NAKWOL_CONNECT_POLICY_VERSION = '0.2.0';
 export type ApplicationAccessPolicy = 'guest' | 'member' | 'admin' | 'lab';
+export type RoleEvidence = {
+  readonly guildId: string;
+  readonly checkedAt: number;
+  readonly roleIdsJson: string;
+  readonly isGuildMember: number;
+  readonly role: string;
+  readonly status: string;
+  readonly credentialGeneration: number | null;
+};
 
 export async function getApplicationAccessPolicy(env: Env, clientId: string): Promise<ApplicationAccessPolicy> {
   const row = await env.DB.prepare(
@@ -45,36 +56,52 @@ export async function diagnoseApplicationAccess(env: Env, userId: string, client
 }
 
 export async function evaluateAccess(env: Env, userId: string, clientId: string, options: { requireMember?: boolean; expiresAt?: number; now?: number } = {}) {
-  const now = options.now ?? Date.now();
+  const now = Math.max(options.now ?? 0, Date.now());
   const requireMember = options.requireMember ?? false;
   const resolved = await resolveAuthPolicy(env, clientId);
   const boundary = Math.min(options.expiresAt ?? Infinity, now + resolved.effective.accessTokenSeconds * 1000);
 
   const policy = await getApplicationAccessPolicy(env, clientId);
-  const user = await getUserWithMembership(env, userId);
+  let reauth = await env.DB.prepare(`SELECT requested_at, completed_at FROM user_reauthentication WHERE user_id = ?`)
+    .bind(userId).first<{ requested_at: number; completed_at: number | null }>();
+  let reauthPending = Boolean(reauth && (!reauth.completed_at || reauth.completed_at <= reauth.requested_at));
   const requiredRoles = await getRequiredRoleIds(env, clientId);
+  const freshness = (policy === 'member' || requireMember || requiredRoles.length > 0) && !reauthPending
+    ? await ensureFreshMembership(env, userId) : null;
+  const credentialAfterRefresh = freshness ? await readDiscordCredentials(env, userId) : null;
+  reauth = await env.DB.prepare(`SELECT requested_at, completed_at FROM user_reauthentication WHERE user_id = ?`)
+    .bind(userId).first<{ requested_at: number; completed_at: number | null }>();
+  reauthPending = Boolean(reauth && (!reauth.completed_at || reauth.completed_at <= reauth.requested_at));
+  const user = await getUserWithMembership(env, userId);
   const membership = await env.DB.prepare(`SELECT role_ids FROM memberships WHERE user_id = ? AND guild_id = ?`)
     .bind(userId, env.NAKWOL_GUILD_ID).first<{ role_ids: string }>();
+  const membershipSnapshot = await env.DB.prepare(`SELECT checked_at, is_guild_member, role, status FROM memberships WHERE user_id = ? AND guild_id = ?`)
+    .bind(userId, env.NAKWOL_GUILD_ID).first<{ checked_at: number; is_guild_member: number; role: string; status: string }>();
   let parsed: unknown = null;
   try { parsed = JSON.parse(membership?.role_ids ?? 'null'); } catch { parsed = null; }
   const roles: string[] = Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string') ? parsed : [];
   const seasonRole = env.NAKWOL_MEMBER_ROLE_ID?.trim() || '';
-  const reauth = await env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
-    .bind(userId).first<{ requested_at: number }>();
   const grant = await env.DB.prepare(`SELECT g.status, g.expires_at FROM application_access_grants g
     JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
     WHERE i.user_id = ? AND g.client_id = ?`).bind(userId, clientId).first<{ status: string; expires_at: number | null }>();
   const grantActive = grant?.status === 'active' && Number.isSafeInteger(grant.expires_at) && Number(grant.expires_at) > now;
+  const roleEvidence: RoleEvidence | null = membership && membershipSnapshot && freshness && credentialAfterRefresh?.state !== 'reauth_required' ? {
+    guildId: env.NAKWOL_GUILD_ID, checkedAt: membershipSnapshot.checked_at, roleIdsJson: membership.role_ids,
+    isGuildMember: membershipSnapshot.is_guild_member, role: membershipSnapshot.role, status: membershipSnapshot.status,
+    credentialGeneration: credentialAfterRefresh?.generation ?? null,
+  } : null;
   const result = (allowed: boolean, reason: string, source: 'role' | 'manual-grant' | 'guest' | 'admin' | 'lab' | 'none' = 'none', validUntil = boundary) => ({ allowed, reason, policy,
     source, validUntil: allowed ? Math.min(boundary, validUntil) : now, policyVersion: resolved.policyVersion, effectivePolicy: resolved.effective,
     season_role_id: seasonRole, role_ids: roles, missing_role_ids: [seasonRole, ...requiredRoles].filter(id => id && !roles.includes(id)),
     checked_at: user?.membership.checked_at ?? null, manual_grant: grantActive,
     reauthentication_requested_at: reauth?.requested_at ?? null,
-    reauthentication_status: reauth ? (Number(user?.membership.checked_at ?? 0) > reauth.requested_at ? 'completed' : 'pending') : null });
+    reauthentication_status: reauth ? (reauthPending ? 'pending' : 'completed') : null,
+    requiresRoleEvidence: allowed && (policy === 'member' || requireMember || requiredRoles.length > 0) && source !== 'manual-grant',
+    roleEvidence: allowed && (policy === 'member' || requireMember || requiredRoles.length > 0) && source !== 'manual-grant' ? roleEvidence : null });
   const application = await env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first<{ status: string }>();
   if (application?.status !== 'active') return result(false, 'APP_DISABLED');
   if (!user || user.status !== 'active') return result(false, 'USER_DISABLED');
-  if (reauth && Number(user.membership.checked_at ?? 0) <= reauth.requested_at) return result(false, 'REAUTHENTICATION_REQUIRED');
+  if (reauthPending) return result(false, 'REAUTHENTICATION_REQUIRED');
   const deny = await env.DB.prepare(`SELECT d.scope FROM application_access_denies d
     JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = d.discord_user_id
     WHERE i.user_id = ? AND d.scope IN ('global', ?) AND d.status = 'active'
@@ -85,7 +112,9 @@ export async function evaluateAccess(env: Env, userId: string, clientId: string,
   if (policy === 'member' || requireMember || requiredRoles.length > 0) {
     const checkedAt = Number(user.membership.checked_at);
     let failure = '';
-    if (!Number.isFinite(checkedAt) || checkedAt <= 0 || checkedAt > now || now - checkedAt >= MEMBERSHIP_MAX_AGE_MS) failure = 'MEMBERSHIP_REFRESH_REQUIRED';
+    if (freshness?.kind === 'reauth-required' || credentialAfterRefresh?.state === 'reauth_required') failure = 'MEMBERSHIP_REAUTH_REQUIRED';
+    else if (freshness?.kind === 'unavailable' && freshness.validUntil <= Date.now()) failure = 'MEMBERSHIP_UNAVAILABLE';
+    else if (!freshness || freshness.validUntil <= Date.now() || !Number.isFinite(checkedAt) || checkedAt <= 0 || checkedAt > Date.now()) failure = 'MEMBERSHIP_REFRESH_REQUIRED';
     else if (!seasonRole) failure = 'SEASON_ROLE_NOT_CONFIGURED';
     else if (!roles.includes(seasonRole)) failure = 'SEASON_ROLE_MISSING';
     else if (!user.membership.is_member) failure = 'MEMBERSHIP_INACTIVE';
@@ -94,7 +123,7 @@ export async function evaluateAccess(env: Env, userId: string, clientId: string,
       if ((policy === 'member' || policy === 'guest') && grantActive) return result(true, 'MANUAL_GRANT', 'manual-grant', Number(grant?.expires_at));
       return result(false, failure);
     }
-    roleValidUntil = checkedAt + MEMBERSHIP_MAX_AGE_MS;
+    roleValidUntil = freshness?.validUntil ?? Math.min(checkedAt + MEMBERSHIP_MAX_AGE_MS, now);
   }
   switch (policy) {
     case 'guest': return result(true, 'POLICY_ALLOWED', requireMember || requiredRoles.length > 0 ? 'role' : 'guest', roleValidUntil);

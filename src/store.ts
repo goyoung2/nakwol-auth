@@ -101,19 +101,22 @@ export async function upsertMembership(env: Env, userId: string, isGuildMember: 
        role = excluded.role,
        status = excluded.status,
        checked_at = excluded.checked_at,
-       role_ids = excluded.role_ids`
+       role_ids = excluded.role_ids WHERE memberships.checked_at <= excluded.checked_at`
   ).bind(userId, env.NAKWOL_GUILD_ID, isGuildMember ? 1 : 0, role, active ? 'active' : 'inactive', now, JSON.stringify(roleIds)).run();
 }
 
 export async function refreshDiscordMembership(
   env: Env,
   discordAccessToken: string,
+  loginStartedAt?: number,
 ): Promise<{ userId: string; role: 'user' | 'member' | 'admin' }> {
   const { user: discordUser, member } = await fetchDiscordIdentity(env, discordAccessToken);
   const role = resolveNakwolRole(env, member);
   const displayName = member?.nick ?? discordUser.global_name ?? discordUser.username;
   const userId = await upsertDiscordUser(env, discordUser, displayName);
   await upsertMembership(env, userId, Boolean(member), role, member?.roles ?? []);
+  if (loginStartedAt) await env.DB.prepare(`UPDATE user_reauthentication SET completed_at=?
+    WHERE user_id=? AND requested_at < ?`).bind(Date.now(), userId, loginStartedAt).run();
   return { userId, role };
 }
 

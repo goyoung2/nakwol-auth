@@ -343,7 +343,7 @@ let supportGeneration = 0;
 const supportId = $('#support-discord');
 const supportStatus = $('#support-status');
 const moreEvents = $('#events-more');
-const supportButtons = ['search', 'grant', 'revoke', 'reauth'].map(id => $('#support-' + id));
+const supportButtons = ['search', 'refresh', 'grant', 'revoke', 'reauth'].map(id => $('#support-' + id));
 const formatTime = value => value ? new Date(value).toLocaleString('ko-KR') : '확인 기록 없음';
 function readDetail(value) {
   try { return JSON.parse(value || '{}') || {}; } catch { return {}; }
@@ -410,19 +410,21 @@ async function actOnAccess(action) {
   if (!state.selected) return;
   const discordId = supportId.value.trim(), reason = $('#support-reason').value.trim();
   if (!/^\d{15,22}$/.test(discordId) || !reason) { showSupportError(new Error('Discord ID와 조치 사유를 입력하세요.')); return; }
-  const descriptions = {grant:'시즌3 및 추가 역할 조건을 대신하는 수동 허가', revoke:'수동 허가 회수', reauthenticate:'모든 서비스의 AUTH 로그인 무효화 및 Discord 재인증 요구'};
+  const descriptions = {grant:'시즌3 및 추가 역할 조건을 대신하는 수동 허가', revoke:'수동 허가 회수', reauthenticate:'모든 서비스의 AUTH 로그인 무효화 및 Discord 재인증 요구', refresh_membership:'Discord 역할을 지금 다시 확인'};
   if (!confirm([state.selected.name + ' / Discord ' + discordId, descriptions[action], '사유: ' + reason].join(String.fromCharCode(10)))) return;
   supportButtons.forEach(button => { button.disabled = true; });
   try {
     const result = await api('/admin/api/access/' + encodeURIComponent(state.selected.client_id), {
       method:'POST', body:JSON.stringify({discord_user_id:discordId, reason, action}),
     });
-    supportStatus.className = 'muted'; supportStatus.textContent = result.message;
+    supportStatus.className = result.ok ? 'muted' : 'error-text';
+    supportStatus.textContent = result.message || (result.status === 'fresh' ? '역할을 다시 확인했습니다.' : result.status === 'reauth-required' ? '사용자 Discord 재동의가 필요합니다. 계정 페이지: ' + result.recovery_url : 'Discord 확인이 지연됐습니다. 잠시 후 다시 시도해 주세요.');
     await loadEvents();
   } catch (error) { showSupportError(error); }
   finally { supportButtons.forEach(button => { button.disabled = false; }); }
 }
 $('#support-grant').onclick = () => actOnAccess('grant');
+$('#support-refresh').onclick = () => actOnAccess('refresh_membership');
 $('#support-revoke').onclick = () => actOnAccess('revoke');
 $('#support-reauth').onclick = () => actOnAccess('reauthenticate');
 

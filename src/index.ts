@@ -2,7 +2,8 @@ import { evaluateAccess, diagnoseApplicationAccess } from './policy';
 import { createOAuthTransaction, validateOAuthTransaction } from './oauth-transaction';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { buildDiscordAuthorizeUrl, exchangeDiscordCode, DiscordMembershipUnavailable } from './discord';
+import { buildDiscordAuthorizeUrl, exchangeDiscordCodeTokens, DiscordMembershipUnavailable } from './discord';
+import { saveDiscordCredentials } from './discord-credentials';
 import { registerDemoRoutes } from './demo';
 import { registerConnectOnboardingRoutes } from './connect-onboarding';
 import {
@@ -188,8 +189,9 @@ app.get('/auth/discord/callback', async (c) => {
   }
 
   try {
-    const discordAccessToken = await exchangeDiscordCode(c.env, discordCode);
-    const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken);
+    const discordTokens = await exchangeDiscordCodeTokens(c.env, discordCode);
+    const { userId, role } = await refreshDiscordMembership(c.env, discordTokens.accessToken, requestRow.created_at);
+    await saveDiscordCredentials(c.env, userId, discordTokens);
     const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
 
     if (!allowed) {
@@ -292,7 +294,9 @@ app.get('/me', async (c) => {
   const userId = tokenInfo.userId;
   const access = await evaluateAccess(c.env, userId, clientId, {requireMember:c.req.header('X-Nakwol-Require-Member') === 'true' && !c.req.header('X-Nakwol-Capabilities')?.split(',').includes('policy-v1'),expiresAt:tokenInfo.expiresAt});
   if (!access.allowed) {
-    const response = c.json({ ok: false, error: { code: 'ACCESS_DENIED', message: '이 앱을 사용할 권한이 없습니다.' } }, 403);
+    const unavailable = access.reason === 'MEMBERSHIP_UNAVAILABLE';
+    const response = c.json({ ok: false, error: { code: unavailable ? 'MEMBERSHIP_UNAVAILABLE' : 'ACCESS_DENIED',
+      message: unavailable ? 'Discord 역할 확인이 지연됐습니다. 잠시 후 다시 시도해 주세요.' : '이 앱을 사용할 권한이 없습니다.' } }, unavailable ? 503 : 403);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 

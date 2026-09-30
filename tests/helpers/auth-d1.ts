@@ -6,7 +6,7 @@ export async function authFixture(script = 'export default {fetch(){return new R
   const options = { modules: true, script, d1Databases: ['DB'], bindings: {NAKWOL_GUILD_ID:'guild-fixture',NAKWOL_MEMBER_ROLE_ID:'season3',DISCORD_CLIENT_ID:'fixture',DISCORD_CLIENT_SECRET:'fixture',AUTH_ORIGIN:'https://auth.test'} };
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0004_nakwol_connect_cli.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0014_gate_reports.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0004_nakwol_connect_cli.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0014_gate_reports.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql', '0017_discord_credentials.sql']) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
   }

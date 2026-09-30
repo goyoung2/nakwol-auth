@@ -102,7 +102,7 @@ function adminPage(): string {
         <p class="muted">이 서비스에만 수동 접근을 허가합니다. Discord 역할과 AUTH 운영 권한은 변경하지 않습니다. 재인증 요구는 해당 사용자의 모든 서비스 AUTH 로그인을 무효화합니다.</p>
         <div class="form-grid"><div class="field"><label for="support-discord">Discord 사용자 ID</label><input id="support-discord" inputmode="numeric" placeholder="숫자로 된 Discord ID" maxlength="22"></div>
         <div class="field"><label for="support-reason">조치 사유</label><input id="support-reason" maxlength="500" placeholder="허가·회수·재인증 사유"></div></div>
-        <div class="actions"><button id="support-search" class="ghost" type="button">계정 진단</button><button id="support-grant" class="primary" type="button">수동 허가</button><button id="support-revoke" class="ghost" type="button">허가 회수</button><button id="support-reauth" class="ghost" type="button">재인증 요구</button></div>
+        <div class="actions"><button id="support-search" class="ghost" type="button">계정 진단</button><button id="support-refresh" class="ghost" type="button">역할 다시 확인</button><button id="support-grant" class="primary" type="button">수동 허가</button><button id="support-revoke" class="ghost" type="button">허가 회수</button><button id="support-reauth" class="ghost" type="button">재인증 요구</button></div>
         <p id="support-status" role="status" aria-live="polite"></p><div id="support-diagnosis"></div>
         <h4>수동 허가 목록</h4><p class="muted">최근 변경 200건까지 표시합니다. 회수는 수동 예외만 제거하며, 원래 역할 조건을 충족하면 접근할 수 있습니다.</p><div id="support-grants"></div>
       </section>

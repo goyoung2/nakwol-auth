@@ -3,6 +3,7 @@ import type { Env } from './types';
 import { authenticateAccessToken } from './store';
 import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin } from './policy';
 import { randomToken } from './crypto';
+import { ensureFreshMembership } from './membership-refresh';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -54,7 +55,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     if (!body || typeof body !== 'object' || !('discord_user_id' in body) || typeof body.discord_user_id !== 'string'
       || !/^\d{15,22}$/.test(body.discord_user_id) || !('reason' in body) || typeof body.reason !== 'string'
       || !body.reason.trim() || body.reason.length > 500 || !('action' in body)
-      || (body.action !== 'grant' && body.action !== 'revoke' && body.action !== 'reauthenticate')) {
+      || (body.action !== 'grant' && body.action !== 'revoke' && body.action !== 'reauthenticate' && body.action !== 'refresh_membership')) {
       return c.json({ error: { message: 'Discord ID, 조치 종류, 사유(1~500자)가 필요합니다.' } }, 400);
     }
     const application = await c.env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first();
@@ -65,6 +66,16 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     const target = await c.env.DB.prepare(`SELECT user_id FROM auth_identities WHERE provider = 'discord' AND provider_user_id = ?`)
       .bind(body.discord_user_id).first<{ user_id: string }>();
+    if (body.action === 'refresh_membership') {
+      if (!target) return c.json({ ok: false, status: 'reauth-required', recovery_url: `${c.env.AUTH_ORIGIN}/account`,
+        error: { message: '아직 로그인한 적 없는 사용자입니다. 사용자에게 계정 페이지 로그인을 안내하세요.' } }, 404);
+      const refresh = await ensureFreshMembership(c.env, target.user_id, { force: true });
+      await c.env.DB.prepare(`INSERT INTO auth_events(id,user_id,client_id,event_type,detail,created_at) VALUES (?,?,?,?,?,?)`)
+        .bind(`evt_${randomToken(10)}`, target.user_id, clientId, 'admin.access.refresh_membership',
+          JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), result: refresh.kind }), Date.now()).run();
+      return c.json({ ok: refresh.kind === 'fresh', status: refresh.kind, checked_at: refresh.checkedAt,
+        valid_until: refresh.validUntil, ...(refresh.kind === 'reauth-required' ? { recovery_url: `${c.env.AUTH_ORIGIN}/account` } : {}) });
+    }
     const now = Date.now();
     const expiresAt = 'expires_at' in body ? body.expires_at : now + 60 * 60 * 1000;
     if (body.action === 'grant' && (typeof expiresAt !== 'number' || !Number.isSafeInteger(expiresAt)

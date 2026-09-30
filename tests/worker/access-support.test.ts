@@ -16,7 +16,7 @@ test('operator support actions use real D1 and preserve service and identity bou
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql', '0017_discord_credentials.sql']) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
   }
@@ -57,12 +57,20 @@ test('operator support actions use real D1 and preserve service and identity bou
       assert.equal(response.status, 400);
     }
   });
+  await t.test('operator force refresh reuses authorization gates and returns recovery for absent credentials', async () => {
+    assert.equal((await request('refresh_membership', 'ordinary')).status, 403);
+    const absent = await request('refresh_membership');
+    assert.equal(absent.status, 404);
+    assert.equal((await absent.json()).recovery_url, 'https://auth.test/account');
+  });
   await t.test('pregrant only links after verified Discord identity and never alters membership', async () => {
     assert.equal((await request('grant')).status, 200);
     assert.equal((await status()).allowed, false);
     await DB.prepare(`INSERT INTO auth_identities VALUES ('target-i','target','discord',?,0,0)`).bind(discordId).run();
     await upsertMembership(env, 'target', false, 'user', []);
     assert.equal((await status()).reason, 'MANUAL_GRANT');
+    const forced = await request('refresh_membership');
+    assert.equal((await forced.json()).status, 'reauth-required');
     assert.equal((await diagnoseApplicationAccess(env, 'target', 'other')).allowed, false);
     const member = await DB.prepare(`SELECT role FROM memberships WHERE user_id='target'`).first();
     assert.equal(member?.role, 'user');
@@ -88,6 +96,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.equal(await inspectAccessToken(env, 'old', 'site'), null);
     assert.equal((await status()).reason, 'REAUTHENTICATION_REQUIRED');
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
+    await DB.prepare(`UPDATE user_reauthentication SET completed_at=? WHERE user_id='target'`).bind(Date.now() + 1).run();
     assert.equal((await status()).allowed, true);
     await DB.prepare(`UPDATE access_tokens SET revoked_at=NULL WHERE user_id='target' AND client_id='site'`).run();
     assert.equal(await inspectAccessToken(env, 'old', 'site'), null);
@@ -110,7 +119,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
     assert.equal((await status()).allowed, true);
     await DB.prepare(`UPDATE memberships SET checked_at=? WHERE user_id='target'`).bind(Date.now() - MEMBERSHIP_MAX_AGE_MS).run();
-    assert.equal((await status()).reason, 'MEMBERSHIP_REFRESH_REQUIRED');
+    assert.equal((await status()).reason, 'MEMBERSHIP_REAUTH_REQUIRED');
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
     assert.equal((await status()).allowed, true);
   });
@@ -128,7 +137,8 @@ test('operator support actions use real D1 and preserve service and identity bou
     let roles: string[] = [];
     t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'discord-fixture' });
+      if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'discord-fixture', refresh_token: 'discord-refresh-fixture',
+        expires_in: 3600, scope: 'identify guilds.members.read' });
       if (url.endsWith('/users/@me')) return Response.json({ id: discordId, username: 'target' });
       return Response.json({ roles });
     });
