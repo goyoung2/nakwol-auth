@@ -275,14 +275,16 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 
 **인터페이스:** setup JSON은 schemaVersion/clientId/siteOrigin/provider/buildDirectory/presentationVersion/policyVersion/step/idempotencyKey. presentation validator와 policy capability를 재사용하며 secrets는 포함하지 않는다. 기존 `protect install/update` 계약을 유지하면서 `--setup-file <file>` 비대화형 입력을 추가한다. 중앙 설정 저장/CLI 설치/실제 배포 상태를 별도 반환한다.
 
-- [ ] 서비스 선택→origin/호스팅→UI preview→정책/실효값→diff 검토/저장→설치/배포/verify 흐름. unsupported 환경은 해결 안내와 미지원 상태를 표시하며 Embed로 보호 완료 처리 금지.
-- [ ] 각 단계 종료/재시작, 중복 제출, 설정 CAS409, stale capability, secret 미설정을 재현한다. 재개 후 앱/credential 중복0, 다른 사용자의 setup ID 접근0. resume key는 비밀값을 대신하지 않는다.
-- [ ] 기존 프로젝트 재설정에서 현재 설정과 diff를 제시하고 관계 없는 CI/소스를 덮어쓰지 않는다. 기존 exact dependency/lockfile/update/doctor 계약을 유지한다.
-- [ ] 브라우저/CLI 입력이 동일 validator에서 같은 오류를 내는 계약 시험. UI·정책 저장과 runtime 적용은 구분하고 구 runtime을 적용 완료로 표시하지 않는다.
-- [ ] 신규 외부 개발자가 지원 플랫폼 fixture에서 OAuth/쿠키 코드 수작업 없이 설치, 디자인 변경, 2시간 정책 설정, 차단 검사와 정상 사용자 접속까지 수행한다.
+- [x] 서비스 선택→origin/호스팅→UI preview→정책/실효값→diff 검토/저장→설치/배포/verify 흐름. unsupported 환경은 해결 안내와 미지원 상태를 표시하며 Embed로 보호 완료 처리 금지.
+- [x] 각 단계 종료/재시작, 중복 제출, 설정 CAS409, stale capability, secret 미설정을 재현한다. 재개 후 앱/credential 중복0, 다른 사용자의 setup ID 접근0. resume key는 비밀값을 대신하지 않는다.
+- [x] 기존 프로젝트 재설정에서 현재 설정과 diff를 제시하고 관계 없는 CI/소스를 덮어쓰지 않는다. 기존 exact dependency/lockfile/update/doctor 계약을 유지한다.
+- [x] 브라우저/CLI 입력이 동일 validator에서 같은 오류를 내는 계약 시험. UI·정책 저장과 runtime 적용은 구분하고 구 runtime을 적용 완료로 표시하지 않는다.
+- [x] 신규 외부 개발자가 지원 플랫폼 fixture에서 OAuth/쿠키 코드 수작업 없이 설치, 디자인 변경, 2시간 정책 설정, 차단 검사와 정상 사용자 접속까지 수행한다.
 
 **실행:** `npx tsx --test tests/worker/developer-setup.test.ts`; `node --test packages/connect-cli/test/setup-resume.test.mjs`; Workers/Pages/Vercel static 각각 설치→doctor→protect verify→정상 접속 수용 시험.
 **합격:** 모든 초기 설정을 같은 흐름에서 완료, 중단 재개/충돌 처리 정상, 실제 보호 검증 전 완료 표시0.
+
+**로컬 완료 증거:** 전체359/359, 타입·CLI pack·Worker dry-run 통과. 실제 생성 Workers/Pages/Vercel HTTP 각각 비로그인55·정상파일7·300이미지 중앙호출0 및 브라우저 재개/충돌/모바일 수용 통과. `docs/audits/2026-10-01-commercial-developer-setup.md` 참조. Connect0.14.0은 로컬 후보이며 운영 migration/배포/npm 발행은 미실행.
 
 ## T10. 동적 API 보호와 리소스 권한 경계 — P3
 
