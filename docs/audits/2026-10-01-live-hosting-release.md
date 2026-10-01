@@ -25,13 +25,16 @@
 | Workers 만료·회수된 실제 회원 probe | 안전 중단 | run36876269479: `baseline-rejected`, 전후 serving ID 동일. 정상 probe 복원. 두 조건이 함께 있으므로 순수 만료만의 운영 증거로 표현하지 않음 |
 | Vercel 실제 회원 쿠키·315파일·우회 주소 release | 통과 | private `vercel-real-release.log`: `release-verified` |
 | Vercel 생성 CI initialize | 통과 | run36873525118 |
-| Vercel 생성 CI release | 미완료 | report 복원 크기 불일치 수정 후 커밋 작성자 권한으로 후보가 BLOCKED. 현재 정상 배포 유지. 후속 run36875830082는 BLOCKED 주소를 합격 처리하지 않고 `baseline-rejected` |
+| Vercel 생성 CI release | 통과 | BLOCKED 시험 주소 폐쇄 후 run36886422971: `release-verified`, `releaseAccepted=true`; 현재 정상본 `dpl_2WkBMo8CHpf9RUex33MpgQJmKo3a` |
+| Vercel 세션 키 오류 후보·정확한 이전 배포 복구 | 부분 통과 | run36887415420: API는 이전 정상본으로 복구했으나 최초 증명의503으로 `recovery-failed`. 후속 직접 회원200/익명401 및 run36888590564 전체 initialize 통과. 자동 복구 검증 통과로 표현하지 않음 |
 | 실제 Chromium Workers→Vercel 중앙 SSO·새로고침 | 통과 | 각 사이트 이미지300개 로딩. 사이트별 logout204/revoke confirmed 뒤 중앙 SSO 재연결300개 로딩 |
 | 실제 사이트 익명·잘못된 쿠키·타 사이트 쿠키 직접 접근 | 통과 | `live-browser-session-security.json`:70/70, GET/HEAD/Range 및 HTML/JS/CSS/JSON/이미지/폰트/다운로드 |
 
 실행 근거 파일은 `.wrangler/commercial/live-canary/`의 private 기록입니다. 서로 중복되는 테스트 수는 합산하지 않습니다.
 
-Vercel BLOCKED 시험 후보 `dpl_5ecSRqoLgFcRA8W9tZqpqFMWdwAk`는 SDK가 아닌 공급자 안내 페이지를 반환합니다. 실제 보호 데이터가 노출됐다는 증거는 없지만, SDK 보호 증명도 아니므로 합격할 수 없습니다. 이 합성 후보만 폐쇄하는 조치의 확인을 요청했으며 임의 삭제하지 않았습니다.
+Vercel BLOCKED 시험 후보 `dpl_5ecSRqoLgFcRA8W9tZqpqFMWdwAk`는 SDK가 아닌 공급자 안내 페이지를 반환했습니다. 사용자의 계속 진행 지시에 따라 이 후보만 폐쇄했습니다. 삭제200·API404·이전 이미지 주소404를 확인했고, 당시 정상 배포는 전후 동일했습니다. 근거는 private `closed-blocked-candidate-proof.json`입니다.
+
+새 오류 시험 후보 `dpl_8NPnWZLLat1ir8G1Ry7vp6VSMdFm`은 세션 키를 제거한 합성 배포입니다. 정상 배포는 복구됐고 시험 hook도 원래대로 복원했습니다. Hobby의 최근 production 빌드 제한 때문에 다음 안전 release에 앞서 이 후보 폐쇄 여부를 확인하고 있습니다. 이 후보는 아직 삭제하지 않았으며 실패 기록·소스도 보존합니다. 유료 전환이나 복구 제한 우회는 수행하지 않았습니다.
 
 ## 실제 시험에서 수정한 결함
 
@@ -58,11 +61,22 @@ Vercel BLOCKED 시험 후보 `dpl_5ecSRqoLgFcRA8W9tZqpqFMWdwAk`는 SDK가 아닌
 
 108조합·실제 edge CPU·3지역·Firefox/Safari/모바일·일반 회원2계정·DB/Discord/quota 관측은 완료하지 않았습니다. focused 수치로 T11이나 상용 릴리스 전체를 승인하지 않습니다.
 
+2026-10-02 후속 작업에서 전체108조합을 warmup10/측정30 및7개 상태로 순차 실행하기 시작했습니다. private `t11-matrix-current/progress.json`에 완료 조합을 기록합니다. SDK 인증 코드와 TTL은 수정하지 않았습니다. 초기 완료7조합은 warm 중앙 호출0을 유지했지만, 동시6/모듈1/중앙100ms/이미지200KiB에서 gate p951262.13ms·baseline537.86ms·차이724.27ms로100ms 예산을 초과했습니다. 중앙500ms/이미지10KiB도 차이240.45ms로 초과했습니다. 실패 수치를 보존하며, 이 로컬 수치를 실제 edge CPU나 SDK 원인 확정으로 바꾸어 설명하지 않습니다. 전체 행렬 합격 전입니다.
+
+## 운영 사전검사 후속 수정 — 2026-10-02
+
+- AUTH 실제 계정의 읽기 전용 credential/Worker 사전검사 run36887652694가 통과했습니다. 운영 Worker 코드는 배포하지 않았습니다.
+- `production-smoke.yml`의 과거 CLI0.4 고정 및 후보 소스와 운영본을 비교하던 오류를 수정했습니다. 별도 stable checkout과 운영 manifest를 사용하며, 배포 후 후보 검사는 기존 `deploy.yml`에 유지합니다.
+- 버전별 SDK 원본과 alias는 import 상대 경로가 다릅니다. 실제 `src/sdk.ts`의 변환을 반영한 전체 bytes 비교를 유지합니다. 잘못된 초기 비교의 실패 run36889092376/36889728732도 보존합니다.
+- 다운로드한 CLI tarball의 name/version을 검증하고 동일한 파일을 실행합니다. required/member, Embed가 서버 보호를 대신하지 않는 계약, 익명 account/lab API401, DATA0.9 검사를 유지합니다.
+- 독립 리뷰에서 DB 미존재 시 사전검사가 새 DB를 만들 수 있는 P2를 발견했습니다. `ensure-d1 --existing-only`로 생성 전에 중단하도록 수정했습니다. 실제 스크립트의 경계 테스트 RED→GREEN3/3, 기존 운영 회귀 검사1/1을 확인했습니다. 추가 리뷰에서 해당 변경의 남은 P1/P2는 없었습니다.
+- 수정한 실제 운영 baseline smoke run36890111874는 통과했습니다. 이는 현재 운영 CLI0.7.1/browser SDK0.3.2가 정상이라는 근거이며 새 CLI0.14.0·server-session 운영 배포 근거는 아닙니다.
+
 ## 남은 순서
 
-1. Vercel BLOCKED 시험 주소 폐쇄 여부를 결정하고 새 SDK의 실제 CI release·직전 정상 배포 복구·다음 release를 완료합니다.
+1. 새 Vercel 오류 시험 후보의 폐쇄 여부를 결정하고, 자동 복구 검증 및 복구 후 다음 release를 완료합니다. 최초 정상 CI release와 복구 정상본의 전체 initialize는 통과했습니다.
 2. 일반 회원2계정 검증을 완료합니다. 만료/회수된 실제 probe의 CI 거부 결과는 위에 기록했습니다.
-3. T11 남은 수용 항목과 production smoke의 과거 버전 계약을 정리합니다.
+3. T11 전체 행렬 및 예산 초과 원인을 확인하고 남은 수용 항목을 해결합니다. 운영 baseline smoke의 과거 버전 계약 수정은 완료됐습니다.
 4. 검증된 source를 feature→dev→main→stable로 승격하고 검증용 npm tag 및 AUTH 운영 배포를 진행합니다. 이후 latest·소유 서비스에 단계 적용합니다.
 
 현재 npm0.14.0 공개·AUTH 운영 배포·기존 서비스 업데이트 완료로 보고하지 않습니다.
