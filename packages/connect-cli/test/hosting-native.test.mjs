@@ -4,7 +4,7 @@ import {createNativeHostingAdapter} from '../src/hosting-native.mjs';
 const document=provider=>({schemaVersion:1,clientId:'site',siteOrigin:'https://site.test',provider,accountId:provider==='vercel'?'':'a'.repeat(32),resourceId:provider==='vercel'?'prj_site':'site',teamId:provider==='vercel'?'team_site':'',mode:'automatic',controlledDeployments:true,origins:['https://site.test'],adapterFile:'ops/adapter.mjs'});
 async function fixture(t,provider){
  const root=await mkdtemp(join(tmpdir(),'nakwol-native-'));t.after(()=>rm(root,{recursive:true,force:true}));await mkdir(join(root,'.nakwol/reports/hosting'),{recursive:true});await writeFile(join(root,'.nakwol/reports/hosting/operation.lock'),JSON.stringify({pid:process.pid,operationId:'lease-owner'}));
- let active='old',version='old-version',writes=0,uploadCount=0,foreign=false,conflict=false,operationId=null;const seen=[];
+ let active='old',version='old-version',writes=0,uploadCount=0,foreign=false,conflict=false,operationId=null,ineligible=false;const seen=[];
  const fetchImpl=async(url,options)=>{const target=new URL(url);seen.push({path:target.pathname,method:options.method,body:options.body?JSON.parse(options.body):null});let result;
   if(provider==='cloudflare-workers'){
    if(target.pathname.endsWith('/subdomain'))result={enabled:false,previews_enabled:false};
@@ -15,17 +15,18 @@ async function fixture(t,provider){
    else result={deployments:[{id:active,created_on:'2026-02-01T00:00:00Z',versions:[{version_id:version,percentage:100}],annotations:{'workers/message':operationId?'nakwol:'+operationId:''}}]};
    return new Response(JSON.stringify({success:true,result}));
   }
-  if(target.pathname.includes('/v6/deployments'))result={deployments:[{projectId:'prj_site',url:'old.vercel.app'},...(uploadCount?[{projectId:'prj_site',url:'new.vercel.app'}]:[])],pagination:{next:null}};
+  if(target.pathname==='/v2/teams/team_site')result={id:'team_site',billing:{plan:'hobby'}};
+  else if(target.pathname.includes('/v6/deployments'))result={deployments:[...(ineligible?[{uid:'inactive-newer',projectId:'prj_site',target:'production',state:'READY',url:'inactive.vercel.app'}]:[]),...(uploadCount?[{uid:'new',projectId:'prj_site',target:'production',state:'READY',url:'new.vercel.app'}]:[]),{uid:'old',projectId:'prj_site',target:'production',state:'READY',url:'old.vercel.app'}].slice(0,Number(target.searchParams.get('limit')||100)),pagination:{next:null}};
   else if(target.pathname.endsWith('/domains'))result={domains:[],pagination:{next:null}};
   else if(target.pathname==='/v4/aliases')result={aliases:[],pagination:{next:null}};
-  else if(target.pathname.includes('/v13/deployments/'))result={id:target.pathname.split('/').at(-1),projectId:foreign?'prj_foreign':'prj_site',target:'production',readyState:'READY',createdAt:target.pathname.endsWith('/old')?1000:2000,meta:{nakwol_operation:operationId,nakwol_build:'a'.repeat(64),nakwol_runtime:'0.14.0'},url:'new.vercel.app'};
+  else if(target.pathname.includes('/v13/deployments/'))result={id:target.pathname.split('/').at(-1),projectId:foreign?'prj_foreign':'prj_site',plan:'hobby',target:'production',readyState:'READY',createdAt:target.pathname.endsWith('/old')?1000:2000,meta:{nakwol_operation:operationId,nakwol_build:'a'.repeat(64),nakwol_runtime:'0.14.0'},url:'new.vercel.app'};
   else if(options.method==='POST'){writes++;active=target.pathname.split('/').at(-1);return new Response(null,{status:201});}
   else result={id:'prj_site',accountId:'team_site',targets:{production:{id:active}}};
   return new Response(JSON.stringify(result));
  };
  const uploadImpl=async request=>{uploadCount++;operationId=request.operationId;if(conflict)active='foreign-current';return {id:provider==='vercel'?'new':'new-version'};};
  const adapter=createNativeHostingAdapter(document(provider),{root,fetchImpl,uploadImpl,apiToken:'private-test-token',leasePid:process.pid});
- return {adapter,root,seen,writes:()=>writes,uploads:()=>uploadCount,foreign:()=>foreign=true,conflict:()=>conflict=true};
+ return {adapter,root,seen,writes:()=>writes,uploads:()=>uploadCount,foreign:()=>foreign=true,conflict:()=>conflict=true,ineligible:()=>ineligible=true};
 }
 for(const provider of ['cloudflare-workers','vercel'])test(`${provider}: scoped upload/promotion and exact previous rollback share operation receipt`,async t=>{
  const f=await fixture(t,provider),caps=await f.adapter({action:'capabilities'});assert.equal(caps.rollback,true);assert.equal(caps.inventoryComplete,true);assert.equal(f.writes(),0);
@@ -45,4 +46,11 @@ test('Cloudflare top-level annotation from a foreign operation is rejected befor
  const f=await fixture(t,'cloudflare-workers');f.foreign();
  await assert.rejects(f.adapter({action:'deploy',operationId:'operation-1',expectedDeploymentId:'old',buildHash:'a'.repeat(64),runtimeVersion:'0.14.0'}),/binding/);
  assert.equal(f.writes(),0);
+});
+
+test('Vercel Hobby refuses automatic upload when current serving baseline is older than the latest production build',async t=>{
+ const f=await fixture(t,'vercel');f.ineligible();
+ await assert.rejects(f.adapter({action:'capabilities'}),/rollback|baseline|production/);
+ await assert.rejects(f.adapter({action:'deploy',operationId:'operation-1',expectedDeploymentId:'old',buildHash:'a'.repeat(64),runtimeVersion:'0.14.0'}),/rollback|baseline|production/);
+ assert.equal(f.uploads(),0);assert.equal(f.writes(),0);
 });

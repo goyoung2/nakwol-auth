@@ -47,17 +47,26 @@ export function createNativeHostingAdapter(document,options={}){
   throw new Error('Native promotion did not become the serving deployment.');
  }
  function vercelArtifact(value,id){if(value?.id!==id||value.projectId!==binding.resourceId||value.target!=='production'||value.readyState!=='READY')throw new Error('Native Vercel artifact project/production binding is invalid.');return value;}
+ async function vercelRollbackBaseline(deploymentId,uploadedId) {
+  const team=await api('/v2/teams/'+binding.teamId);
+  if(team.id!==binding.teamId||!['hobby','pro','enterprise'].includes(team.billing?.plan))throw new Error('Native Vercel rollback plan/team binding is unknown.');
+  if(team.billing.plan!=='hobby')return;
+  const list=await api('/v6/deployments?projectId='+binding.resourceId+'&target=production&state=READY&limit=2');
+  const expected=uploadedId?[uploadedId,deploymentId]:[deploymentId];
+  if(!Array.isArray(list.deployments)||expected.some((id,index)=>{const item=list.deployments[index];return (item?.uid||item?.id)!==id||item.target!=='production'||(item.state||item.readyState)!=='READY'||item.projectId&&item.projectId!==binding.resourceId;}))throw new Error('Native Vercel Hobby rollback requires the latest production baseline; automatic promotion refused.');
+ }
  return async function handle(request){
   if(request.schemaVersion!==undefined&&request.schemaVersion!==1||request.provider!==undefined&&request.provider!==binding.provider||request.resourceId!==undefined&&request.resourceId!==binding.resourceId)throw new Error('Native adapter request binding is invalid.');
-  if(request.action==='capabilities')return {...await current(),serializedDeployments:true,compareBeforeWrite:true,rollback:true};
+  if(request.action==='capabilities'){const live=await current();if(!workers)await vercelRollbackBaseline(live.deploymentId);return {...live,serializedDeployments:true,compareBeforeWrite:true,rollback:true};}
   if(request.action==='current')return current();
   if(!['deploy','rollback'].includes(request.action)||!/^[-\w]{1,80}$/.test(request.operationId||'')||!/^[a-f0-9]{64}$/.test(request.buildHash||'')||!/^\d+\.\d+\.\d+$/.test(request.runtimeVersion||''))throw new Error('Native mutation request is invalid.');
   const before=await expect(checkedId(request.expectedDeploymentId));
   if(request.action==='deploy'){
+   if(!workers)await vercelRollbackBaseline(before.deploymentId);
    const upload=options.uploadImpl||(await import('./hosting-upload.mjs')).uploadNativeCandidate;
    const uploaded=await upload({...request,binding,root,apiToken:credential}),artifactId=checkedId(uploaded?.id);
    if(workers){const artifact=await api(resource+'/versions/'+artifactId);if(artifact.id!==artifactId||artifact.annotations?.['workers/message']!==`nakwol:${request.operationId}:${request.buildHash}:${request.runtimeVersion}`)throw new Error('Native Worker upload artifact binding is invalid.');}
-   else{const artifact=vercelArtifact(await api('/v13/deployments/'+artifactId),artifactId);if(artifact.meta?.nakwol_operation!==request.operationId||artifact.meta?.nakwol_build!==request.buildHash||artifact.meta?.nakwol_runtime!==request.runtimeVersion)throw new Error('Native Vercel uploaded artifact binding is invalid.');}
+   else{const artifact=vercelArtifact(await api('/v13/deployments/'+artifactId),artifactId);if(artifact.meta?.nakwol_operation!==request.operationId||artifact.meta?.nakwol_build!==request.buildHash||artifact.meta?.nakwol_runtime!==request.runtimeVersion)throw new Error('Native Vercel uploaded artifact binding is invalid.');await vercelRollbackBaseline(before.deploymentId,artifactId);}
    await expect(before.deploymentId);
    await save({operationId:request.operationId,phase:'promoting',previousDeploymentId:before.deploymentId,artifactId,...(!workers?{deploymentId:artifactId}:{})});
    if(workers){const result=await api(resource+'/deployments','POST',{strategy:'percentage',versions:[{version_id:artifactId,percentage:100}],annotations:{'workers/message':`nakwol:${request.operationId}`}});const deploymentId=checkedId(result.id);await save({operationId:request.operationId,phase:'promoted',previousDeploymentId:before.deploymentId,artifactId,deploymentId});return waitFor(deploymentId);}
@@ -73,6 +82,7 @@ export function createNativeHostingAdapter(document,options={}){
   }
   const target=vercelArtifact(await api('/v13/deployments/'+targetId),targetId),active=vercelArtifact(await api('/v13/deployments/'+before.deploymentId),before.deploymentId);
   if(!(target.createdAt<active.createdAt))throw new Error('Native rollback target must be the specified older deployment.');
+  await vercelRollbackBaseline(targetId,before.deploymentId);
   await expect(before.deploymentId);await save({...stored,phase:'restoring',deploymentId:targetId});await api('/v9/projects/'+binding.resourceId+'/rollback/'+targetId,'POST',{},false,true);return waitFor(targetId);
  };
 }

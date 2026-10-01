@@ -79,7 +79,9 @@ AES-GCM으로 client/origin/provider/resource/account/team에 바인딩합니다
 release는 이전 정상본의 member 접근·파일 해시·익명 차단을 재검사한 뒤 업로드합니다.
 고정된 CLI는 단계별 후보만 업로드하고, API로 project/account와 operation/build/runtime를 확인한 뒤 현재 serving ID를 다시 비교하고 승격합니다.
 Workers는 preview를 끄고 100% 버전만 배포합니다. Vercel은 production 후보를 `--skip-domain`으로 업로드한 뒤 승격합니다.
+Vercel 자동 모드는 현재 team의 billing plan 조회 권한도 필요합니다. Hobby는 직전 production 배포로만 복구할 수 있으므로, 현재 정상본이 최신 READY production 빌드인지 업로드 전에 확인하고 업로드 후 후보·정상본이 최신 두 빌드인지 다시 확인합니다. 더 최신인 비활성 빌드가 있거나 plan을 확인할 수 없으면 자동 승격을 거부합니다. 수동으로 현재 정상 배포와 이력을 정리한 뒤 initialize하세요. SDK가 유료 플랜으로 변경하거나 과거 배포를 삭제하지 않습니다.
 검증 실패 시 그 operation의 정확한 이전 배포만 복구합니다. 실패한 새 릴리스는 복구 성공 후에도 exit1입니다.
+공급자 API 전환 직후 edge에 이전 runtime이 남을 수 있습니다. 익명 경로가 모두 안전하게 차단되고 deployment·operation·origin 바인딩이 유지되는 경우에만 전체 검증을 최대3회 수행합니다. 매 회 사이 대기는1초이며 전체 HTTP 검사 시간은 별도입니다. 노출·불완전 증명·경합은 재시도로 합격시키지 않습니다. 최종 합격에는 정상 member의 모든 파일 해시와 기대 runtime 검증이 필요합니다.
 
 runner 중단·stale lock·외부 배포 경합은 자동 추정 복구하지 않습니다. 실제 serving ID와 실행 중인 job을 확인한 뒤 자신의 stale lock을 정리하고 정상 소스에서 initialize하세요.
 
