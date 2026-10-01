@@ -293,13 +293,15 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 
 **인터페이스(제안):** `authorizeRequest(request,context)`→`{allowed:false,response}` 또는 `{allowed:true,principal,responseHeaders}`. principal은server-only userId/clientId/scopes/policyVersion. `protectHandler(handler,options)`는최종응답에cache/renewedcookie를적용한다.
 
-- [ ] GET뿐아니라POST/PUT/DELETE 요청에도handler호출전판정. cross-sitecookiePOST는CSRF거부,body는검사전에임의소비하지않는다.
-- [ ] client가보낸X-User/역할header는제거/무시. 원본서버가인터넷직접접근가능하면SDK설치완료로판정하지않는다.
-- [ ] 덱소유권같은row-level권한은서비스의역할임을명세. member인A가B데이터를수정하는것은SDK로그인만으로허용하지않는다.
-- [ ] WebSocket/SSE는명시적으로미지원 또는연결수명/재검증을정의한별도adapter만지원. 일반GET예외로통과시키지않는다.
+- [x] GET뿐아니라POST/PUT/DELETE 요청에도handler호출전판정. cross-sitecookiePOST는CSRF거부,body는검사전에임의소비하지않는다.
+- [x] client가보낸X-User/역할header는제거/무시. 원본서버가인터넷직접접근가능하면SDK설치완료로판정하지않는다.
+- [x] 덱소유권같은row-level권한은서비스의역할임을명세. member인A가B데이터를수정하는것은SDK로그인만으로허용하지않는다.
+- [x] WebSocket/SSE는명시적으로미지원 또는연결수명/재검증을정의한별도adapter만지원. 일반GET예외로통과시키지않는다.
 
 **실행:** `node --test packages/connect-cli/test/server-api.test.mjs`; 두사용자소유권fixture와cross-sitePOST실제 HTTP검사.
 **합격:** developer는공식wrapper를사용,비인가handler호출0,기존정적GET/HEAD계약유지.
+
+**로컬 완료 증거:** 전체369/369, API10/10, 타입·CLI pack·Worker dry-run 통과. 실제 HTTP 두 사용자 소유권/CSRF/갱신/장애 및 생성 Workers/Pages/Vercel 차단55·정상7·300이미지 중앙0. 독립 Astra Important1 SSE 우회 RED→GREEN, vendor 캐시 계약도 회귀 검증. `docs/audits/2026-10-01-commercial-server-api-protection.md` 참조. 첫 전체 실행 HTTP 연결 실패1회는 원인 미확정으로 기록했고 최종 재검증369/369. 운영 배포/npm 미실행.
 
 ## T11. 재현 가능한 성능·비용·장애 시험 — P4
 
