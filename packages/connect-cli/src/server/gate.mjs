@@ -214,6 +214,7 @@ export async function serveProtected(request, env, settings) {
   if (isRevoked(sessionId(session.token, settings))) return denied(request, 401, settings);
   const asset = api ? await env.NAKWOL_API_HANDLER(request, {userId:activeAuthorization.userId,clientId:activeAuthorization.clientId,scopes:[],policyVersion:activeAuthorization.policyVersion ?? 0}) : await env.ASSETS.fetch(request);
   const headers = new Headers(asset.headers);
+  for (const name of ['CDN-Cache-Control', 'Cloudflare-CDN-Cache-Control', 'Surrogate-Control']) headers.delete(name);
   // Conditional requests also require a valid authorization lease before returning 304.
   headers.set('Cache-Control', !api && asset.headers.has('ETag') && [200, 304].includes(asset.status)
     ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');

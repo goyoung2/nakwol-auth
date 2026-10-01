@@ -319,6 +319,8 @@ T09의 화면/진단은 T05 이후 먼저 개발 가능하고 전파 완료 표�
 **실행(신규):** `node scripts/benchmark-gate.mjs --profile local-lease --output .nakwol/reports/bench-local.json`, 같은명령`--profile bounded-control`.
 **합격:** 설계안§11 수치목표 충족,실측/미측정분리. 목표미달을TTL상향으로숨기지않는다.
 
+**2026-10-01 진행 상태:** 재현 fixture/Node HTTP driver/장애 시험을 구현했다. 동시300·독립 그래프10·중앙100ms·이미지50KiB에서 두 profile의 전7상태를 각10warmup+30측정했다. warm 중앙0, 갱신10, 304/거부 본문0은 확인됐으나 공개 기준선 대비 warm 추가 배치 p95는159.79ms/117.06ms로 허용100ms를 초과했다. T11 전체 합격·T12 출시 진행으로 해석하지 않는다. 전체108조합, 실제 edge CPU/3지역 브라우저/Discord·DB·quota·CDN 검증은 남아 있다. [재현 명령·원시 결과·비용 근거](../../benchmarks/commercial-gate.md)를 참조한다. 관측/캐시 오설정 시험에서 발견한 vendor 공유 캐시 헤더 유지 결함은 공통 legacy/server gate에서 수정했다.
+
 ## T12. 배포·업데이트·관측·상용 지원 문서 — P4
 
 **수정:** `packages/connect-cli/src/{managed-updates,gate-reporting,release-check,deployment-rollback}.mjs`, `src/connect-onboarding.ts`, `README.md`, `CONNECT_CLI.md`, `CONNECT.md`, `docs/{LLM_INSTALLATION,CONNECT_SERVER_PROTECTION,MANAGED_GATE_UPDATES,SERVER_GATED_AUTH}.md`, `packages/connect-cli/GATE_SPEC.md`, `.github/workflows/`의관련workflow.

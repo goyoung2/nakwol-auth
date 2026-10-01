@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+test('benchmark reports genuine local gate, baseline, single-flight and conditional bytes',async()=>{
+  const {runBenchmark}=await import('../../../scripts/benchmark-gate.mjs');
+  const report=await runBenchmark({profile:'local-lease',concurrency:30,isolates:1,authDelayMs:0,imageKiB:1,warmups:0,samples:1,states:['warm','lease-expired','revisit']});
+  assert.equal(report.measurement.engine,'node-http');
+  assert.equal(report.scenarios.length,3);
+  const warm=report.scenarios.find(s=>s.state==='warm');
+  assert.equal(warm.runs[0].requests,315);
+  assert.equal(warm.runs[0].central.refresh,0);
+  assert.equal(warm.runs[0].central.me,0);
+  assert.equal(warm.runs[0].central.control,0);
+  assert.equal(report.scenarios.find(s=>s.state==='lease-expired').runs[0].central.refresh,1);
+  assert.equal(report.scenarios.find(s=>s.state==='revisit').runs[0].bytes,0);
+  assert.equal(report.scenarios.find(s=>s.state==='revisit').runs[0].responses304,315);
+  assert.ok(report.baseline.runs[0].bytes>300*1024);
+  assert.ok(report.protectVerify.ok);
+  assert.equal(report.measurement.edgeCpuMeasured,false);
+});
+test('300 prepared HTTP connections preserve independent isolate single-flight counts',async()=>{
+  const {runBenchmark}=await import('../../../scripts/benchmark-gate.mjs');
+  const report=await runBenchmark({profile:'bounded-control',concurrency:300,isolates:10,authDelayMs:0,imageKiB:1,warmups:0,samples:1,states:['warm','lease-expired','access-expired','role-expired']});
+  assert.equal(report.measurement.transportPreparation.concurrentHeldResponses,300);
+  assert.equal(report.scenarios[0].runs[0].central.control,0);
+  assert.equal(report.scenarios[0].runs[0].central.refresh,0);
+  assert.equal(report.scenarios[1].runs[0].central.refresh,10);
+  assert.equal(report.scenarios[1].runs[0].central.control,10);
+  for(const state of ['access-expired','role-expired'])assert.equal(report.scenarios.find(s=>s.state===state).runs[0].bytes,0);
+  assert.equal(report.protectVerify.requestCount,1264);
+});

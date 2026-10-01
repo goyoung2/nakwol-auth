@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-01T01:48:21.3865212Z",
+  "runtime": "Node.js v22.23.1",
+  "platform": "win32",
+  "scope": "Isolated node:http loopback client and server in one process, without gate, authentication, fixture, fetch override, or Date.now override",
+  "evidence": [
+    {
+      "serverErrors": [],
+      "attempted": 300,
+      "served": 232,
+      "refusedCode": "ECONNREFUSED",
+      "port": 7039,
+      "listenBacklog": 2048,
+      "refused": 68,
+      "firstRefusedIndex": 232,
+      "refusedSyscall": "connect",
+      "ok": 232,
+      "refusedErrno": -4078,
+      "mode": "300 simultaneous new HTTP sockets",
+      "accepted": 232,
+      "listenerStillActive": true
+    },
+    {
+      "implication": "Pacing avoids refusal but only 34 sockets, so this does not prove 300 simultaneous connections",
+      "ok": 300,
+      "mode": "10 requests then setImmediate, reusable sockets",
+      "port": 7379,
+      "refused": 0,
+      "accepted": 34,
+      "requests": 300
+    },
+    {
+      "reusedOk": 300,
+      "primingHeldUnansweredRequests": 300,
+      "totalRequests": 600,
+      "simultaneousReusedSocketRequests": 300,
+      "totalAccepted": 300,
+      "primingOk": 300,
+      "port": 7787,
+      "listenBacklog": 2048,
+      "primingAccepted": 300,
+      "reusedErrors": [],
+      "primingErrors": [],
+      "mode": "Establish 300 sockets in groups of 10 with 2ms pacing while withholding all responses, then release and reuse",
+      "freeSockets": 300
+    }
+  ],
+  "conclusion": "Failure is reproducible during a burst of new TCP connection establishment outside gate/auth code. Established connection capacity and HTTP concurrency of 300 are demonstrated to work. The exact rejecting Windows/Node/network component is not identified.",
+  "pending": "Need lower-level socket/ETW or packet evidence to distinguish listen acceptance/backlog behavior from network filtering or another local TCP implementation constraint. backlog=2048 alone did not prevent refusal.",
+  "benchmarkRecommendation": "Use paced pre-establishment of 300 keep-alive sockets before timing 300 request concurrency; record connection priming separately. Do not reduce the claimed concurrency to 30.",
+  "exclusions": [
+    "No system network settings changed",
+    "No benchmark source changed",
+    "No relation to previous T10 failure established"
+  ],
+  "interruptedAttempt": "First held-response test omitted release for requests arriving after flush and was interrupted. Corrected bounded diagnostic waits for held+errors before release."
+}

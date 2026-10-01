@@ -200,6 +200,7 @@ export async function serveServerSession(request, env, settings) {
   const asset = api ? await env.NAKWOL_API_HANDLER(request, {userId:activeProof.userId,clientId:activeProof.clientId,scopes:[],policyVersion:activeProof.policyVersion}) : await env.ASSETS.fetch(request);
   if (ssoIsRevoked(id)) return ssoDeny(request, 401, settings);
   const headers = new Headers(asset.headers);
+  for (const name of ['CDN-Cache-Control', 'Cloudflare-CDN-Cache-Control', 'Surrogate-Control']) headers.delete(name);
   const observations=observeApproval(env,settings,activeProof);
   headers.set('X-Nakwol-Observations',observations?'background-v1':'unsupported');
   headers.set('Cache-Control', !api && asset.headers.has('ETag') && [200, 304].includes(asset.status) ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
