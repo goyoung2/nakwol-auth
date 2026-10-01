@@ -19,7 +19,7 @@ async function fixture(t,provider){
   else if(target.pathname.endsWith('/domains'))result={domains:[],pagination:{next:null}};
   else if(target.pathname==='/v4/aliases')result={aliases:[],pagination:{next:null}};
   else if(target.pathname.includes('/v13/deployments/'))result={id:target.pathname.split('/').at(-1),projectId:foreign?'prj_foreign':'prj_site',target:'production',readyState:'READY',createdAt:target.pathname.endsWith('/old')?1000:2000,meta:{nakwol_operation:operationId,nakwol_build:'a'.repeat(64),nakwol_runtime:'0.14.0'},url:'new.vercel.app'};
-  else if(options.method==='POST'){writes++;active=target.pathname.split('/').at(-1);result={};}
+  else if(options.method==='POST'){writes++;active=target.pathname.split('/').at(-1);return new Response(null,{status:201});}
   else result={id:'prj_site',accountId:'team_site',targets:{production:{id:active}}};
   return new Response(JSON.stringify(result));
  };

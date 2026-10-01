@@ -14,10 +14,11 @@ export function createNativeHostingAdapter(document,options={}){
  const scoped=path=>workers?path:path+(path.includes('?')?'&':'?')+'teamId='+binding.teamId;
  const receiptName='.nakwol/reports/hosting/provider-operation.json';
  const checkedId=value=>{if(typeof value!=='string'||!identifier.test(value))throw new Error('Invalid native deployment identifier.');return value;};
- async function api(path,method='GET',body,allowMissing=false){
+ async function api(path,method='GET',body,allowMissing=false,allowEmptyAcceptance=false){
   const response=await fetchImpl(base+scoped(path),{method,redirect:'error',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)});
   if(allowMissing&&response.status===404){await response.body?.cancel();return null;}
   const bytes=await boundedBody(response,1024*1024);if(!response.ok||!bytes.complete)throw new Error('Native hosting API request failed.');
+  if(allowEmptyAcceptance&&!workers&&method==='POST'&&[201,202,204].includes(response.status)&&bytes.bytes.length===0)return null;
   let data;try{data=JSON.parse(bytes.bytes);}catch{throw new Error('Native hosting API response is invalid.');}
   if(workers){if(data.success!==true||data.result===undefined)throw new Error('Native hosting API rejected the request.');return data.result;}return data;
  }
@@ -60,7 +61,7 @@ export function createNativeHostingAdapter(document,options={}){
    await expect(before.deploymentId);
    await save({operationId:request.operationId,phase:'promoting',previousDeploymentId:before.deploymentId,artifactId,...(!workers?{deploymentId:artifactId}:{})});
    if(workers){const result=await api(resource+'/deployments','POST',{strategy:'percentage',versions:[{version_id:artifactId,percentage:100}],annotations:{'workers/message':`nakwol:${request.operationId}`}});const deploymentId=checkedId(result.id);await save({operationId:request.operationId,phase:'promoted',previousDeploymentId:before.deploymentId,artifactId,deploymentId});return waitFor(deploymentId);}
-   await api('/v10/projects/'+binding.resourceId+'/promote/'+artifactId,'POST',{});return waitFor(artifactId);
+   await api('/v10/projects/'+binding.resourceId+'/promote/'+artifactId,'POST',{},false,true);return waitFor(artifactId);
   }
   const stored=await receipt();if(!stored||stored.operationId!==request.operationId||stored.previousDeploymentId!==request.targetDeploymentId||before.operationId!==request.operationId)throw new Error('Native rollback is not bound to this operation.');
   const targetId=checkedId(request.targetDeploymentId);
@@ -72,7 +73,7 @@ export function createNativeHostingAdapter(document,options={}){
   }
   const target=vercelArtifact(await api('/v13/deployments/'+targetId),targetId),active=vercelArtifact(await api('/v13/deployments/'+before.deploymentId),before.deploymentId);
   if(!(target.createdAt<active.createdAt))throw new Error('Native rollback target must be the specified older deployment.');
-  await expect(before.deploymentId);await save({...stored,phase:'restoring',deploymentId:targetId});await api('/v9/projects/'+binding.resourceId+'/rollback/'+targetId,'POST',{});return waitFor(targetId);
+  await expect(before.deploymentId);await save({...stored,phase:'restoring',deploymentId:targetId});await api('/v9/projects/'+binding.resourceId+'/rollback/'+targetId,'POST',{},false,true);return waitFor(targetId);
  };
 }
 export async function runNativeHostingAdapter(binding){
