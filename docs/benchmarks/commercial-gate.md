@@ -31,6 +31,7 @@ done
 ## 측정 경계
 
 - 실제 공식 `createGate`와 AES-GCM/서명 검증 코드를 그대로 실행합니다. 임시 디렉터리에 runtime 전체를 복사해 isolate별 session/control/관측 Map을 분리합니다. Node 모듈 그래프이며 실제 workerd isolate라고 부르지 않습니다.
+- `createGate`는 각 synthetic binding의 준비 단계에서 isolate마다 한 번 생성하고 요청에서 재사용합니다. 실제 Vercel 어댑터의 모듈 수준 handler 수명주기와 맞춥니다. 설정이 바뀌는 다음 binding에는 새 handler를 준비합니다. 생성 횟수·시간은 `measurement.gatePreparation`에 별도 기록하며 로그인·성능 배치 밖입니다. 각 배치의 `gateConstructions`는0이어야 합니다.
 - 사이트 요청은 실제 loopback HTTP입니다. 중앙은 통제된 `session/refresh`, code exchange, 서명된 control 응답입니다. 새 프로토콜은 `/me`를 부르지 않으므로 `/me=0`만으로 중앙 호출 0이라고 판단하지 않습니다. `refresh`, `control`, `exchange`, `observations`를 별도 기록합니다.
 - 315개 파일: HTML1, JS4, CSS3, JSON4, PNG300, 원본 합성 TTF2, 다운로드1. 모든 파일은 SHA와 바이트 수를 갖습니다. 이미지 파일은 정확히 10/50/200KiB이며 합성 RGB PNG로 디코딩됩니다. 크기별 이미지 총량은 3,072,000 / 15,360,000 / 61,440,000바이트입니다. 실제 도감의 압축률·디코딩 비용을 동일하게 대표한다고 주장하지 않습니다.
 - 브라우저용 화면은 1280×720, DPR1, lazy loading 없음입니다. 다운로드는 자동 다운로드하지 않으므로 브라우저의 자연 요청 수와 315개 전 파일 HTTP 시험 수는 다릅니다.
@@ -109,8 +110,27 @@ D1 초과 읽기 백만 rows당 $0.001, 쓰기 백만 rows당 $1, 저장 초과 
 
 두 profile 모두 warm 중앙0, 거부 본문0, revisit304/본문0, 모든 예상 상태 코드 일치(오류0)입니다. **local-lease 추가 배치 p95=159.79ms, bounded-control=117.06ms로 허용100ms를 모두 초과했습니다. T11 성능 승인은 미달입니다.** 요청당 추가 TTFB/edge CPU/브라우저 SSO 목표도 승인하지 않았습니다. 인증 wall에는 병렬 스케줄링이 포함돼 per-request CPU로 해석하지 않습니다.
 
-local-lease의 role-expired에서는 300동시 때20 refresh, 이전30동시 시험에서는110 refresh가 발생했습니다. 긍정 승인 갱신의 single-flight와 달리 거부 결과는 local-lease에서 후속 wave까지 캐시하지 않습니다. 이 상태의 트래픽 비용을 추가 개선 대상으로 남깁니다. 보안상 모두403이고 자산0입니다.
+당시 local-lease의 role-expired에서는 300동시 때20 refresh, 이전30동시 시험에서는110 refresh가 발생했습니다. 긍정 승인 갱신의 single-flight와 달리 거부 결과는 후속 wave까지 캐시하지 않았습니다. 이 트래픽 비용은 이후 수정의 근거이며, 당시에도 모두403이고 자산0이었습니다.
+
+이 표 이후 수정은 local-lease 실패에1초 backoff를 적용하고 factory 생성을 준비 단계로 옮깁니다. 가짜 시계의 실패 wave·회복 및 소규모 HTTP fixture 검증은 위 과거 성능값이나108조합 성능 승인을 대체하지 않습니다.
 
 [local 원시 결과](results/2026-10-01-local-lease.json), [bounded 원시 결과](results/2026-10-01-bounded-control.json), [장애·관측·디자인 결과](results/2026-10-01-faults.json), [격리 TCP 진단](results/2026-10-01-transport.json), [브라우저 디코딩 QA](results/2026-10-01-browser-decoding.json). 측정 시점 HEAD40401e0와 실제 미커밋 runtime SHA를 함께 보존했습니다. 보호 자산 원본이나 사용자 토큰은 포함하지 않습니다.
 
 공개 synthetic 브라우저 QA는 이미지300/300 decode, 원본 합성 font2 loaded, JSON4 loaded를 확인했습니다. resource timing 기본 buffer가250으로 잘려 request count 측정으로 사용하지 않았습니다. Chromium 단일 로컬 실행이며 Firefox/Safari/모바일/3지역/SSO 검증은 남아 있습니다.
+
+### 2026-10-01 factory 수명주기 수정 후 focused warm 측정
+
+현재 기준 commit은 `9d57529e70068b359f28957425037dbd21e54d80`, branch는 `feature/commercial-auth-foundation`이며 **dirty=true**입니다. 각 원시 보고서의 `sourceHashes`가 실제 수정 소스의 SHA256을 고정합니다. 두 profile의 sourceHashes는 같습니다. 환경은 AMD Ryzen7 5700X3D, 논리CPU16, RAM 약48GiB, Windows10 build19045, Node22.23.1입니다. root와 UI 작업자의 CPU 시험이 끝난 뒤 두 profile을 순차 실행했고, 각 profile은 자체 공개 기준선을 측정했습니다.
+
+조건은 동시300, 독립 Node ESM 그래프10, 합성 AUTH100ms, 이미지50KiB, HTML 포함315요청/이미지300개입니다. warm 준비10회 뒤 측정30회와 별도 공개 기준선 준비10회·측정30회를 수행했습니다. 다른6개 상태나 전체108조합은 이번 focused 실행에 포함하지 않았습니다.
+
+| Profile | warm 배치 p95 ms | 자체 기준선 p95 ms | 추가 배치 p95 ms | 허용 ms | 이번 warm 예산 판정 | factory 총 생성 횟수 / ms |
+|---|---:|---:|---:|---:|---|---:|
+| local-lease | 233.83 | 151.60 | 82.23 | 100 | 통과 | 410 / 4.67 |
+| bounded-control | 303.26 | 180.54 | 122.73 | 100 | 미달 | 410 / 5.00 |
+
+410회 생성은 검증 binding1개와 준비·측정 binding40개마다 isolate10개를 준비한 비용이며, 로그인과 성능 배치 밖입니다. 측정된 각315요청 배치에서 `gateConstructions=0`, 중앙 me/exchange/refresh/control/observations=0, 오류0, 정상 전송15,391,869바이트였습니다. 각 실행의 익명 `protect verify`는1264요청에서 통과했습니다.
+
+과거 전체 실행과 이번 focused 실행의 공개 기준선 자체가 다릅니다. 과거 값과의 차이를 factory 수정 하나가 만든 개선으로 해석하지 않습니다. `local-lease`는 이번 warm 조건의100ms 예산을 충족했고 `bounded-control`은 여전히 초과했습니다. 실제 edgeCPU·요청별 추가TTFB·3지역/브라우저SSO·Discord/DB/quota/CDN·전체행렬 승인은 남아 있으므로 **T11은 PARTIAL**입니다.
+
+[수정 후 local 원시 결과](results/2026-10-01-corrected-local-lease-warm.json), [수정 후 bounded 원시 결과](results/2026-10-01-corrected-bounded-control-warm.json), [장비·dirty 상태·실행 범위](results/2026-10-01-corrected-warm-environment.json). 더 작은 샘플의 회귀 시험 결과를 이30회 실측으로 대신하거나, 이 focused 통과를 출시 합격으로 표시하지 않습니다.

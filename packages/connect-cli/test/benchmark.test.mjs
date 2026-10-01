@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 test('benchmark reports genuine local gate, baseline, single-flight and conditional bytes',async()=>{
   const {runBenchmark}=await import('../../../scripts/benchmark-gate.mjs');
-  const report=await runBenchmark({profile:'local-lease',concurrency:30,isolates:1,authDelayMs:0,imageKiB:1,warmups:0,samples:1,states:['warm','lease-expired','revisit']});
+  const report=await runBenchmark({profile:'local-lease',concurrency:30,isolates:1,authDelayMs:0,imageKiB:1,warmups:0,samples:1,states:['warm','lease-expired','revisit','role-expired']});
   assert.equal(report.measurement.engine,'node-http');
-  assert.equal(report.scenarios.length,3);
+  assert.equal(report.scenarios.length,4);
+  assert.ok(report.scenarios.every(s=>s.runs.every(run=>run.gateConstructions===0)),'timed requests must reuse prepared gate factories');
+  assert.equal(report.measurement.gatePreparation.constructions,5,'one verification and four synthetic bindings, each with one isolate');
+  assert.equal(report.measurement.gatePreparation.includedInWorkload,false);
+  assert.equal(report.scenarios.find(s=>s.state==='role-expired').runs[0].central.refresh,1);
+  assert.equal(report.scenarios.find(s=>s.state==='role-expired').runs[0].assetCalls,0);
   const warm=report.scenarios.find(s=>s.state==='warm');
   assert.equal(warm.runs[0].requests,315);
   assert.equal(warm.runs[0].central.refresh,0);
@@ -21,6 +26,8 @@ test('300 prepared HTTP connections preserve independent isolate single-flight c
   const {runBenchmark}=await import('../../../scripts/benchmark-gate.mjs');
   const report=await runBenchmark({profile:'bounded-control',concurrency:300,isolates:10,authDelayMs:0,imageKiB:1,warmups:0,samples:1,states:['warm','lease-expired','access-expired','role-expired']});
   assert.equal(report.measurement.transportPreparation.concurrentHeldResponses,300);
+  assert.ok(report.scenarios.every(s=>s.runs.every(run=>run.gateConstructions===0)));
+  assert.equal(report.measurement.gatePreparation.constructions,50,'each synthetic binding prepares all ten independent isolate handlers');
   assert.equal(report.scenarios[0].runs[0].central.control,0);
   assert.equal(report.scenarios[0].runs[0].central.refresh,0);
   assert.equal(report.scenarios[1].runs[0].central.refresh,10);

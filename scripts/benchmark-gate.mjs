@@ -32,11 +32,13 @@ export async function runBenchmark(options={}){
   const context=new AsyncLocalStorage();
   const directory=await mkdtemp(join(tmpdir(),'nakwol-benchmark-'));
   const gates=[];
+  let handlers=[];
+  const gatePreparation={constructions:0,wallMs:0,includedInWorkload:false};
   let server;
   const agent=new Agent({keepAlive:true,maxSockets:config.concurrency,maxFreeSockets:config.concurrency});
   const transportEvents=new EventEmitter(),primed=[];
   try{
-    for(let i=0;i<config.isolates;i++){const dir=join(directory,String(i));await cp(join(root,'packages/connect-cli/src/server'),dir,{recursive:true});gates.push(await import(pathToFileURL(join(dir,'gate.mjs')).href));}
+    for(let i=0;i<config.isolates;i++){const dir=join(directory,String(i));await cp(join(root,'packages/connect-cli/src/server'),dir,{recursive:true});const runtime=await import(pathToFileURL(join(dir,'gate.mjs')).href);gates.push({createGate(settings){const at=performance.now(),handler=runtime.createGate(settings);gatePreparation.constructions++;gatePreparation.wallMs+=performance.now()-at;return handler;}});}
     const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
     const publicKeys=JSON.stringify({bench:await crypto.subtle.exportKey('jwk',pair.publicKey)});
     Date.now=()=>now;
@@ -64,7 +66,7 @@ export async function runBenchmark(options={}){
       return new Response(conditional||request.method==='HEAD'?null:item.body,{status:conditional?304:200,headers:{'Content-Type':item.contentType,ETag:item.etag}});
     };
     const env=()=>({sessionSecret:'synthetic-benchmark-key-01234567890123456789',siteCredential:'synthetic-credential',controlProfile:config.profile,controlPublicKeys:publicKeys,serveAsset});
-    const invoke=(request,index=0)=>gates[index].createGate(active.settings)(request,env());
+    const invoke=(request,index=0)=>handlers[index](request,env());
     server=createServer(async(req,res)=>{
       if(req.url==='/__benchmark/transport-prime'){primed.push(res);transportEvents.emit('prime');return;}
       const timing={at:performance.now(),authWallMs:null};
@@ -103,6 +105,7 @@ export async function runBenchmark(options={}){
     async function prepare(state){
       now=1900000000000;
       active={id:'bench-session-'+(++sequence),settings:{clientId:'bench-'+sequence,siteUrl:'https://benchmark.test/',authOrigin:'https://auth.benchmark.test',accessPolicy:'member'},absoluteUntil:now+86400000,roleShort:state==='role-expired',evidenceUntil:now+60000};
+      handlers=gates.map(runtime=>runtime.createGate(active.settings));
       counter=counts();const at=performance.now();
       const start=await request('/__nakwol/start');const stateId=new URL(start.headers.get('Location')).searchParams.get('state');
       const callback=await request('/__nakwol/callback?state='+stateId+'&code=synthetic',cookies(start));
@@ -117,7 +120,7 @@ export async function runBenchmark(options={}){
       counter=counts();assetCalls=0;return {cookie,login};
     }
     async function batch(state,cookie){
-      const begin=performance.now(),cpu=process.cpuUsage();let index=0,bytes=0,errors=0,responses304=0,htmlTtfbMs=null,imageStart=null,imageFinish=null;
+      const begin=performance.now(),cpu=process.cpuUsage(),constructionsAt=gatePreparation.constructions;let index=0,bytes=0,errors=0,responses304=0,htmlTtfbMs=null,imageStart=null,imageFinish=null;
       const images=[],auth=[],statuses={};
       await Promise.all(Array.from({length:Math.min(config.concurrency,paths.length)},async()=>{
         for(;;){const n=index++;if(n>=paths.length)return;const path=paths[n],image=/\.(png|webp)$/.test(path);const at=performance.now();if(image&&imageStart===null)imageStart=at;
@@ -132,9 +135,10 @@ export async function runBenchmark(options={}){
         }
       }));
       const usage=process.cpuUsage(cpu);
-      return {requests:paths.length,bytes,errors,statuses,responses304,wallMs:performance.now()-begin,imageBatchMs:imageFinish-imageStart,htmlTtfbMs,imageTtfbP95Ms:percentile(images,.95),authWallP95Ms:percentile(auth,.95),processCpuMs:(usage.user+usage.system)/1000,assetCalls,central:{...counter}};
+      return {requests:paths.length,bytes,errors,statuses,responses304,wallMs:performance.now()-begin,imageBatchMs:imageFinish-imageStart,htmlTtfbMs,imageTtfbP95Ms:percentile(images,.95),authWallP95Ms:percentile(auth,.95),processCpuMs:(usage.user+usage.system)/1000,assetCalls,gateConstructions:gatePreparation.constructions-constructionsAt,central:{...counter}};
     }
     active={settings:{clientId:'verification',siteUrl:'https://benchmark.test/',authOrigin:'https://auth.benchmark.test',accessPolicy:'member'}};
+    handlers=gates.map(runtime=>runtime.createGate(active.settings));
     const protectVerify=await verifyProtection({provider:'custom',url:'https://benchmark.test/',paths:paths.filter(p=>p!=='/').join(','),expectRuntime:'0.14.0',fetchImpl:(url,init)=>invoke(new Request(url,init))});
     if(!protectVerify.ok)throw new Error('protect verify failed');
     const scenarios=[];
@@ -155,7 +159,7 @@ export async function runBenchmark(options={}){
     const baselineP95=baseline.summary.wallMs.p95;
     const acceptance={warmCentralZero:warm?warm.runs.every(r=>r.central.refresh===0&&r.central.control===0&&r.central.me===0):null,batchBudgetMs:Math.max(100,baselineP95*.1),addedBatchP95Ms:warm?warm.summary.wallMs.p95-baselineP95:null,edgeCpuTarget:null,browserSSO:null};
     acceptance.warmBatchWithinBudget=warm?acceptance.addedBatchP95Ms<=acceptance.batchBudgetMs:null;
-    return {schemaVersion:1,at:new Date(realNow()).toISOString(),sourceCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceHashes,config,fixture:fixture.manifest,measurement:{engine:'node-http',runtime:process.version,platform:process.platform,hostname:'loopback',isolate:'independent Node ESM module graphs; not Cloudflare workerd isolates',auth:'synthetic central session/refresh and signed control responses',transportPreparation,edgeCpuMeasured:false,cpu:'batch process.cpuUsage includes client/server/assets; not per-request Worker CPU',authWall:'gate entry to protected asset callback; includes crypto/control/refresh, scheduling; not CPU',ttfb:'Node HTTP response headers, body consumed separately',browserPaintMeasured:false,discordCallsMeasured:false},protectVerify:{ok:protectVerify.ok,requestCount:protectVerify.requestCount},scenarios,baseline,acceptance};
+    return {schemaVersion:1,at:new Date(realNow()).toISOString(),sourceCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceHashes,config,fixture:fixture.manifest,measurement:{engine:'node-http',runtime:process.version,platform:process.platform,hostname:'loopback',isolate:'independent Node ESM module graphs; not Cloudflare workerd isolates',auth:'synthetic central session/refresh and signed control responses',transportPreparation,gatePreparation,edgeCpuMeasured:false,cpu:'batch process.cpuUsage includes client/server/assets; not per-request Worker CPU',authWall:'gate entry to protected asset callback; includes crypto/control/refresh, scheduling; not CPU',ttfb:'Node HTTP response headers, body consumed separately',browserPaintMeasured:false,discordCallsMeasured:false},protectVerify:{ok:protectVerify.ok,requestCount:protectVerify.requestCount},scenarios,baseline,acceptance};
   }finally{
     globalThis.fetch=nativeFetch;Date.now=realNow;agent.destroy();
     if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
