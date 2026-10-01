@@ -56,6 +56,8 @@ done
 
 `tests/fixtures/gate-benchmark/faults.mjs`의 `runFaultChecks()`는 AUTH/control 503·429·실제 7초/4초 timeout, 거부 시 handler0, 회복, 세션/서명 키 경계, pending login quota8, 공개 cache header 오설정을 검사합니다. 시험에서 발견한 공유 캐시 지시문 유지 결함은 legacy/server 세션 공통 코드에서 수정했습니다. 브라우저의 private ETag 재검증은 유지합니다.
 
+정적 응답에서는 vendor 공유 캐시 헤더를 제거하고 API에서는 명시적 private/no-store를 유지합니다. 첫 전체 회귀에서 API 헤더를 함께 제거한 회귀를 발견해 `781ee56`에서 수정했습니다. 아래 원시 성능값은 이 수정 전 `0395375`의 정적 경로 snapshot이며 수정 후 성능값으로 소급하지 않습니다.
+
 관측을 켠 10개 모듈 그래프가 이미지300개를 처리할 때 중앙 승인/control0, 비동기 수집10회, 같은 session bucket 중복9개를 실측합니다. collector를 보류한 채 보호 응답300개가 완료되는 것을 확인합니다. 큐128/overflow872, 수집 실패 시 retry6/손실1000, 다음 새 이벤트 회복을 검사합니다. 이는 중앙 DB의 last-observed 저장 지연 실측이 아닙니다. 디자인은 실제 공통 loader의 cold/hit/failure/recovery와 바이트를 측정하며 브라우저 bootstrap/paint 비용은 별도입니다.
 
 Discord는 중앙 서비스 경계에 있으므로 사이트 fixture의 AUTH503/429를 Discord 장애 실측이라고 부르지 않습니다. 실제 provider quota, CDN 우회, 서비스워커, Cloudflare billing 오류도 운영 staging에서 별도 검증해야 합니다.
@@ -83,6 +85,8 @@ D1 초과 읽기 백만 rows당 $0.001, 쓰기 백만 rows당 $1, 저장 초과 
 ### 2026-10-01 로컬 반복 측정
 
 조건: 동시300, 독립 모듈 그래프10, 합성 중앙100ms, 이미지50KiB, 상태별 warmup10+측정30. 전송량15,391,869바이트/정상 배치, 315요청. 준비된 loopback 연결이며 실제 사이트 브라우저 시간은 아닙니다.
+
+측정 장비: AMD Ryzen7 5700X3D(논리CPU16), RAM 약48GiB, Windows10 build19045, Node22.23.1. 전원·외부 프로세스·실제 edge 배치 조건을 동일하다고 가정하지 않습니다.
 
 | Profile / 상태 | 전체 배치 p95 ms | HTML TTFB p95 ms | 이미지 TTFB p95의 p95 ms | 인증 wall p95의 p95 ms | refresh / control 호출 범위 | 본문 bytes |
 |---|---:|---:|---:|---:|---|---:|

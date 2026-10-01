@@ -33,7 +33,13 @@ for (const provider of ['cloudflare-workers','cloudflare-pages']) test(`${provid
   }};
   const mf=new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare?miniflare.convertV4MiniflareOptions(mfOptions):mfOptions);
   t.after(async()=>{await mf.dispose();await rm(root,{recursive:true,force:true});});
-  const preflight=await mf.dispatchFetch('https://site.test/',{headers:{Accept:'text/html'}});
+  let preflight;
+  try { preflight=await mf.dispatchFetch('https://site.test/',{headers:{Accept:'text/html'}}); }
+  catch(error) {
+    const endpoint=await mf.ready.catch(()=>undefined),cause=error instanceof Error?error.cause:undefined;
+    t.diagnostic(JSON.stringify({transport:'workerd-http',origin:endpoint?.origin,message:error instanceof Error?error.message:String(error),cause:cause instanceof Error?cause.message:String(cause),code:cause?.code}));
+    throw error;
+  }
   assert.equal(preflight.status,401,await preflight.text());
   const report=await verifyProtection({root,fetchImpl:(url,init)=>mf.dispatchFetch(String(url),init)});
   assert.equal(report.ok,true,JSON.stringify(report.checks.filter(c=>!c.ok)));
