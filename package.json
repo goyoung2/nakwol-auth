@@ -15,7 +15,8 @@
     "db:migrate:local": "wrangler d1 migrations apply nakwol-auth --local",
     "db:seed:local": "wrangler d1 execute nakwol-auth --local --file=./scripts/dev-seed.sql",
     "db:migrate:remote": "wrangler d1 migrations apply nakwol-auth --remote",
-    "test:managed": "node scripts/managed-gate-smoke.mjs"
+    "test:managed": "node scripts/managed-gate-smoke.mjs",
+    "test:hosting": "node scripts/hosting-connection-smoke.mjs"
   },
   "dependencies": {
     "hono": "^4.0.0"
