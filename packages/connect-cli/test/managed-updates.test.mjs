@@ -72,3 +72,9 @@ test('runtime version matches the published package contract',async()=>{
   const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
   assert.equal(RUNTIME_VERSION,pkg.version);
 });
+test('automatic merge refuses sites without a reviewed deployment and recovery connection',async t=>{
+  const root=await fixture(t);
+  const before=await readFile(join(root,'package.json'),'utf8');
+  await assert.rejects(automateProtection({root,autoMerge:true}),/automatic|adapter|opt-in/i);
+  assert.equal(await readFile(join(root,'package.json'),'utf8'),before);
+});
