@@ -71,6 +71,7 @@ Vercel BLOCKED 시험 후보 `dpl_5ecSRqoLgFcRA8W9tZqpqFMWdwAk`는 SDK가 아닌
 - 다운로드한 CLI tarball의 name/version을 검증하고 동일한 파일을 실행합니다. required/member, Embed가 서버 보호를 대신하지 않는 계약, 익명 account/lab API401, DATA0.9 검사를 유지합니다.
 - 독립 리뷰에서 DB 미존재 시 사전검사가 새 DB를 만들 수 있는 P2를 발견했습니다. `ensure-d1 --existing-only`로 생성 전에 중단하도록 수정했습니다. 실제 스크립트의 경계 테스트 RED→GREEN3/3, 기존 운영 회귀 검사1/1을 확인했습니다. 추가 리뷰에서 해당 변경의 남은 P1/P2는 없었습니다.
 - 수정한 실제 운영 baseline smoke run36890111874는 통과했습니다. 이는 현재 운영 CLI0.7.1/browser SDK0.3.2가 정상이라는 근거이며 새 CLI0.14.0·server-session 운영 배포 근거는 아닙니다.
+- 코드 snapshot `11e3ea7`의 전체 CI run36890117675는490/490, 타입 검사·패키지 smoke·Worker dry-run·후보 배포 파일 계약을 통과했습니다. governance/quality run36890117667도 통과했습니다. 이후 변경은 이 결과를 적은 문서뿐입니다. 과거0.4 고정 회귀 검사 실패도 private 로그에 보존합니다.
 
 ## 남은 순서
 
