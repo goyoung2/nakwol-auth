@@ -277,3 +277,7 @@ Owners edit their own service at AUTH `/developer/presentation`. `nakwol-connect
 ## 동적 API 보호
 
 공식 `nakwol-connect/server`의 `protectHandler`와 `authorizeRequest`는 기존 서버 세션 검증을 재사용합니다. 변경 요청의 CSRF, server-only principal, no-store와 갱신 쿠키를 처리하며, 덱 소유권은 서비스가 검사해야 합니다. 정적 자동 설치가 기존 API 라우팅까지 보호했다고 간주하면 안 됩니다. [서버 API 연결·원본 차단 안내](../../docs/SERVER_API_PROTECTION.md)를 따르세요. WebSocket/SSE는 미지원입니다.
+
+### Cloudflare·Vercel 연결 템플릿 (0.14.0 로컬 후보)
+
+기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. 기존 reviewed adapter에는 AES-GCM 정상본 봉인과 initialize/release를 연결할 수 있습니다. 새 native 배포·복구 adapter 자동 생성과 운영·npm 배포는 아직 포함하지 않습니다. [설치·호스팅 연결 안내](../../docs/HOSTING_CONNECTIONS.md)를 확인하세요.

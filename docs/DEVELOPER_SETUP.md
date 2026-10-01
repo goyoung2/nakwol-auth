@@ -58,3 +58,7 @@ npx --yes nakwol-connect@~0.14.0 protect verify --url https://SITE/ --manifest .
 ## 기존 서비스 영향
 
 마법사 추가만으로 설치된 사이트의 게이트가 바뀌지는 않습니다. 지원하는 정책·디자인은 기존 계약대로 적용되며 자산 요청마다 마법사 API를 호출하지 않습니다. 구 renderer/adapter는 공식 update와 재배포가 필요합니다. 저장 성공은 모든 배포의 적용 증거가 아닙니다.
+
+## 호스팅 연결 단계 (0.14.0 후보)
+
+설치 단계에서 Cloudflare account/resource 또는 Vercel project/team, 추가 HTTPS origin을 입력해 별도 hosting JSON을 받습니다. CLI `protect hosting wizard`도 같은 validator를 사용합니다. 기본 검사 템플릿과 검토된 adapter 연결을 구분합니다. 자세한 상태·Secret·npm 게시 조건은 [HOSTING_CONNECTIONS.md](HOSTING_CONNECTIONS.md)를 따르세요.

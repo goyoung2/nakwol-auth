@@ -188,3 +188,7 @@ DATA scopes:
 - DATA scope는 필요한 권한만 최소로 요청합니다.
 
 상세 계약은 [CONNECT.md](./CONNECT.md), [WEB_SDK.md](./WEB_SDK.md), [DATA.md](./DATA.md)를 참고하세요.
+
+### Cloudflare·Vercel 연결 템플릿 (0.14.0 로컬 후보)
+
+기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. 기존 reviewed adapter에는 AES-GCM 정상본 봉인과 initialize/release를 연결할 수 있습니다. 새 native 배포·복구 adapter 자동 생성과 운영·npm 배포는 아직 포함하지 않습니다. [설치·호스팅 연결 안내](docs/HOSTING_CONNECTIONS.md)를 확인하세요.
