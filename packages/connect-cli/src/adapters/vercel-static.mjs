@@ -14,7 +14,7 @@ export async function inspect(root, protection) {
   }
   return {ok:true};
 }
-export async function generate({settings}, {directory}) {
+export async function generate({settings, projectName}, {directory}) {
   const {gate,login,session,control,observations}=await source();
   return {
     '.nakwol/server/gate.mjs':gate,
@@ -30,6 +30,6 @@ export default function middleware(request) {
   return gate(request, { waitUntil, sessionSecret:process.env.NAKWOL_SESSION_SECRET, siteCredential:process.env.NAKWOL_SITE_CREDENTIAL, controlProfile:process.env.NAKWOL_CONTROL_PROFILE, controlPublicKeys:process.env.NAKWOL_CONTROL_PUBLIC_KEYS, sessionPreviousSecret:process.env.NAKWOL_SESSION_PREVIOUS_SECRET, sessionPreviousUntil:Number(process.env.NAKWOL_SESSION_PREVIOUS_UNTIL), serveAsset:()=>next() });
 }
 `,
-    'vercel.json':JSON.stringify({framework:null,outputDirectory:directory,buildCommand:'npm run build'},null,2)+'\n',
+    'vercel.json':JSON.stringify({framework:null,outputDirectory:directory,buildCommand:'npm run build',name:projectName,version:2},null,2)+'\n',
   };
 }

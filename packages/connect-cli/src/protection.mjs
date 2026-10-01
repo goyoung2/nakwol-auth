@@ -17,6 +17,13 @@ const { version: runtimeVersion } = JSON.parse(await readFile(new URL('../packag
 const UPDATE_COMMAND = 'npx --yes nakwol-connect@~0.14.0 protect update';
 // Git may convert generated text to CRLF on Windows; line endings are not a gate change.
 const hash = value => createHash('sha256').update(value.toString().replaceAll('\r\n', '\n')).digest('hex');
+// Vercel rewrites JSON whitespace/key order before the remote build. Protect
+// every setting while comparing its JSON value rather than its formatting.
+function generatedHash(file, value) {
+  if (file !== 'vercel.json') return hash(value);
+  const config = JSON.parse(value.toString());
+  return hash(JSON.stringify(Object.fromEntries(Object.keys(config).sort().map(key => [key, config[key]]))));
+}
 
 export function siteUrl(value) {
   const url = new URL(value);
@@ -58,7 +65,10 @@ export async function inspectProtection(root, config, options = {}) {
   const expectedNames = p.provider === 'vercel' ? vercel.files.filter(file => (modern || !file.endsWith('/session.mjs')) && (controlled || !file.endsWith('/control.mjs')) && (observed || !file.endsWith('/observations.mjs'))) : p.provider === 'cloudflare-pages' ? pagesFiles(p.assetsDirectory) : [`${GENERATED}/gate.mjs`, `${GENERATED}/login.mjs`, `${GENERATED}/index.mjs`, WRANGLER_FILE, ...(modern ? [`${GENERATED}/session.mjs`] : []), ...(controlled ? [`${GENERATED}/control.mjs`] : []), ...(observed ? [`${GENERATED}/observations.mjs`] : [])];
   if (!Object.hasOwn(adapters,p.provider) || !p.files || Object.keys(p.files).length !== expectedNames.length) return { installed: true, ok: false, detail: '지원하지 않는 보호 설정' };
   for (const file of expectedNames) {
-    try { if (hash(await readFile(join(root, file))) !== p.files[file]) return { installed: true, ok: false, detail: `설치 이후 파일 변경: ${file}` }; }
+    try {
+      const value = await readFile(join(root, file));
+      if (generatedHash(file, value) !== p.files[file] && hash(value) !== p.files[file]) return { installed: true, ok: false, detail: `설치 이후 파일 변경: ${file}` };
+    }
     catch (error) {
       if (options.allowMissingBuildOutputs && error.code === 'ENOENT' && generatedAssetPaths(p).includes(file)) continue;
       return { installed: true, ok: false, detail: `파일 없음: ${file}` };
@@ -108,7 +118,7 @@ export async function installProtection(options = {}) {
   await mkdir(join(root, GENERATED), { recursive: true });
   for (const [file, content] of Object.entries(files)) await writeFile(join(root, file), content);
   await writeFile(join(root, 'package.json'), JSON.stringify(buildPackage, null, 2) + String.fromCharCode(10));
-  const protection = { schemaVersion:1, capabilities:adapters[options.provider].capabilities, runtimeVersion, updateChannel:config.protection?.updateChannel === 'managed' ? 'managed' : 'latest', ...(config.protection?.automation ? {automation:config.protection.automation} : {}), ...(config.protection?.automatic ? {automatic:config.protection.automatic} : {}), ...(config.protection?.hosting ? {hosting:config.protection.hosting} : {}), ...(config.protection?.rollback ? {rollback:config.protection.rollback} : {}), provider: options.provider, projectName, siteUrl: url, clientId:config.clientId, accessPolicy, authOrigin, assetsDirectory: inventory.directory, files: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, hash(content)])) };
+  const protection = { schemaVersion:1, capabilities:adapters[options.provider].capabilities, runtimeVersion, updateChannel:config.protection?.updateChannel === 'managed' ? 'managed' : 'latest', ...(config.protection?.automation ? {automation:config.protection.automation} : {}), ...(config.protection?.automatic ? {automatic:config.protection.automatic} : {}), ...(config.protection?.hosting ? {hosting:config.protection.hosting} : {}), ...(config.protection?.rollback ? {rollback:config.protection.rollback} : {}), provider: options.provider, projectName, siteUrl: url, clientId:config.clientId, accessPolicy, authOrigin, assetsDirectory: inventory.directory, files: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, generatedHash(file, content)])) };
   await writeProjectConfig(root, { ...config, accessPolicy, authOrigin, protection });
   return { ok: true, protectionStatus: 'configured', protection, ...(prepared ? {setupDiff:prepared.diff,setupStatus:{...prepared.status,localInstallation:'configured'}} : {}), nextSteps: [
     'npm run build는 설정된 버전의 공식 공통 게이트를 반영합니다. 별도 빌드 도구/배포 명령은 빌드 후 npm run nakwol:gate를 실행하세요.',

@@ -17,6 +17,20 @@ async function fixture(t) {
 }
 const options = root => ({root,provider:'vercel',assets:'dist',url:'https://site.test/'});
 
+test('Vercel remote build reserialization preserves integrity but routing changes fail closed', async t => {
+  const root = await fixture(t);
+  await installProtection(options(root));
+  const file = join(root, 'vercel.json');
+  const settings = JSON.parse(await readFile(file, 'utf8'));
+  // The real Vercel CLI uploads a compact config with project name and version.
+  await writeFile(file, JSON.stringify({...settings, name:'test-site', version:2}));
+  assert.equal((await inspectProtection(root, await readProjectConfig(root))).ok, true);
+  await updateProtection({root});
+  await writeFile(file, JSON.stringify({...settings, name:'test-site', version:2, rewrites:[{source:'/(.*)',destination:'/index.html'}]}));
+  assert.equal((await inspectProtection(root, await readProjectConfig(root))).ok, false);
+  await assert.rejects(updateProtection({root}), /변경/);
+});
+
 test('Vercel static installation uses shared gate, all paths and inspectable update', async t => {
   const root = await fixture(t);
   const installed = await installProtection(options(root));
