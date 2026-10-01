@@ -58,7 +58,7 @@ export async function releaseHosting(options={}){
   // The manifest proof binds its original bytes. Preserve its canonical encoding.
   if(typeof state.manifestBytes!=='string')throw new Error('Baseline original manifest bytes are missing.');
   await writeFile(manifestFile,state.manifestBytes,{mode:0o600});
-  await writeFile(reportFile,JSON.stringify(state.report,null,2)+'\n',{mode:0o600});await validateAutomaticConfig(root,await readProjectConfig(root));
+  await writeFile(reportFile,JSON.stringify(state.report)+'\n',{mode:0o600});await validateAutomaticConfig(root,await readProjectConfig(root));
   const nonce=randomUUID(),candidate=join(directory,nonce+'.candidate.json'),output=join(directory,nonce+'.rollout.json');
   await createProtectionManifest({root,deploymentId:'candidate-'+nonce,outputFile:candidate});
   const result=await runRollout({...options,root,candidateManifest:candidate,outputFile:output,fetchImpl:options.verificationFetchImpl||globalThis.fetch});

@@ -6,6 +6,7 @@ import {installProtection} from '../src/protection.mjs';import {sha256} from '..
 import {connectHosting,verifyHosting} from '../src/hosting-connection.mjs';
 import {initializeHosting,releaseHosting} from '../src/hosting-release.mjs';
 import {RUNTIME_VERSION} from '../src/server/gate.mjs';
+import {openHostingState,sealHostingState} from '../src/hosting-state.mjs';
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'nakwol-hosting-release-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await mkdir(join(root,'dist'));await mkdir(join(root,'ops'));await writeFile(join(root,'index.html'),'<body></body>');await writeFile(join(root,'dist/index.html'),'PRIVATE-HOSTING-BYTES');
@@ -45,4 +46,15 @@ test('invalid key/state and locked operation never deploy; normal cookie checks 
 test('recovery waits for a blocked stale edge to converge and still requires complete final proof',async t=>{
  const f=await fixture(t);await initializeHosting(f);await f.change({mode:'outage',badDeploymentId:'new-1',recoveryLagProbes:8});
  const result=await releaseHosting(f);assert.equal(result.status,'recovery-verified');assert.equal(result.releaseAccepted,false);assert.equal(result.recoveryVerified,true);assert.equal(result.recoveryVerification.checks.every(c=>c.ok),true);assert.equal((await f.state()).writes,2);
+});
+
+test('sealed complete evidence remains readable when pretty printing alone exceeds the byte limit',async t=>{
+ const f=await fixture(t);await initializeHosting(f);
+ const file=join(f.root,'.nakwol/reports/hosting/baseline.enc'),binding=JSON.parse(await readFile(join(f.root,'.nakwol/hosting.json'),'utf8'));
+ const state=openHostingState(binding,await readFile(file,'utf8'),process.env.NAKWOL_RELEASE_STATE_KEY);
+ state.report.auditNotes=Array(700000).fill('');
+ assert.ok(Buffer.byteLength(JSON.stringify(state.report))<4*1024*1024);
+ assert.ok(Buffer.byteLength(JSON.stringify(state.report,null,2))>4*1024*1024);
+ await writeFile(file,sealHostingState(binding,state,process.env.NAKWOL_RELEASE_STATE_KEY));
+ const result=await releaseHosting(f);assert.equal(result.status,'release-verified');assert.equal((await f.state()).writes,1);
 });
