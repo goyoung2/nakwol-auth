@@ -109,5 +109,6 @@ test('production deploy ignores test-only changes while keeping runtime and veri
   assert.match(workflow, /grep -qi 'authentication policy is REQUIRED BY DEFAULT' \/tmp\/llms/);
   assert.match(workflow, /grep -q 'auth = required' \/tmp\/llms/);
   assert.match(workflow, /grep -q 'access_policy = member' \/tmp\/llms/);
-  assert.match(workflow, /NAKWOL_CONNECT_V07_DEPLOY_OK/);
+  assert.match(workflow, /NAKWOL_CONNECT_CURRENT_DEPLOY_OK/);
+  assert.ok(workflow.includes('expected_cli=$(node -p "require(\'./packages/connect-cli/package.json\').version")'));
 });
