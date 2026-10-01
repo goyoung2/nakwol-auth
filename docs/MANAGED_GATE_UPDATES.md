@@ -6,6 +6,17 @@
 사이트에 설치한 패키지, 실제 사이트에 배포된 게이트는 각각 다른 상태입니다.
 0.7.1은 2026-09-29 [npm 게시 검증](https://github.com/goyoung2/nakwol-auth/actions/runs/36537904182)과 [AUTH 운영 배포](https://github.com/goyoung2/nakwol-auth/actions/runs/36537904188)를 완료했습니다. 각 소비자 사이트의 업데이트·배포는 별도입니다. 신규 설치와 LLM 지시문은 [설치 가이드](LLM_INSTALLATION.md)를 보세요.
 
+## 자동 모드 후보 기능 (0.14.0, 로컬)
+
+기본 모드의 수동 승인 계약은 유지합니다. 새 후보는 `protect automate --auto-merge`와
+호스팅 독립 `protect rollout`을 제공합니다. 검증한 SDK 패치 HEAD만 원자적으로 병합하고,
+소유자가 연결한 배포 어댑터에서 정상본 재검사·새 배포 검사·실패 복구를 수행합니다.
+Cloudflare/Vercel뿐 아니라 다른 호스팅도 같은 프로토콜을 연결할 수 있습니다.
+네이티브 배포 어댑터·계정 연결을 자동 생성하거나 기존 사이트에서 저절로 켜지는 기능은 아닙니다.
+최초 연결, GitHub 최소 권한, 고정 origin 목록, 복구·baseline 보관과 제한은
+[안전한 자동 업데이트](SAFE_AUTOMATIC_UPDATES.md)를 따릅니다. 아래 0.7.1 명령에 이 후보의 옵션이
+있다고 가정하지 않습니다. 후보는 아직 npm 게시/운영 적용되지 않았습니다.
+
 ## 최초 한 번 설정
 
 기존 공식 게이트가 정상 설치된 사이트에서 새 CLI로 실행합니다.

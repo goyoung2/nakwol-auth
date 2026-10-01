@@ -10,7 +10,9 @@ export async function exerciseAutomaticRollout({root,command,url,enableProbe}) {
   const runtime=JSON.parse(await readFile(join(root,'.nakwol-connect.json'),'utf8')).protection.runtimeVersion;
   const stateFile=join(root,'automatic-state.json');
   await writeFile(stateFile,JSON.stringify({deploymentId:'old',operationId:null,writes:0,mode:'good'}));
+  let probeCount=0;
   enableProbe(async(req)=>{
+    probeCount++;
     const state=JSON.parse(await readFile(stateFile,'utf8'));
     if(state.deploymentId==='new' && state.mode==='outage') return new Response(null,{status:503});
     if(req.headers.cookie==='smoke_session=member') return new Response('private');
@@ -72,5 +74,6 @@ else {
   const workflow=await readFile(join(optInRoot,'.github/workflows/nakwol-gate-auto-merge.yml'),'utf8');
   assert.ok(workflow.includes('secrets.NAKWOL_UPDATE_GITHUB_TOKEN'));
   assert.ok(workflow.includes('ref: ${{ github.sha }}'));
-  return {accepted:accepted.status,rejected:recovered.status,failedExit:failure.code,probeCount:baseline.requestCount+accepted.verification.requestCount+recovered.failedVerification.requestCount+recovered.recoveryVerification.requestCount,hosting:'simulated adapter, live local HTTPS',optIn:setup.autoMerge};
+  assert.equal(probeCount,baseline.requestCount+accepted.baselineVerification.requestCount+accepted.verification.requestCount+recovered.baselineVerification.requestCount+recovered.failedVerification.requestCount+recovered.recoveryVerification.requestCount);
+  return {accepted:accepted.status,rejected:recovered.status,failedExit:failure.code,probeCount,hosting:'simulated adapter, live local HTTPS',optIn:setup.autoMerge};
 }

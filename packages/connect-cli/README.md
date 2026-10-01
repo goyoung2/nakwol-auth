@@ -251,6 +251,21 @@ both anonymous blocking and the expected gate version. No auto-merge, deployment
 credentials or automated rollback are installed. See
 [managed update operations](../../docs/MANAGED_GATE_UPDATES.md) for setup and limits.
 
+### Safe automatic updates (0.14.0 local candidate)
+
+`protect automate --auto-merge` adds an opt-in controller that validates the actual
+Dependabot PR, exact SDK-only patch, npm integrity and protected gate check before
+atomically merging the inspected HEAD. A repository-scoped owner token is required;
+PR code and hosting credentials are not used in the privileged job.
+
+`protect rollout --candidate-manifest FILE --output-file FILE` invokes an owner-reviewed,
+hash-pinned hosting adapter. It rechecks the verified baseline, deploys, verifies blocking
+and authenticated file hashes, and restores the previous artifact on rejection. Recovery
+still exits 1. Host deployment APIs/CI must be connected explicitly; this is a portable
+protocol, not preinstalled native adapters. Fixed origin inventory, serialization and
+compare-before-write are required. Existing installations/default automation are unchanged.
+See [setup, protocol and operational limits](../../docs/SAFE_AUTOMATIC_UPDATES.md).
+
 ### 0.8.0 static adapters and release evidence
 
 Adds `protect install --provider vercel` for static builds with full-path middleware using the shared gate. Existing routing/SSR configurations are not overwritten. `protect manifest --deployment-id ID --output-file evidence.json` records the exact build; `protect verify --manifest evidence.json --origins-file origins.json --session-cookie-env NAKWOL_VERIFY_COOKIE` checks anonymous blocking and authenticated file hashes separately. Legacy header-only reports cannot approve automatic rollback. Existing 0.7.x installations require explicit version selection and redeployment. See [evidence contract and limits](../../docs/PROTECTION_EVIDENCE.md). Source changes are not npm publication or production deployment evidence.

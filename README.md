@@ -121,6 +121,8 @@ Web SDK stable은 **0.3.2**이며 Universal Embed는 같은 브라우저의 중�
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 
+**0.14.0 로컬 후보**에는 검증한 패치 HEAD의 자동 병합과 호스팅 독립 배포·검사·복구 코어가 추가되었습니다. 소유자가 검토한 배포 어댑터와 CI 연결 후 명시적으로 켜며, 기존 설치에는 영향이 없습니다. Cloudflare/Vercel 외 호스팅도 같은 계약을 사용합니다. 네이티브 어댑터의 자동 생성·운영 배포는 별도입니다. [안전한 자동 업데이트 연결 안내](docs/SAFE_AUTOMATIC_UPDATES.md)를 확인하세요.
+
 ## 개발자 권한
 
 NAKWOL 운영자는 `https://nakwol-auth.sepsd21.workers.dev/admin/developers`에서 Discord 사용자 ID를 기준으로 Connect 개발자 권한을 사전 등록할 수 있습니다.
