@@ -77,3 +77,12 @@ test('an exact production SDK dependency remains usable through connection and m
  const file=join(root,'nakwol-hosting.json');await writeFile(file,JSON.stringify(binding()));await connectHosting({root,hostingFile:file});await updateProtection({root});
  const updated=JSON.parse(await readFile(join(root,'package.json')));assert.equal(updated.dependencies['nakwol-connect'],version);assert.equal(updated.devDependencies?.['nakwol-connect'],undefined);assert.equal((await readProjectConfig(root)).protection.hosting.mode,'manual');
 });
+for(const provider of ['cloudflare-workers','vercel'])test(`${provider}: explicit native connection generates reviewed adapter and sealed-state workflow`,async t=>{
+ const root=await fixture(t,provider),value={...binding(provider),mode:'automatic',controlledDeployments:true,adapterFile:'.nakwol/hosting-adapter.mjs',...(provider==='vercel'?{accountId:'',resourceId:'prj_site',teamId:'team_site'}:{})};
+ const file=join(root,'native.json');await writeFile(file,JSON.stringify(value));await connectHosting({root,hostingFile:file});
+ const config=await readProjectConfig(root),{readAutomaticConnection}=await import('../src/portable-rollout.mjs');await readAutomaticConnection(root,config);
+ const source=await readFile(join(root,value.adapterFile),'utf8');assert.match(source,/runNativeHostingAdapter/);assert.doesNotMatch(source,/private-test-token/);
+ const workflow=await readFile(join(root,'.github/workflows/nakwol-hosting.yml'),'utf8');assert.match(workflow,/protect hosting initialize/);assert.match(workflow,/protect hosting release/);assert.match(workflow,/actions\/cache\/save@/);assert.match(workflow,/if: always\(\)/);assert.doesNotMatch(workflow,/pull_request|push:|upload-artifact/);
+ const pkg=JSON.parse(await readFile(join(root,'package.json')));assert.equal(pkg.devDependencies[provider==='vercel'?'vercel':'wrangler'],provider==='vercel'?'62.1.0':'4.119.0');
+ await updateProtection({root});assert.deepEqual((await readProjectConfig(root)).protection.automatic,config.protection.automatic);
+});

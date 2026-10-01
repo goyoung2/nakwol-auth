@@ -121,7 +121,7 @@ Web SDK stable은 **0.3.2**이며 Universal Embed는 같은 브라우저의 중�
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 
-**0.14.0 로컬 후보**에는 검증한 패치 HEAD의 자동 병합과 호스팅 독립 배포·검사·복구 코어가 추가되었습니다. 소유자가 검토한 배포 어댑터와 CI 연결 후 명시적으로 켜며, 기존 설치에는 영향이 없습니다. Cloudflare/Vercel 외 호스팅도 같은 계약을 사용합니다. 네이티브 어댑터의 자동 생성·운영 배포는 별도입니다. [안전한 자동 업데이트 연결 안내](docs/SAFE_AUTOMATIC_UPDATES.md)를 확인하세요.
+**0.14.0 로컬 후보**에는 검증한 패치 HEAD의 자동 병합과 호스팅 독립 배포·검사·복구 코어가 추가되었습니다. 소유자가 검토한 배포 어댑터와 CI 연결 후 명시적으로 켜며, 기존 설치에는 영향이 없습니다. Cloudflare/Vercel 외 호스팅도 같은 계약을 사용합니다. Workers·Vercel 네이티브 어댑터 생성은 제공하며, 운영 배포와 canary는 별도입니다. [안전한 자동 업데이트 연결 안내](docs/SAFE_AUTOMATIC_UPDATES.md)를 확인하세요.
 
 ## 개발자 권한
 
@@ -191,4 +191,4 @@ DATA scopes:
 
 ### Cloudflare·Vercel 연결 템플릿 (0.14.0 로컬 후보)
 
-기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. 기존 reviewed adapter에는 AES-GCM 정상본 봉인과 initialize/release를 연결할 수 있습니다. 새 native 배포·복구 adapter 자동 생성과 운영·npm 배포는 아직 포함하지 않습니다. [설치·호스팅 연결 안내](docs/HOSTING_CONNECTIONS.md)를 확인하세요.
+기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. Workers·Vercel은 명시적 선택 시 공식 배포·복구 adapter, 암호화 정상본 및 initialize/release CI를 생성합니다. Pages·그 밖의 호스팅은 수동 검사 또는 reviewed adapter를 사용합니다. 운영 canary와 npm 게시·AUTH 배포는 아직 하지 않았습니다. [설치·호스팅 연결 안내](docs/HOSTING_CONNECTIONS.md)를 확인하세요.

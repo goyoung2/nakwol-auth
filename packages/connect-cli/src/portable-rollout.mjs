@@ -45,7 +45,8 @@ export async function validateAutomaticConfig(root,config) {
   const previous=await readProtectionManifest(manifestFile);
   const proof=await jsonFile(reportFile),binding=proof.evidenceBinding;
   if(proof.releaseAccepted!==true || proof.ok!==true || proof.manifestUnchanged!==true || binding?.deploymentId!==previous.deploymentId || binding.buildHash!==previous.buildHash || binding.manifestHash!==previous.manifestHash || binding.runtimeVersion!==previous.runtimeVersion || proof.expectedRuntime!==previous.runtimeVersion || proof.authenticatedChecks?.length!==previous.files.length || !proof.authenticatedChecks.every(check=>check.ok===true) || !proof.checks?.length || !proof.checks.every(check=>check.ok===true) || !proof.origins?.includes(config.protection.siteUrl)) throw new Error('Automatic baseline needs a matching strong verification proof.');
-  return {...connection,previous,manifestFile,reportFile};
+  if(!Array.isArray(proof.origins))throw new Error('Automatic baseline origin inventory is invalid.');
+  return {...connection,previous,manifestFile,reportFile,previousOrigins:[...new Set(proof.origins.map(siteUrl))].sort()};
 }
 
 // The adapter is owner-reviewed CI code, not a sandbox for untrusted plugins.
@@ -82,7 +83,7 @@ async function invokeAdapter(root,connection,action,payload={}) {
 function descriptor(value,policy,origins=null) {
   if(value?.schemaVersion!==1 || value.provider!==policy.provider || value.resourceId!==policy.resourceId || value.inventoryComplete!==true || !Array.isArray(value.origins) || !value.origins.length || value.origins.length>100) throw new Error('Automatic adapter resource/origin binding is invalid.');
   const normalized=[...new Set(value.origins.map(siteUrl))].sort();
-  if(normalized.length!==value.origins.length || origins && JSON.stringify(normalized)!==JSON.stringify(origins)) throw new Error('Automatic origin inventory changed; manual review is required.');
+  if(normalized.length!==value.origins.length || origins && origins.some(origin=>!normalized.includes(origin))) throw new Error('Automatic origin inventory lost a known origin; manual closure review is required.');
   if(value.deploymentId!==undefined && !id.test(value.deploymentId)) throw new Error('Automatic deployment identifier is invalid.');
   // Retain only public protocol fields; an adapter cannot inject secrets into reports.
   return {schemaVersion:1,provider:policy.provider,resourceId:policy.resourceId,origins:normalized,inventoryComplete:true,...(value.deploymentId?{deploymentId:value.deploymentId}:{}),...(typeof value.operationId==='string' && /^[\w-]{1,80}$/.test(value.operationId)?{operationId:value.operationId}:{})};
@@ -114,9 +115,11 @@ export async function runRollout(options={}) {
   if(!inside(await realpath(root),outputDirectory) || inside(assets,outputDirectory)) throw new Error('Automatic reports must stay in the project outside public assets.');
   const capabilities=await invokeAdapter(root,connection,'capabilities');
   const base=descriptor(capabilities,policy);
+  if(connection.previousOrigins.some(origin=>!base.origins.includes(origin)))throw new Error('Automatic inventory lost a baseline origin; manual closure review is required.');
   if(capabilities.serializedDeployments!==true || capabilities.compareBeforeWrite!==true || capabilities.rollback!==true) throw new Error('Automatic adapter lacks required recovery/compare capabilities.');
   if(!base.origins.includes(config.protection.siteUrl)) throw new Error('Automatic adapter does not serve the registered origin.');
-  const current=async()=>descriptor(await invokeAdapter(root,connection,'current'),policy,base.origins);
+  const track=value=>{const result=descriptor(value,policy,base.origins);base.origins=result.origins;return result;};
+  const current=async()=>track(await invokeAdapter(root,connection,'current'));
   const first=await current();
   if(first.deploymentId!==previous.deploymentId) throw new Error('Automatic baseline is not the current deployment.');
   const operationId=randomUUID();
@@ -130,17 +133,18 @@ export async function runRollout(options={}) {
   const verify=async(manifestFile,manifest)=>verifyProtection({root,provider:'custom',url:config.protection.siteUrl,manifest:manifestFile,deploymentId:manifest.deploymentId,expectRuntime:manifest.runtimeVersion,sessionCookieEnv:policy.sessionCookieEnv,alternateOrigins:base.origins.filter(origin=>origin!==config.protection.siteUrl).join(','),fetchImpl:options.fetchImpl || globalThis.fetch});
   const baseline=await verify(connection.manifestFile,previous);
   if(!baseline.releaseAccepted) return save({status:'baseline-rejected',baselineVerification:baseline});
-  if((await current()).deploymentId!==first.deploymentId) return save({status:'deployment-conflict',baselineVerification:baseline});
+  const baselineAfter=await current();
+  if(baselineAfter.deploymentId!==first.deploymentId || JSON.stringify(baselineAfter.origins)!==JSON.stringify(baseline.origins?.slice().sort())) return save({status:'deployment-conflict',baselineVerification:baseline});
   await save({status:'deploying',baselineVerification:baseline});
   if(!journal.journalPersisted) return save({status:'journal-failed'});
   let deployed;
   try {
-    deployed=descriptor(await invokeAdapter(root,connection,'deploy',{operationId,expectedDeploymentId:first.deploymentId,buildHash:candidate.buildHash,runtimeVersion:candidate.runtimeVersion}),policy,base.origins);
+    deployed=track(await invokeAdapter(root,connection,'deploy',{operationId,expectedDeploymentId:first.deploymentId,buildHash:candidate.buildHash,runtimeVersion:candidate.runtimeVersion}));
     if(!deployed.deploymentId || deployed.deploymentId===first.deploymentId || deployed.operationId!==operationId) throw new Error('Automatic deployment result is not bound to this operation.');
   } catch {
     // A timed-out write may have committed. Recover only an exact operation receipt.
     try {deployed=await current();} catch {return save({status:'deployment-indeterminate'});}
-    if(deployed.deploymentId===first.deploymentId) return save({status:'deployment-failed'});
+    if(deployed.deploymentId===first.deploymentId) return save({status:'deployment-failed',failedVerification:await verify(connection.manifestFile,previous)});
     if(deployed.operationId!==operationId) return save({status:'deployment-indeterminate'});
     await save({status:'deployment-indeterminate',deploymentId:deployed.deploymentId});
     return recover();
@@ -155,7 +159,7 @@ export async function runRollout(options={}) {
     if((await current()).deploymentId!==deployed.deploymentId) return save({status:'deployment-conflict'});
     verification=await verify(candidateFile,boundCandidate);
     const after=await current();
-    if(after.deploymentId!==deployed.deploymentId || after.operationId!==operationId) return save({status:'deployment-conflict',failedVerification:verification});
+    if(after.deploymentId!==deployed.deploymentId || after.operationId!==operationId || JSON.stringify(after.origins)!==JSON.stringify(verification.origins?.slice().sort())) return save({status:'deployment-conflict',failedVerification:verification});
     if(verification.releaseAccepted) {
       await save({ok:true,releaseAccepted:true,status:'release-verified',verification,manifestFile:candidateFile});
       if(journal.journalPersisted) return journal;
@@ -171,14 +175,14 @@ export async function runRollout(options={}) {
       const before=await current();
       if(before.deploymentId!==deployed.deploymentId || before.operationId!==operationId) return save({status:'recovery-conflict'});
       await save({status:'recovering'});
-      const restored=descriptor(await invokeAdapter(root,connection,'rollback',{operationId,expectedDeploymentId:deployed.deploymentId,targetDeploymentId:first.deploymentId,buildHash:previous.buildHash,runtimeVersion:previous.runtimeVersion}),policy,base.origins);
+      const restored=track(await invokeAdapter(root,connection,'rollback',{operationId,expectedDeploymentId:deployed.deploymentId,targetDeploymentId:first.deploymentId,buildHash:previous.buildHash,runtimeVersion:previous.runtimeVersion}));
       if(!restored.deploymentId || restored.deploymentId===deployed.deploymentId || restored.operationId!==operationId) throw new Error('Recovery result is not bound to this operation.');
       const serving=await current();
       if(serving.deploymentId!==restored.deploymentId || serving.operationId!==operationId) return save({status:'recovery-conflict'});
       const file=output+'.recovery-manifest.json',manifest={...previous,deploymentId:restored.deploymentId};delete manifest.manifestHash;
       await writeFile(file,JSON.stringify(manifest,null,2)+'\n',{flag:'wx',mode:0o600});
       const proof=await verify(file,manifest),after=await current();
-      if(after.deploymentId!==restored.deploymentId || after.operationId!==operationId) return save({status:'recovery-conflict',recoveryVerification:proof});
+      if(after.deploymentId!==restored.deploymentId || after.operationId!==operationId || JSON.stringify(after.origins)!==JSON.stringify(proof.origins?.slice().sort())) return save({status:'recovery-conflict',recoveryVerification:proof});
       return save({ok:false,releaseAccepted:false,status:proof.releaseAccepted?'recovery-verified':'recovery-failed',recoveryVerified:proof.releaseAccepted,recoveryDeploymentId:restored.deploymentId,recoveryVerification:proof});
     } catch {return save({ok:false,releaseAccepted:false,status:'recovery-indeterminate',recoveryVerified:false});}
   }

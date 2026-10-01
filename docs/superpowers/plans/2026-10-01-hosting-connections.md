@@ -11,20 +11,20 @@ registry 조회: latest0.7.1(2026-10-01). 로컬 후보0.14.0은 미게시. 이 
   Secret 없는 별도 hosting JSON을 다운로드한다. 기존 setup schema/API/앱/정책은 유지한다.
 - CLI connect는 공식 required/member 게이트와 앱/origin/provider 바인딩을 검증한다.
   기존 CI/adapter는 덮어쓰지 않는다. 검토할 adapter/workflow와 Secret 안내를 생성한다.
-- Cloudflare Workers/Pages 및 Vercel의 실제 API·로컬 고정 CLI를 사용한다. SDK에
+- Cloudflare Workers 및 Vercel의 실제 API·로컬 고정 CLI를 사용한다. SDK에
   중앙 Discord Secret을 넣지 않으며 호스팅 credentials는 사이트 CI에만 둔다.
 - automatic은 owner가 모든 변경을 동일 workflow로 통제하고 host Git 자동 배포를 끈
   경우만 opt-in 가능하다. GitHub concurrency와 로컬 operation lease를 요구한다.
   플랫폼이 원자적 CAS를 제공한다고 주장하지 않는다. 외부 직접 변경은 지원 조건 위반이며
   현재 ID를 변경 직전에 다시 비교하고 충돌·불확실 결과를 성공으로 표시하지 않는다.
 - Worker는 version upload 후 명확한 100% promotion, Vercel은 production skip-domain
-  artifact 후 promotion, Pages는 production upload를 사용한다. Secret/DB migration은 없다.
+  artifact 후 promotion. Pages는 수동 배포 검사 또는 기존 custom adapter로 지원한다. Secret/DB migration은 없다.
 - baseline 생성은 read-only initialize, normal member cookie 전체 proof와 실제 serving ID 확인.
   baseline은 client/origin/resource에 바인딩한 AES-GCM으로 봉인하여 CI cache에 보존한다.
   미검증·위조·다른 사이트 baseline/만료 쿠키에서는 배포하지 않는다.
 - release는 기존 portable rollout 한 곳에서 검사·복구한다. 신규 origin은 모두 추가 검사하고,
-  origin 제거는 adapter가 해당 배포의 provider API 폐쇄 증거를 확인한 경우만 인정한다.
-  실패한 새 Pages/Vercel deployment 정리는 명시적 opt-in 후 정확한 이 operation에만 적용한다.
+  origin 제거는 성공으로 인정하지 않고 수동 폐쇄 검토를 요구한다.
+  실패한 deployment도 검사 목록에 유지하며 자동 삭제하지 않는다. 새 주소가 유출되면 복구도 실패 처리한다.
 - 정상본 승격·복구 결과를 봉인한다. 실패한 새 릴리스는 복구 후에도 exit1이다.
   cache 저장 실패/runner 종료/호스팅 장애는 자동 정상 표시하지 않는다.
 - 기본은 수동; PR 검사와 native read-only check만 가능한 모드도 제공한다.
@@ -32,11 +32,11 @@ registry 조회: latest0.7.1(2026-10-01). 로컬 후보0.14.0은 미게시. 이 
 
 ## 작업
 
-1. [ ] hosting schema·connect/plan·안전한 generated CI 및 암호화 baseline.
-2. [ ] native CF Workers/Pages/Vercel adapters·경합/rollback/preview 보호.
-3. [ ] 공통 rollout의 origin 추가/폐쇄 증거 처리·CLI release 연결.
-4. [ ] 기존 웹 마법사·Secret 안내·JSON/명령 다운로드 및 브라우저 검증.
-5. [ ] SDK 회귀·tarball 실행·types·fresh review 수정·문서·commit·checkpoint.
+1. [x] hosting schema·connect/plan·안전한 generated CI 및 암호화 baseline.
+2. [x] native CF Workers/Vercel adapters·경합/rollback/preview 보호; Pages는 수동/custom adapter.
+3. [x] 공통 rollout의 origin 추가·제거 거부·CLI release 연결.
+4. [x] 기존 웹 마법사·Secret 안내·JSON/명령 다운로드 및 브라우저 검증.
+5. [x] SDK 회귀·tarball 실행·types·fresh review 수정·문서·commit·checkpoint.
 
 ## 검증
 
@@ -54,28 +54,14 @@ owner-controlled single workflow와 모든 write 경로의 외부 직렬화 계�
 Ruling: D04 중앙 setup document는 바꾸지 않고 공개 hosting JSON을 별도 export한다.
 hosting token/CI key/cookie는 JSON·중앙 DB·browser storage에 저장하지 않는다.
 Ruling: 동적 preview origin은 고정 집합보다 검사 범위를 넓혀 처리한다. 제거를 HTTP404만으로
-closed라 추정하지 않고 provider-scoped proof를 요구한다. opaque custom adapters도 이 계약을 따라야 한다.
+closed라 추정하지 않고 제거 자체를 거부한다. provider-scoped 자동 폐쇄는 이번 설치 기능에서 제외한다. opaque custom adapters도 알려진 origin을 임의로 빼지 못한다.
 
 
 ## 실제 구현 결과와 범위 차이
 
-이 문서의 초기 계약은 native 자동 배포·복구까지 포함한 확장 계획이었다.
-현재 구현은 **호스팅 연결 마법사·GET 검사 템플릿·기존 reviewed adapter 연결**이다.
-초기 확장 계약 전체를 완료했다고 보고하지 않는다. 실제 결과는 HOSTING_CONNECTIONS.md 및
-아래 audit의 상태 표가 기준이다.
-
-1. 완료: 별도 hosting schema, plan/connect, 기본 브랜치 검사 CI, exact 로컬 SDK hook,
-   Secret 안내, AES-GCM 정상본, private gitignore 및 symlink 경계.
-2. 부분 완료: Workers/Pages/Vercel native API **조회** 및 전체 preview/alias 검사.
-   **미구현:** native deploy/rollback adapter 자동 생성·실제 호스팅 연결.
-3. 완료: CLI initialize/release가 기존 portable rollout·strong proof·정확한 operation 복구를 재사용.
-   **미구현:** 자동 origin 추가/폐쇄 증거 처리 및 CI baseline cache 전송 자동 설치.
-   기존 fixed-origin 계약은 변경하지 않았으며 inventory 변동 시 멈춘다.
-4. 완료: 기존 D04 웹 마법사·터미널 마법사, JSON/명령·Secret 안내, 실제 브라우저 검증.
-5. 완료: 관련 회귀, 실제 tarball3provider 실행, typecheck 및 fresh reviewer 수정.
-   **미실시:** GitHub push/npm publish/AUTH 또는 소비 사이트 운영 배포/native canary.
-
-Ruling: default 템플릿의 read-only 검사와 새 native 자동 운영 완성을 구분한다.
-이미 검토된 adapter가 없는 프로젝트는 manual template까지만 연결한다.
-미완성 native adapter를 생성하거나 강한 정상본 없이 자동 배포 가능으로 표시하지 않는다.
-후속 확장 작업은 위 미구현 항목을 구현하고 native canary를 수행해야 한다.
+- 구현: 마법사·hosting JSON·GET inventory·private 정상본·native Workers/Vercel adapter 자동 생성·CI encrypted cache restore/save.
+- 신규 deployment origin은 모두 검사하며 제거는 거부한다. 자동 삭제 기능은 제공하지 않는다. 정상 alias 복구 후 candidate 주소가 유출되면 recovery 실패다.
+- Pages native 쓰기와 provider-scoped 자동 폐쇄/삭제는 제외했다. Pages 및 다른 호스팅은 수동 검사 또는 reviewed custom adapter를 사용한다. 이 설치 마법사 작업에서 플랫폼 삭제를 묵시적으로 활성화하지 않는다.
+- 초기 검사 템플릿 단계는 17074fc 및443ed0a로 고정했다. 후속 native 구현의 증거는 audit2026-10-01-hosting-connections.md를 따른다.
+- 실제 계정 권한·GitHub CI·OAuth·canary·npm publish·AUTH/소비 사이트 배포는 미실시다. fixture 및 로컬 브라우저 검증은 운영 증거가 아니다.
+- 상용 전체 T11/T12 성능·운영 수용 한계는 이 작업으로 해소하지 않았다.
