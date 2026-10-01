@@ -170,7 +170,8 @@ export async function serveServerSession(request, env, settings) {
     for (const name of [ssoHandleCookie, ssoProofCookie, '__Host-nakwol_connect']) response.headers.append('Set-Cookie', ssoCookie(name, '', 0));
     return response;
   }
-  if (!['GET', 'HEAD'].includes(request.method)) return ssoResponse(null, 405);
+  const api = typeof env.NAKWOL_API_HANDLER === 'function';
+  if (!api && !['GET', 'HEAD'].includes(request.method)) return ssoResponse(null, 405);
   if (url.pathname === '/__nakwol/login') return ssoPage(request, 200, settings, ssoSafeReturn(url.searchParams.get('return_to'), origin), true);
   if (!validHandle) return ssoDeny(request, 401, settings);
   const id = ssoId(handle, env, settings); if (ssoIsRevoked(id)) return ssoDeny(request, 401, settings);
@@ -196,12 +197,12 @@ export async function serveServerSession(request, env, settings) {
     if (renewed) response.headers.append('Set-Cookie', renewed);
     return response;
   }
-  const asset = await env.ASSETS.fetch(request);
+  const asset = api ? await env.NAKWOL_API_HANDLER(request, {userId:activeProof.userId,clientId:activeProof.clientId,scopes:[],policyVersion:activeProof.policyVersion}) : await env.ASSETS.fetch(request);
   if (ssoIsRevoked(id)) return ssoDeny(request, 401, settings);
   const headers = new Headers(asset.headers);
   const observations=observeApproval(env,settings,activeProof);
   headers.set('X-Nakwol-Observations',observations?'background-v1':'unsupported');
-  headers.set('Cache-Control', asset.headers.has('ETag') && [200, 304].includes(asset.status) ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
+  headers.set('Cache-Control', !api && asset.headers.has('ETag') && [200, 304].includes(asset.status) ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
   headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', ')); headers.set('X-Nakwol-Gate', 'v1'); headers.set('X-Nakwol-Runtime', '0.14.0'); headers.set('X-Nakwol-Session-Mode', 'server-refresh-v1'); headers.set('X-Content-Type-Options', 'nosniff');
   if (renewed) headers.append('Set-Cookie', renewed);
   return new Response(asset.body, { status: asset.status, headers });

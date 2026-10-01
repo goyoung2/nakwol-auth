@@ -258,3 +258,7 @@ Adds `protect install --provider vercel` for static builds with full-path middle
 ### Service presentation (0.13 candidate)
 
 Owners edit their own service at AUTH `/developer/presentation`. `nakwol-connect/presentation` exports the shared schema validator and TypeScript declarations. Widget hidden does not weaken server protection. Existing gates need one protect update/redeploy to adopt the shared public renderer; supported brand-only updates then require no reinstall. Draft preview is owner-authenticated; public bootstrap contains only published brand data and caches for at most60s, never per asset. Full contract: repository docs/SERVICE_PRESENTATION.md. This is a local release candidate until publication/rollout is recorded.
+
+## 동적 API 보호
+
+공식 `nakwol-connect/server`의 `protectHandler`와 `authorizeRequest`는 기존 서버 세션 검증을 재사용합니다. 변경 요청의 CSRF, server-only principal, no-store와 갱신 쿠키를 처리하며, 덱 소유권은 서비스가 검사해야 합니다. 정적 자동 설치가 기존 API 라우팅까지 보호했다고 간주하면 안 됩니다. [서버 API 연결·원본 차단 안내](../../docs/SERVER_API_PROTECTION.md)를 따르세요. WebSocket/SSE는 미지원입니다.

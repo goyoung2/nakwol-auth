@@ -222,3 +222,7 @@ AUTH의 `/developer/apps`에서 현재 소유한 서비스의 권한 재확인 �
 ## 인증 화면 편집 (0.13 후보)
 
 서비스별 브랜드 설정은 [SERVICE_PRESENTATION.md](SERVICE_PRESENTATION.md)의 공개 published snapshot만 사용합니다. owner 초안/preview/이미지는 인증 범위 안에 유지합니다. official common gate의 두 로그인 모드가 같은 공개 렌더러를 사용하며 콘텐츠 요청의 인증 경로와 캐시를 변경하지 않습니다. 이미지300개와 같이 승인된 자산 요청에서는 presentation 조회0회입니다. 구0.12 이하 게이트는 최초 protect update/재배포가 필요하며 지원 renderer 설치 후 브랜드-only 게시로 세션을 폐기하거나 재설치하지 않습니다.
+
+## 서버 API를 함께 운영하는 서비스
+
+동적 API는 공식 [서버 API 보호 hook](SERVER_API_PROTECTION.md)의 `protectHandler`로 handler 실행 전에 검증합니다. 정적 생성 게이트와 동일한 쿠키·갱신을 사용하고, 서비스 소유권 검사는 별도로 연결합니다. 기존 API를 정적 설치기가 자동 변경하지 않으므로 라우팅·원본 API 폐쇄·두 사용자 소유권 검사를 확인해야 합니다. WebSocket/SSE는 지원하지 않습니다.
