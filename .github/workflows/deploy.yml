@@ -116,11 +116,12 @@ jobs:
           exit 1
       - name: Deploy existing Worker without replacing dashboard variables
         run: npx wrangler deploy --keep-vars
-      - name: Verify production AUTH and Connect v0.7 distribution
+      - name: Verify production AUTH and current Connect distribution
         shell: bash
         run: |
           set -euo pipefail
           origin='https://nakwol-auth.sepsd21.workers.dev'
+          expected_cli=$(node -p "require('./packages/connect-cli/package.json').version")
           for i in {1..18}; do
             hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
             ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.3.2/nakwol-auth-web.js" || true)
@@ -142,7 +143,7 @@ jobs:
                  grep -q '"default_auth":"required"' /tmp/connect-manifest && \
                  grep -q '"default_access_policy":"member"' /tmp/connect-manifest && \
                  grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
-                 grep -q '"version":"0.7.1"' /tmp/cli-manifest && \
+                 grep -Fq "\"version\":\"$expected_cli\"" /tmp/cli-manifest && \
                  grep -q '"default_auth":"required"' /tmp/cli-manifest && \
                  grep -q '"default_access_policy":"member"' /tmp/cli-manifest && \
                  grep -q 'init --auth optional' /tmp/cli-manifest && \
@@ -155,13 +156,13 @@ jobs:
                  grep -q 'OpenAPI' /tmp/llms && \
                  grep -q 'CLI 연결 승인' /tmp/device && \
                  test -s /tmp/cli-package; then
-                echo 'NAKWOL_CONNECT_V07_DEPLOY_OK'
+                echo 'NAKWOL_CONNECT_CURRENT_DEPLOY_OK'
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo '::error::NAKWOL Connect v0.7 deployment verification failed.'
+          echo '::error::NAKWOL Connect deployment verification failed.'
           echo '--- Connect manifest ---'
           cat /tmp/connect-manifest || true
           echo
