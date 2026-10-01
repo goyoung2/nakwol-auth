@@ -79,14 +79,20 @@ test('AUTH v0.2 release notes are a final release record with exact provenance',
   assert.match(notes, /no remaining formal release blocker/i);
 });
 
-test('production smoke covers AUTH 0.2, Connect 0.4 and DATA 0.9 without mutating device state', async () => {
+test('production smoke checks the deployed stable baseline without mutating device state', async () => {
   const workflow = await root('.github/workflows/production-smoke.yml');
 
-  assert.match(workflow, /AUTH v0\.2, Connect v0\.4 and DATA v0\.9/);
+  assert.match(workflow, /ref: stable[\s\S]*path: \.production-baseline/);
+  assert.match(workflow, /ensure-d1\.mjs --existing-only/);
   assert.match(workflow, /sdk\/v0\.2\.0\/nakwol-auth-web\.js/);
   assert.match(workflow, /\/account/);
   assert.match(workflow, /\/lab/);
-  assert.match(workflow, /NAKWOL Connect CLI v0\.4/);
+  assert.match(workflow, /PRODUCTION_CLI_VERSION/);
+  assert.match(workflow, /EXPECTED_CLI_VERSION/);
+  assert.match(workflow, /--package=file:\/tmp\/connect-cli\.tgz/);
+  assert.match(workflow, /cmp -s \/tmp\/sdk-expected-alias\.js \/tmp\/sdk-alias\.js/);
+  assert.match(workflow, /\[ "\$account_api" = '401' \]/);
+  assert.match(workflow, /\[ "\$lab_api" = '401' \]/);
   assert.match(workflow, /"version":"0\.9\.0"/);
   assert.match(workflow, /nakwol-account-center/);
   assert.match(workflow, /nakwol-auth-lab/);

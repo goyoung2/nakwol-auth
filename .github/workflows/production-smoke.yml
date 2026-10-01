@@ -101,7 +101,8 @@ jobs:
           cmp -s .production-baseline/src/assets/nakwol-auth-web.js.txt /tmp/sdk-v01.js
           cmp -s .production-baseline/src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-v02.js
           cmp -s ".production-baseline/src/assets/nakwol-auth-web-v$sdk_version.js.txt" /tmp/sdk-stable.js
-          cmp -s /tmp/sdk-stable.js /tmp/sdk-alias.js
+          node -e "const fs=require('fs'); fs.writeFileSync('/tmp/sdk-expected-alias.js',fs.readFileSync('/tmp/sdk-stable.js','utf8').replaceAll('../v0.3.1/nakwol-auth-web.js','./v0.3.1/nakwol-auth-web.js'))"
+          cmp -s /tmp/sdk-expected-alias.js /tmp/sdk-alias.js
 
           grep -q 'nakwol-account-center' /tmp/account.html
           grep -q '내 낙월 계정' /tmp/account.html
