@@ -52,6 +52,9 @@ export function registerServiceManagementRoutes(app: Hono<{ Bindings: Env }>): v
     const actor = await authenticateServiceActor(c), clientId = c.req.param('clientId'), operationId = c.req.param('operationId');
     await requireServiceOwner(c.env, actor, clientId);
     await requireAppTarget(c.env, clientId, { ...c.req.query(), operationId });
-    return c.env.DB.prepare('SELECT id AS operationId, version AS policyVersion, created_at AS createdAt, delivery_status AS deliveryStatus FROM auth_policy_operations WHERE id=? AND scope=?').bind(operationId, `app:${clientId}`).first();
+    const operation=await c.env.DB.prepare('SELECT id AS operationId, version AS policyVersion, created_at AS createdAt, delivery_status AS deliveryStatus FROM auth_policy_operations WHERE id=? AND scope=?').bind(operationId, `app:${clientId}`).first();
+    if(!operation)throw new ServiceManagementError('NOT_FOUND',404);
+    const receipts=await c.env.DB.prepare('SELECT client_id AS clientId,operation_id AS operationId,seq AS version,status AS deliveryStatus,published_at AS publishedAt,observed_at AS observedAt FROM gate_control_outbox WHERE policy_operation_id=? AND client_id=? ORDER BY seq DESC LIMIT 1').bind(operationId,clientId).all();
+    return {...operation,clientId,control:{receipts:receipts.results,legacyRuntimeSupported:false},siteProfile:'unconfirmed',allUsersObserved:false};
   }));
 }

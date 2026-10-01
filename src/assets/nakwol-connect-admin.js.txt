@@ -181,7 +181,7 @@ function getFormData() {
     redirect_uris: String(fd.get('redirect_uris') || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
     framework: String(fd.get('framework') || 'other'),
     access_policy: String(ui.form.elements.namedItem('access_policy').value || 'member'),
-    status: String(fd.get('status') || 'active'),
+    ...(state.creating ? {status: String(fd.get('status') || 'active')} : {}),
   };
 }
 
@@ -194,6 +194,8 @@ function fillForm(app) {
   setField('access_policy', app?.access_policy || 'member');
   ui.form.elements.namedItem('access_policy').disabled = Boolean(app && !state.creating);
   setField('status', app?.status || 'active');
+  ui.form.elements.namedItem('status').disabled = Boolean(app && !state.creating);
+  $('#app-status-help').hidden = state.creating;
   const clientField = ui.form.elements.namedItem('client_id');
   clientField.readOnly = Boolean(app && !state.creating);
 }
@@ -525,6 +527,8 @@ ui.refreshEvents.addEventListener('click', () => loadEvents().catch((error) => r
     }
     const usersReturn = sessionStorage.getItem('nakwol.developer.users.return');
     if (usersReturn !== null) { sessionStorage.removeItem('nakwol.developer.users.return'); location.replace('/developer/users' + (usersReturn ? '?client_id='+encodeURIComponent(usersReturn) : '')); return; }
+    const setupReturn = sessionStorage.getItem('nakwol.developer.setup.return');
+    if (setupReturn !== null) { sessionStorage.removeItem('nakwol.developer.setup.return'); location.replace('/developer/setup' + (/^[a-z0-9][a-z0-9-]{0,63}$/.test(setupReturn) ? '?client_id='+encodeURIComponent(setupReturn) : '')); return; }
     const developerReturn = sessionStorage.getItem('nakwol.developer.return');
     if (developerReturn !== null) { sessionStorage.removeItem('nakwol.developer.return'); location.replace('/developer/apps' + (developerReturn ? '?client_id='+encodeURIComponent(developerReturn) : '')); return; }
     await loadSession();
