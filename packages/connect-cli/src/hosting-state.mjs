@@ -1,10 +1,11 @@
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
+export const MAX_HOSTING_EVIDENCE_BYTES=8*1024*1024;
 const context=binding=>JSON.stringify({schemaVersion:1,clientId:binding.clientId,siteOrigin:binding.siteOrigin,provider:binding.provider,resourceId:binding.resourceId,accountId:binding.accountId,teamId:binding.teamId});
 function key(value){if(!/^[a-fA-F0-9]{64}$/.test(value||''))throw new Error('NAKWOL_RELEASE_STATE_KEY must be a private 32-byte hex key.');return Buffer.from(value,'hex');}
 export function sealHostingState(binding,state,secret){
  const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key(secret),iv);cipher.setAAD(Buffer.from(context(binding)));
  const encrypted=Buffer.concat([cipher.update(JSON.stringify(state)),cipher.final()]);
- if(encrypted.length>8*1024*1024)throw new Error('Hosting baseline exceeds 8 MiB.');
+ if(encrypted.length>MAX_HOSTING_EVIDENCE_BYTES)throw new Error('Hosting baseline exceeds 8 MiB.');
  return JSON.stringify({schemaVersion:1,iv:iv.toString('hex'),tag:cipher.getAuthTag().toString('hex'),data:encrypted.toString('base64')});
 }
 export function openHostingState(binding,encoded,secret){

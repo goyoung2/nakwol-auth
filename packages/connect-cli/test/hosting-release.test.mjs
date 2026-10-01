@@ -7,6 +7,7 @@ import {connectHosting,verifyHosting} from '../src/hosting-connection.mjs';
 import {initializeHosting,releaseHosting} from '../src/hosting-release.mjs';
 import {RUNTIME_VERSION} from '../src/server/gate.mjs';
 import {openHostingState,sealHostingState} from '../src/hosting-state.mjs';
+import {validateAutomaticConfig} from '../src/portable-rollout.mjs';
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'nakwol-hosting-release-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await mkdir(join(root,'dist'));await mkdir(join(root,'ops'));await writeFile(join(root,'index.html'),'<body></body>');await writeFile(join(root,'dist/index.html'),'PRIVATE-HOSTING-BYTES');
@@ -57,4 +58,18 @@ test('sealed complete evidence remains readable when pretty printing alone excee
  assert.ok(Buffer.byteLength(JSON.stringify(state.report,null,2))>4*1024*1024);
  await writeFile(file,sealHostingState(binding,state,process.env.NAKWOL_RELEASE_STATE_KEY));
  const result=await releaseHosting(f);assert.equal(result.status,'release-verified');assert.equal((await f.state()).writes,1);
+});
+
+test('restored report shares the bounded sealed-state budget and still rejects oversized evidence',async t=>{
+ const f=await fixture(t);await initializeHosting(f);
+ const file=join(f.root,'.nakwol/reports/hosting/baseline.enc'),binding=JSON.parse(await readFile(join(f.root,'.nakwol/hosting.json'),'utf8'));
+ const state=openHostingState(binding,await readFile(file,'utf8'),process.env.NAKWOL_RELEASE_STATE_KEY);
+ state.report.auditNotes='x'.repeat(5*1024*1024);
+ assert.ok(Buffer.byteLength(JSON.stringify(state.report))>4*1024*1024);
+ await writeFile(file,sealHostingState(binding,state,process.env.NAKWOL_RELEASE_STATE_KEY));
+ const result=await releaseHosting(f);assert.equal(result.status,'release-verified');assert.equal((await f.state()).writes,1);
+ state.report.auditNotes='x'.repeat(8*1024*1024);
+ assert.throws(()=>sealHostingState(binding,state,process.env.NAKWOL_RELEASE_STATE_KEY),/exceeds 8 MiB/);
+ await writeFile(join(f.root,'.nakwol/reports/hosting/previous-report.json'),JSON.stringify(state.report));
+ await assert.rejects(validateAutomaticConfig(f.root,await readProjectConfig(f.root)),/size limit/);
 });

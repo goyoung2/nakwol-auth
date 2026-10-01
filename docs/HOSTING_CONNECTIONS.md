@@ -98,6 +98,7 @@ JSON에 주소를 적는 것만으로 보호되지 않습니다. GitHub Pages에
 
 HTML·JS/CSS·JSON·이미지·폰트·GET/HEAD/Range 보호는 유지합니다. lease/hot path/cache 정책은 이 기능으로 변경하지 않습니다.
 자동 검사는 origin 최대100개, 파일당1MiB로 제한되며 초과 시 수동 검증이 필요합니다.
+봉인 정상본의 평문 전체와 자동 검증 JSON은 각각8MiB로 제한합니다. 기존 봉인 상한8MiB와 불일치했던 report 읽기 상한4MiB를8MiB로 맞췄습니다. 복원 시 들여쓰기를 추가하지 않으며 모든 증명 항목을 유지합니다. 다수의 과거 origin과 파일로 증명이 이 한도를 넘으면 자동 배포를 진행하지 말고 수동 검증·복구 경로를 사용하세요. 이 변경은 인증이나 세션 유효 기간의 완화가 아닙니다.
 실제 계정 배포와 OAuth·GitHub 운영 CI는 별도 canary가 남아 있습니다. 구현·fixture 통과를 운영 검증으로 표현하지 않습니다.
 
 참조: [Workers 배포 API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/),

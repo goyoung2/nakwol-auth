@@ -6,6 +6,7 @@ import {readProjectConfig} from './config.mjs';
 import {readProtectionManifest,sha256} from './protection-inventory.mjs';
 import {assetInventory,generatedAssetPaths,siteUrl} from './protection.mjs';
 import {verifyProtection} from './protection-verify.mjs';
+import {MAX_HOSTING_EVIDENCE_BYTES} from './hosting-state.mjs';
 
 const id=/^[\w.-]{1,200}$/;
 const envName=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
@@ -21,7 +22,7 @@ async function localFile(root,name) {
 }
 async function jsonFile(file) {
   const bytes=await readFile(file);
-  if(bytes.length>4*1024*1024) throw new Error('Automatic evidence exceeds its size limit.');
+  if(bytes.length>MAX_HOSTING_EVIDENCE_BYTES) throw new Error('Automatic evidence exceeds its size limit.');
   return JSON.parse(bytes);
 }
 export async function readAutomaticConnection(root,config) {
