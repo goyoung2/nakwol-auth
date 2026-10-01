@@ -21,3 +21,32 @@ test('300 images across 10 isolates coalesce in background with bounded outage c
     console.log(JSON.stringify({images:300,isolates:10,transmissions:calls,bytes,schedulingMs,schedulingCpuMs,outageAttempts:failed,dropped:outage.observationMetrics().dropped}));
   }finally{globalThis.fetch=original;}
 });
+
+test('successful observation flushes retain no empty binding records',async t=>{
+  const mod=await import('../src/server/observations.mjs?successful-bindings');
+  t.mock.method(globalThis,'fetch',async()=>Response.json({ok:true}));
+  const proof={sessionId:'session',userId:'user',verifiedAt:Date.now()-1,leaseUntil:Date.now()+300000};
+  for(let i=0;i<300;i++){
+    let task;
+    mod.observeApproval({NAKWOL_SITE_CREDENTIAL:'credential-'+i,NAKWOL_WAIT_UNTIL:p=>task=p},{clientId:'app-'+i,siteUrl:'https://site.test/',authOrigin:'https://auth.test'},proof);
+    await task;
+    assert.equal(mod.observationMetrics().dropBindings,0,'a delivered binding with zero dropped events must be removed');
+  }
+  assert.equal(mod.observationMetrics().sent,300);assert.equal(mod.observationMetrics().queued,0);
+});
+
+test('failed observation bindings stay capped and successful retry drains their counts',async t=>{
+  const mod=await import('../src/server/observations.mjs?failed-bindings');
+  let outage=true,retainedDrop;
+  t.mock.method(globalThis,'fetch',async(_input,init)=>{if(outage)return new Response(null,{status:503});retainedDrop=JSON.parse(init.body).dropped;return Response.json({ok:true});});
+  const proof={sessionId:'session',userId:'user',verifiedAt:Date.now()-1,leaseUntil:Date.now()+300000};
+  for(let i=0;i<300;i++){
+    let task;
+    mod.observeApproval({NAKWOL_SITE_CREDENTIAL:'credential-'+i,NAKWOL_WAIT_UNTIL:p=>task=p},{clientId:'app-'+i,siteUrl:'https://site.test/',authOrigin:'https://auth.test'},proof);
+    await task;
+    assert.ok(mod.observationMetrics().dropBindings<=128);
+  }
+  assert.equal(mod.observationMetrics().dropBindings,128);outage=false;let task;
+  mod.observeApproval({NAKWOL_SITE_CREDENTIAL:'credential-299',NAKWOL_WAIT_UNTIL:p=>task=p},{clientId:'app-299',siteUrl:'https://site.test/',authOrigin:'https://auth.test'},{...proof,userId:'next-user'});
+  await task;assert.equal(retainedDrop,1);assert.equal(mod.observationMetrics().dropBindings,127);
+});

@@ -152,6 +152,8 @@ server-session 모드의 승인된 asset 응답에서만 앱·사용자·5분 �
 
 isolate 큐128건, batch50건, 작업당3batch, timeout2초/재시도1회/drop 집계로 제한합니다. 수신 API는 site credential app/origin과 승인된 session을 검사하고 user identity를 중앙 session에서 도출합니다. 다중 isolate 전송은 허용하며 수신 upsert가 같은 앱/사용자/5분 구간을 합칩니다. 장애/포화/누락이 승인 결과를 변경하거나 자산마다 동기 중앙 쓰기를 만들면 안 됩니다. 마지막 관측은 온라인 상태가 아닙니다. 기존 authorization lease와 cache/security 계약은 유지합니다.
 
+drop 집계는 isolate당 최대128개 binding에 한정하고, 성공적으로 전달한 집계의 남은 값이0이면 삭제합니다. 전송 중 새로 생긴 drop은 다음 batch에 전달하며 binding 식별자나 credential을 진단 지표에 노출하지 않습니다.
+
 ## 선택형 빠른 차단 전파 (0.11.0)
 
 `bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](../../docs/BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.

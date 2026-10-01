@@ -106,7 +106,8 @@ async function ssoRefresh(handle, proof, env, settings, minimumControl=0) {
   const id = ssoId(handle, env, settings);
   if (ssoIsRevoked(id)) return { status: 401 };
   const failure=ssoFailures.get(id);
-  if(minimumControl>0&&failure?.until>Date.now()&&failure.controlVersion===minimumControl)return {status:failure.status};
+  if(failure?.until>Date.now()&&failure.controlVersion===minimumControl)return {status:failure.status};
+  ssoFailures.delete(id);
   const cached = ssoCompleted.get(id);
   if (cached?.session.leaseUntil > Date.now() && (cached.session.controlVersion??0)>=minimumControl && cached.session.generation >= (proof?.generation ?? 0)) return cached;
   if (ssoPending.has(id)) return ssoPending.get(id);
@@ -114,9 +115,8 @@ async function ssoRefresh(handle, proof, env, settings, minimumControl=0) {
   ssoCompleted.delete(id);
   const task = ssoRemote('session/refresh', { session_id: handle.sessionId, handle: handle.handle, expected_generation: proof?.generation ?? 0 }, env, settings).then(result => {
     if (ssoIsRevoked(id)) return { status: 401 };
-    if(minimumControl>0&&[401,403].includes(result.status))ssoRemember(ssoFailures,id,{status:result.status,until:Date.now()+30000,controlVersion:minimumControl});
-    if (result.status === 200 && (!ssoValidProof(result.session, settings, handle) || result.session.leaseUntil <= Date.now())) return { status: 503 };
-    if(result.status===200 && (result.session.controlVersion??0)<minimumControl)return {status:503};
+    if (result.status === 200 && (!ssoValidProof(result.session, settings, handle) || result.session.leaseUntil <= Date.now() || (result.session.controlVersion??0)<minimumControl)) result={status:503};
+    if(result.status!==200)ssoRemember(ssoFailures,id,{status:result.status,until:Date.now()+(minimumControl>0&&[401,403].includes(result.status)?30000:1000),controlVersion:minimumControl});
     if (result.status === 200) ssoRemember(ssoCompleted, id, result);
     return result;
   }).finally(() => ssoPending.delete(id));

@@ -3,7 +3,7 @@ const observationDrops=new Map();
 const observationStats={scheduled:0,sent:0,dropped:0,bytes:0,supported:false};
 let observationPending=false;
 function observationDrop(binding,count){observationStats.dropped+=count;if(!observationDrops.has(binding)&&observationDrops.size>=128)observationDrops.delete(observationDrops.keys().next().value);observationDrops.set(binding,Math.min(1000000,(observationDrops.get(binding)||0)+count));}
-export function observationMetrics(){return {...observationStats,queued:observationQueue.size};}
+export function observationMetrics(){return {...observationStats,queued:observationQueue.size,dropBindings:observationDrops.size};}
 async function observationFlush(){
   try{
     let batches=0;
@@ -19,7 +19,7 @@ async function observationFlush(){
         try{const result=await fetch(new URL('/server/v1/observations',first.authOrigin),{method:'POST',headers:{Authorization:'Bearer '+first.credential,'Content-Type':'application/json'},body,cache:'no-store',redirect:'manual',signal:AbortSignal.timeout(2000)});sent=result.status===200;await result.body?.cancel();}
         catch(error){if(!(error instanceof Error))throw error;}
       }
-      if(sent){observationStats.sent+=batch.length;observationDrops.set(first.binding,Math.max(0,(observationDrops.get(first.binding)||0)-dropped));}else observationDrop(first.binding,batch.length);
+      if(sent){observationStats.sent+=batch.length;const remaining=Math.max(0,(observationDrops.get(first.binding)||0)-dropped);if(remaining)observationDrops.set(first.binding,remaining);else observationDrops.delete(first.binding);}else observationDrop(first.binding,batch.length);
     }
     for(const item of observationQueue.values())observationDrop(item.binding,1);observationQueue.clear();
   }finally{observationPending=false;}
