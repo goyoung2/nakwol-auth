@@ -19,7 +19,8 @@ async function fixture(t){
  const file=join(root,'nakwol-hosting.json');await writeFile(file,JSON.stringify(binding));await connectHosting({root,hostingFile:file});
  for(const [name,value]of Object.entries({CLOUDFLARE_API_TOKEN:'private-fixture-token',NAKWOL_RELEASE_STATE_KEY:'a'.repeat(64),NAKWOL_HOSTING_TEST_COOKIE:'session=member'})){const old=process.env[name];process.env[name]=value;t.after(()=>{if(old===undefined)delete process.env[name];else process.env[name]=old;});}
  const state=async()=>JSON.parse(await readFile(stateFile,'utf8')),change=async patch=>writeFile(stateFile,JSON.stringify({...await state(),...patch}));let probes=0;
- const server=createServer(async(req,res)=>{probes++;const current=await state();if(current.deploymentId===current.badDeploymentId&&current.mode==='outage'){res.writeHead(503);res.end();return;}if(req.headers.cookie==='session=member'){res.writeHead(200);res.end('PRIVATE-HOSTING-BYTES');return;}res.writeHead(401,{'X-Nakwol-Gate':'v1','X-Nakwol-Runtime':RUNTIME_VERSION,'Cache-Control':'private, no-store'});res.end('denied');});
+ let recoveryProbes=0;
+ const server=createServer(async(req,res)=>{probes++;const current=await state();if(current.deploymentId===current.badDeploymentId&&current.mode==='outage'){res.writeHead(503);res.end();return;}if(req.headers.cookie==='session=member'){res.writeHead(200);res.end('PRIVATE-HOSTING-BYTES');return;}const lag=current.deploymentId.startsWith('recovery-')&&recoveryProbes++<(current.recoveryLagProbes||0);res.writeHead(401,{'X-Nakwol-Gate':'v1','X-Nakwol-Runtime':lag?'0.0.0':RUNTIME_VERSION,'Cache-Control':'private, no-store'});res.end('denied');});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
  const verificationFetchImpl=(url,init)=>{const parsed=new URL(url);return fetch('http://127.0.0.1:'+server.address().port+parsed.pathname+parsed.search,init);};
  const fetchImpl=async(url,init)=>{assert.equal(init.method,'GET');const value=String(url).endsWith('/deployments')?{deployments:[{id:(await state()).deploymentId,versions:[{version_id:'version',percentage:100}]}]}:String(url).endsWith('/scripts/site/subdomain')?{enabled:false,previews_enabled:false}:[];return new Response(JSON.stringify({success:true,result:value}));};
@@ -39,4 +40,9 @@ test('invalid key/state and locked operation never deploy; normal cookie checks 
  const lock=join(f.root,'.nakwol/reports/hosting/operation.lock');await writeFile(lock,'owner');await assert.rejects(releaseHosting(f),/EEXIST/);assert.equal((await f.state()).writes,0);await rm(lock);
  const old=process.env.NAKWOL_PROBE_SESSION;process.env.NAKWOL_PROBE_SESSION='session=wrong';t.after(()=>{if(old===undefined)delete process.env.NAKWOL_PROBE_SESSION;else process.env.NAKWOL_PROBE_SESSION=old;});
  const proof=await verifyHosting(f);assert.equal(proof.ok,false);assert.equal(proof.releaseAccepted,false);assert.equal(proof.status,'normal-member-check-failed');
+});
+
+test('recovery waits for a blocked stale edge to converge and still requires complete final proof',async t=>{
+ const f=await fixture(t);await initializeHosting(f);await f.change({mode:'outage',badDeploymentId:'new-1',recoveryLagProbes:8});
+ const result=await releaseHosting(f);assert.equal(result.status,'recovery-verified');assert.equal(result.releaseAccepted,false);assert.equal(result.recoveryVerified,true);assert.equal(result.recoveryVerification.checks.every(c=>c.ok),true);assert.equal((await f.state()).writes,2);
 });

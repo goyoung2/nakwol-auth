@@ -131,6 +131,17 @@ export async function runRollout(options={}) {
     return journal;
   };
   const verify=async(manifestFile,manifest)=>verifyProtection({root,provider:'custom',url:config.protection.siteUrl,manifest:manifestFile,deploymentId:manifest.deploymentId,expectRuntime:manifest.runtimeVersion,sessionCookieEnv:policy.sessionCookieEnv,alternateOrigins:base.origins.filter(origin=>origin!==config.protection.siteUrl).join(','),fetchImpl:options.fetchImpl || globalThis.fetch});
+  async function verifyConverged(file,manifest,expectedDeploymentId) {
+    for(let attempt=0;attempt<3;attempt++) {
+      const proof=await verify(file,manifest);
+      // Retry edge propagation only while every anonymous path remains blocked.
+      // Exposure, incomplete evidence and inventory conflicts require recovery.
+      if(proof.releaseAccepted||attempt===2||!proof.checks?.length||!proof.checks.every(check=>check.authorizationBlocked===true))return proof;
+      const live=await current();
+      if(live.deploymentId!==expectedDeploymentId||live.operationId!==operationId||JSON.stringify(live.origins)!==JSON.stringify(proof.origins?.slice().sort()))return proof;
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+  }
   const baseline=await verify(connection.manifestFile,previous);
   if(!baseline.releaseAccepted) return save({status:'baseline-rejected',baselineVerification:baseline});
   const baselineAfter=await current();
@@ -157,7 +168,7 @@ export async function runRollout(options={}) {
   try {
     await writeFile(candidateFile,JSON.stringify(boundCandidate,null,2)+'\n',{flag:'wx',mode:0o600});
     if((await current()).deploymentId!==deployed.deploymentId) return save({status:'deployment-conflict'});
-    verification=await verify(candidateFile,boundCandidate);
+    verification=await verifyConverged(candidateFile,boundCandidate,deployed.deploymentId);
     const after=await current();
     if(after.deploymentId!==deployed.deploymentId || after.operationId!==operationId || JSON.stringify(after.origins)!==JSON.stringify(verification.origins?.slice().sort())) return save({status:'deployment-conflict',failedVerification:verification});
     if(verification.releaseAccepted) {
@@ -181,7 +192,7 @@ export async function runRollout(options={}) {
       if(serving.deploymentId!==restored.deploymentId || serving.operationId!==operationId) return save({status:'recovery-conflict'});
       const file=output+'.recovery-manifest.json',manifest={...previous,deploymentId:restored.deploymentId};delete manifest.manifestHash;
       await writeFile(file,JSON.stringify(manifest,null,2)+'\n',{flag:'wx',mode:0o600});
-      const proof=await verify(file,manifest),after=await current();
+      const proof=await verifyConverged(file,manifest,restored.deploymentId),after=await current();
       if(after.deploymentId!==restored.deploymentId || after.operationId!==operationId || JSON.stringify(after.origins)!==JSON.stringify(proof.origins?.slice().sort())) return save({status:'recovery-conflict',recoveryVerification:proof});
       return save({ok:false,releaseAccepted:false,status:proof.releaseAccepted?'recovery-verified':'recovery-failed',recoveryVerified:proof.releaseAccepted,recoveryDeploymentId:restored.deploymentId,recoveryVerification:proof});
     } catch {return save({ok:false,releaseAccepted:false,status:'recovery-indeterminate',recoveryVerified:false});}

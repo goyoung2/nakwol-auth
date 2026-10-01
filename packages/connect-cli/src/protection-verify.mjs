@@ -94,9 +94,10 @@ export async function verifyProtection(options = {}) {
         const canaries = manifest?.files.filter(f => f.canary).map(f => f.canary) || [];
         const leaked = canaries.some(canary => body.bytes.includes(Buffer.from(canary))) || (file && file.size > 0 && body.complete && sha256(body.bytes) === file.sha256);
         const exposed = leaked || (res.status >= 200 && res.status < 300) || res.status === 304;
-        const blocked = (!expectedRuntime || observedRuntime === expectedRuntime) && [401, 403].includes(res.status) && res.headers.get('X-Nakwol-Gate') === 'v1' && noStore && body.complete && !leaked;
+        const authorizationBlocked = [401, 403].includes(res.status) && res.headers.get('X-Nakwol-Gate') === 'v1' && noStore && body.complete && !leaked;
+        const blocked = (!expectedRuntime || observedRuntime === expectedRuntime) && authorizationBlocked;
         const classification = exposed ? 'exposed' : blocked ? 'blocked' : 'indeterminate';
-        checks[index] = { name: `${origin.slice(0, -1)}${path} ${variant.name}`, origin, ok: blocked, classification, bodyComplete: body.complete, status: res.status, contentType: res.headers.get('Content-Type'), detail: `HTTP ${res.status}; gate=${res.headers.get('X-Nakwol-Gate') || 'missing'}; no-store=${noStore}; runtime=${observedRuntime || 'unknown'}; classification=${classification}; bodyComplete=${body.complete}` };
+        checks[index] = { name: `${origin.slice(0, -1)}${path} ${variant.name}`, origin, ok: blocked, classification, authorizationBlocked, bodyComplete: body.complete, status: res.status, contentType: res.headers.get('Content-Type'), detail: `HTTP ${res.status}; gate=${res.headers.get('X-Nakwol-Gate') || 'missing'}; no-store=${noStore}; runtime=${observedRuntime || 'unknown'}; classification=${classification}; bodyComplete=${body.complete}` };
         if (res.status >= 300 && res.status < 400 && res.headers.get('Location')) {
           const target = new URL(res.headers.get('Location'), url);
           // Only the already approved origin is probed; no cookies are forwarded.
