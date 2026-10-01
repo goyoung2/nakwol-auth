@@ -90,7 +90,7 @@ function adminPage(): string {
             <div class="field full"><label>Redirect URI</label><textarea name="redirect_uris" required placeholder="https://example.pages.dev/\nhttps://preview.example.dev/"></textarea><small>한 줄에 하나. 로그인 후 돌아올 정확한 URL입니다.</small></div>
             <div class="field"><label>개발 환경</label><select name="framework"><option value="vite">Vite</option><option value="react">React</option><option value="vue">Vue</option><option value="cra">Create React App</option><option value="next_app">Next.js App Router</option><option value="next_pages">Next.js Pages Router</option><option value="sveltekit">SvelteKit</option><option value="html">일반 HTML</option><option value="other">기타</option></select></div>
             <div class="field"><label>접근 정책 · 기존 앱은 <a href="/developer/apps">정책 관리</a>에서 변경</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
-            <div class="field"><label>상태</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select></div>
+            <div class="field"><label>상태 · 기존 앱은 조회만 가능</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select><small id="app-status-help">기존 앱의 상태 변경은 아래 관리자 조치의 서비스 잠금·서비스 잠금 해제로 진행하세요.</small></div>
           </div>
           <div class="actions"><button id="reset-app" class="ghost" type="button">되돌리기</button><button id="save-app" class="primary" type="submit">저장</button></div>
         </form>
@@ -301,14 +301,15 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!existing) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: '앱을 찾을 수 없습니다.' } }, 404);
     if ([ADMIN_CLIENT_ID, 'nakwol-auth-selftest'].includes(clientId)) return c.json({ ok: false, error: { code: 'SYSTEM_APP', message: '시스템 앱은 여기서 수정할 수 없습니다.' } }, 403);
     const raw = await c.req.json().catch(() => ({}));
-    const normalized = normalizeAppInput(raw, clientId);
+    const normalized = normalizeAppInput({ ...raw, status: raw?.status ?? existing.status }, clientId);
     if (!normalized.value) return c.json({ ok: false, error: { code: 'INVALID_APP', message: normalized.error } }, 400);
     const v = normalized.value;
     if (v.accessPolicy !== existing.access_policy) return c.json({ok:false,error:{code:'POLICY_WORKFLOW_REQUIRED',message:'접근 정책은 정책 관리 화면에서 영향 확인과 사유를 남겨 변경하세요.'}},409);
+    if (v.status !== existing.status) return c.json({ ok: false, error: { code: 'APP_STATUS_WORKFLOW_REQUIRED', message: '앱 잠금·해제는 운영자 조치 화면의 영향 확인·감사 절차로 변경하세요.' } }, 409);
     const now = Date.now();
     await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, status = ?, updated_at = ? WHERE client_id = ?`)
-        .bind(v.name, JSON.stringify(v.redirectUris), v.status, now, clientId),
+      c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, updated_at = ? WHERE client_id = ?`)
+        .bind(v.name, JSON.stringify(v.redirectUris), now, clientId),
       c.env.DB.prepare(
         `INSERT INTO application_settings(client_id, homepage_url, framework, access_policy, owner_user_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)

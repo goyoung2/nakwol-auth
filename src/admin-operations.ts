@@ -103,7 +103,10 @@ async function stateOf(env:Env,clientId:string,input:AdminAction) {
 export async function previewAdminAction(env:Env,actor:Operator,clientId:string,input:AdminAction) {
   const version=await versionOf(env),before=await stateOf(env,clientId,input),previewToken='op_'+randomToken(24),now=Date.now();
   if(input.action==='reauthenticate'&&before.target?.user_id===actor.userId)throw new AdminOperationError('SELF_REAUTH_FORBIDDEN',409);
-  const count=await env.DB.prepare(`SELECT COUNT(*) AS count FROM server_sessions WHERE (? IS NULL OR user_id=?) AND (?='global' OR client_id=?) AND revoked_at IS NULL AND idle_expires_at>? AND absolute_expires_at>?`).bind(before.target?.user_id??null,before.target?.user_id??null,input.action==='reauthenticate'?'global':input.scope,clientId,now,now).first<{count:number}>();
+  const appWide = input.action === 'lock-app' || input.action === 'unlock-app' || input.action === 'restore-policy';
+  const sessionId = input.action === 'revoke-session' ? input.sessionId ?? null : null;
+  const count = appWide || before.target ? await env.DB.prepare(`SELECT COUNT(*) AS count FROM server_sessions WHERE (?=1 OR user_id=?) AND (?='global' OR client_id=?) AND (? IS NULL OR id=?) AND revoked_at IS NULL AND idle_expires_at>? AND absolute_expires_at>?`)
+    .bind(appWide ? 1 : 0, before.target?.user_id ?? null, input.action === 'reauthenticate' ? 'global' : input.scope, clientId, sessionId, sessionId, now, now).first<{count:number}>() : null;
   await env.DB.batch([
     env.DB.prepare('DELETE FROM admin_operation_previews WHERE expires_at<=?').bind(now),
     env.DB.prepare('INSERT INTO admin_operation_previews VALUES(?,?,?,?,?,?,?)').bind(previewToken,actor.userId,clientId,version,JSON.stringify(input),JSON.stringify(before),now+300000),
