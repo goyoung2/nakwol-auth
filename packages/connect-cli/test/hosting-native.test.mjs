@@ -9,7 +9,7 @@ async function fixture(t,provider){
   if(provider==='cloudflare-workers'){
    if(target.pathname.endsWith('/subdomain'))result={enabled:false,previews_enabled:false};
    else if(target.pathname.endsWith('/domains'))result=[];
-   else if(target.pathname.endsWith('/versions/new-version'))result={id:'new-version',metadata:{annotations:{'workers/message':'nakwol:'+operationId+':'+'a'.repeat(64)+':0.14.0'}}};
+   else if(target.pathname.endsWith('/versions/new-version'))result={id:'new-version',metadata:{source:'wrangler'},annotations:{'workers/message':'nakwol:'+(foreign?'foreign-operation':operationId)+':'+'a'.repeat(64)+':0.14.0'}};
    else if(target.pathname.endsWith('/deployments/old'))result={id:'old',created_on:'2026-01-01T00:00:00Z',versions:[{version_id:'old-version',percentage:100}]};
    else if(options.method==='POST'){writes++;active=version==='old-version'?'new':'recovered';version=JSON.parse(options.body).versions[0].version_id;result={id:active};}
    else result={deployments:[{id:active,created_on:'2026-02-01T00:00:00Z',versions:[{version_id:version,percentage:100}],annotations:{'workers/message':operationId?'nakwol:'+operationId:''}}]};
@@ -40,3 +40,9 @@ test('native adapter never writes on stale expected ID, lost lease or a change d
  await rm(join(f.root,'.nakwol/reports/hosting/operation.lock'));await assert.rejects(f.adapter({...input,expectedDeploymentId:'foreign-current'}),/lease|lock/);assert.equal(f.writes(),0);
 });
 test('Vercel foreign artifact is rejected before promotion',async t=>{const f=await fixture(t,'vercel');f.foreign();await assert.rejects(f.adapter({action:'deploy',operationId:'operation-1',expectedDeploymentId:'old',buildHash:'a'.repeat(64),runtimeVersion:'0.14.0'}),/binding|project/);assert.equal(f.writes(),0);});
+
+test('Cloudflare top-level annotation from a foreign operation is rejected before promotion',async t=>{
+ const f=await fixture(t,'cloudflare-workers');f.foreign();
+ await assert.rejects(f.adapter({action:'deploy',operationId:'operation-1',expectedDeploymentId:'old',buildHash:'a'.repeat(64),runtimeVersion:'0.14.0'}),/binding/);
+ assert.equal(f.writes(),0);
+});

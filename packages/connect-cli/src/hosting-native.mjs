@@ -55,7 +55,7 @@ export function createNativeHostingAdapter(document,options={}){
   if(request.action==='deploy'){
    const upload=options.uploadImpl||(await import('./hosting-upload.mjs')).uploadNativeCandidate;
    const uploaded=await upload({...request,binding,root,apiToken:credential}),artifactId=checkedId(uploaded?.id);
-   if(workers){const artifact=await api(resource+'/versions/'+artifactId);if(artifact.id!==artifactId||artifact.metadata?.annotations?.['workers/message']!==`nakwol:${request.operationId}:${request.buildHash}:${request.runtimeVersion}`)throw new Error('Native Worker upload artifact binding is invalid.');}
+   if(workers){const artifact=await api(resource+'/versions/'+artifactId);if(artifact.id!==artifactId||artifact.annotations?.['workers/message']!==`nakwol:${request.operationId}:${request.buildHash}:${request.runtimeVersion}`)throw new Error('Native Worker upload artifact binding is invalid.');}
    else{const artifact=vercelArtifact(await api('/v13/deployments/'+artifactId),artifactId);if(artifact.meta?.nakwol_operation!==request.operationId||artifact.meta?.nakwol_build!==request.buildHash||artifact.meta?.nakwol_runtime!==request.runtimeVersion)throw new Error('Native Vercel uploaded artifact binding is invalid.');}
    await expect(before.deploymentId);
    await save({operationId:request.operationId,phase:'promoting',previousDeploymentId:before.deploymentId,artifactId,...(!workers?{deploymentId:artifactId}:{})});
