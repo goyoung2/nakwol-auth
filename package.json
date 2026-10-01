@@ -8,7 +8,7 @@
     "dev": "wrangler dev --port 8787",
     "predeploy": "npm run cli:pack",
     "deploy": "wrangler deploy",
-    "test:unit": "tsx --test --test-concurrency=1 tests/worker/*.test.ts packages/connect-cli/test/*.test.mjs",
+    "test:unit": "tsx --test --test-concurrency=1 tests/worker/*.test.ts tests/worker/*.test.mjs packages/connect-cli/test/*.test.mjs",
     "test": "npm run cli:pack && npm run test:unit",
     "typecheck": "npm run cli:pack && tsc --noEmit",
     "cli:pack": "node scripts/build-connect-cli-package.mjs",

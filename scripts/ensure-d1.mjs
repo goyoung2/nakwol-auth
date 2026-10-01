@@ -10,6 +10,7 @@ const run = (args, capture = false) => execFileSync(npx, ['wrangler', ...args], 
 let dbs = JSON.parse(run(['d1', 'list', '--json'], true));
 let db = dbs.find((item) => item.name === 'nakwol-auth');
 if (!db) {
+  if (process.argv.includes('--existing-only')) throw new Error('Required existing production D1 database was not found; refusing remote creation');
   run(['d1', 'create', 'nakwol-auth', '--location', 'apac']);
   dbs = JSON.parse(run(['d1', 'list', '--json'], true));
   db = dbs.find((item) => item.name === 'nakwol-auth');
