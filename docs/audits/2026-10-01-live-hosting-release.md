@@ -22,6 +22,7 @@
 | Workers 복구된 암호화 정상본으로 다음 release | 통과 | run36874342240: `release-verified`, `releaseAccepted=true` |
 | Workers 잘못된 state key | 안전 중단 | run36875528935: 봉인 상태 거부, 전후 serving ID 동일 |
 | Workers 정상본 cache 유실 | 안전 중단 | run36876078344: ENOENT, 전후 serving ID 동일. 기존 cache를 삭제하지 않고 시험 namespace를 분리한 뒤 원래 workflow로 복원 |
+| Workers 만료·회수된 실제 회원 probe | 안전 중단 | run36876269479: `baseline-rejected`, 전후 serving ID 동일. 정상 probe 복원. 두 조건이 함께 있으므로 순수 만료만의 운영 증거로 표현하지 않음 |
 | Vercel 실제 회원 쿠키·315파일·우회 주소 release | 통과 | private `vercel-real-release.log`: `release-verified` |
 | Vercel 생성 CI initialize | 통과 | run36873525118 |
 | Vercel 생성 CI release | 미완료 | report 복원 크기 불일치 수정 후 커밋 작성자 권한으로 후보가 BLOCKED. 현재 정상 배포 유지. 후속 run36875830082는 BLOCKED 주소를 합격 처리하지 않고 `baseline-rejected` |
@@ -60,7 +61,7 @@ Vercel BLOCKED 시험 후보 `dpl_5ecSRqoLgFcRA8W9tZqpqFMWdwAk`는 SDK가 아닌
 ## 남은 순서
 
 1. Vercel BLOCKED 시험 주소 폐쇄 여부를 결정하고 새 SDK의 실제 CI release·직전 정상 배포 복구·다음 release를 완료합니다.
-2. 만료/회수된 실제 probe의 CI 거부 결과를 기록하고 일반 회원2계정 검증을 완료합니다.
+2. 일반 회원2계정 검증을 완료합니다. 만료/회수된 실제 probe의 CI 거부 결과는 위에 기록했습니다.
 3. T11 남은 수용 항목과 production smoke의 과거 버전 계약을 정리합니다.
 4. 검증된 source를 feature→dev→main→stable로 승격하고 검증용 npm tag 및 AUTH 운영 배포를 진행합니다. 이후 latest·소유 서비스에 단계 적용합니다.
 
