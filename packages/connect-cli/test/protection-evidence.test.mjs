@@ -18,6 +18,24 @@ async function fixture(t) {
   await writeFile(manifest,JSON.stringify({schemaVersion:1,deploymentId:'deploy-1',buildHash:protectionBuildHash(files),runtimeVersion:'0.7.1',capabilities:['all-paths'],files}));
   return {provider:'custom',url:'https://site.test/',manifest};
 }
+
+test('authenticated canonical redirects verify final bytes without forwarding cookies to foreign origins', async t => {
+  const options = await fixture(t);
+  process.env.NAKWOL_REDIRECT_PROBE='session=redirect-test';
+  t.after(()=>delete process.env.NAKWOL_REDIRECT_PROBE);
+  for (const mode of ['canonical','foreign','loop','wrong-bytes']) {
+    const seen=[];
+    const result=await verifyProtection({...options,sessionCookieEnv:'NAKWOL_REDIRECT_PROBE',fetchImpl:async(url,init)=>{
+      if (init.headers?.Cookie !== 'session=redirect-test') return new Response(null,{status:401,headers});
+      seen.push(url.origin);
+      if (url.pathname==='/canonical' && mode!=='loop') return new Response(mode==='wrong-bytes'?'wrong':privateBody);
+      return new Response(null,{status:307,headers:{Location:mode==='foreign'?'https://foreign.test/canonical':'/canonical'}});
+    }});
+    assert.equal(result.releaseAccepted,mode==='canonical',mode);
+    assert.ok(seen.every(origin=>origin==='https://site.test'));
+    assert.ok(seen.length<=6,'redirect loops are bounded');
+  }
+});
 test('manifest proves authenticated existence; anonymous-only or always401 is not release accepted',async t => {
   const options = await fixture(t);
   const denied = () => new Response('denied',{status:401,headers});

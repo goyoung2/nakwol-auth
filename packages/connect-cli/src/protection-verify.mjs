@@ -116,9 +116,22 @@ export async function verifyProtection(options = {}) {
   await Promise.all(Array.from({ length: 6 }, run));
   const authenticatedChecks = [];
   if (manifest && sessionCookie) {
+    async function authenticatedRequest(path) {
+      let target = new URL(path, primary);
+      for (let hop = 0; hop <= 5; hop++) {
+        const response = await request(target, {headers:{Cookie:sessionCookie},redirect:'manual',cache:'no-store',signal:AbortSignal.timeout(10000)});
+        if (![301,302,303,307,308].includes(response.status)) return response;
+        const location = response.headers.get('Location');
+        await response.body?.cancel();
+        if (!location || hop === 5) throw new Error('Authenticated redirect chain is invalid.');
+        const next = new URL(location, target);
+        if (next.origin !== new URL(primary).origin || next.username || next.password) throw new Error('Authenticated redirect leaves the bound site.');
+        target = next;
+      }
+    }
     for (const file of manifest.files) {
       try {
-        const response = await request(new URL(file.path, primary), {headers:{Cookie:sessionCookie},redirect:'manual',cache:'no-store',signal:AbortSignal.timeout(10000)});
+        const response = await authenticatedRequest(file.path);
         const body = await boundedBody(response);
         const ok = response.status === 200 && body.complete && body.bytes.length === file.size && sha256(body.bytes) === file.sha256;
         authenticatedChecks.push({name:file.path,ok,status:response.status,bodyComplete:body.complete});
