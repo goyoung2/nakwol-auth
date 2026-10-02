@@ -1,0 +1,32 @@
+{
+  "images": 300,
+  "decoded": 300,
+  "fonts": [
+    {
+      "family": "FixtureA",
+      "status": "loaded"
+    },
+    {
+      "family": "FixtureB",
+      "status": "loaded"
+    }
+  ],
+  "json": {
+    "fixture0": "loaded",
+    "fixture1": "loaded",
+    "fixture2": "loaded",
+    "fixture3": "loaded"
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720,
+    "dpr": 1
+  },
+  "navigation": [
+    {
+      "ttfbMs": 7.099999904632568,
+      "loadMs": 318.90000009536743
+    }
+  ],
+  "resources": 250
+}

@@ -43,14 +43,7 @@ function jsResponse(source: string, cacheControl = 'public, max-age=300'): Respo
   });
 }
 
-function adminPage(): string {
-  return `<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NAKWOL Connect</title>
-  <style>
+export function connectSharedStyles(): string { return `
     :root{font-family:Inter,Pretendard,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e5e7eb;background:#080c14;--panel:#111827;--panel2:#0c1321;--line:#263244;--muted:#94a3b8;--accent:#818cf8;--ok:#86efac;--bad:#fca5a5}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 10% 0%,#182038 0,#080c14 38%);color:#e5e7eb}button,input,textarea,select{font:inherit}button{cursor:pointer}
     header{height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(8,12,20,.82);backdrop-filter:blur(16px);position:sticky;top:0;z-index:10}.brand{display:flex;gap:14px;align-items:center}.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#4f46e5;font-weight:900}.brand b{font-size:18px}.brand small{display:block;color:var(--muted);margin-top:2px}
@@ -61,7 +54,16 @@ function adminPage(): string {
     .content{display:flex;flex-direction:column;gap:16px}.content-card{padding:20px}.content-card h2,.content-card h3{margin-top:0}.content-card h3{font-size:15px;margin-bottom:14px}.detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.detail-head h2{margin:0;font-size:21px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:#cbd5e1;font-weight:700}.field input,.field textarea,.field select{width:100%;border:1px solid #334155;background:#0b1220;color:#f8fafc;border-radius:10px;padding:10px 11px;outline:none}.field textarea{min-height:88px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus{border-color:#6366f1}.field small{color:var(--muted);font-size:11px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
     .guide-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.guide-step{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:6px}.guide-step span{font-size:12px;color:var(--muted);line-height:1.45}.code-wrap{position:relative;margin:10px 0}.code{margin:0;background:#050912;border:1px solid #202c3f;border-radius:11px;padding:14px 70px 14px 14px;color:#c7d2fe;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.code-wrap .copy{position:absolute;top:8px;right:8px}.muted{color:var(--muted);font-size:13px}.diag-row{display:grid;grid-template-columns:22px 145px 1fr;gap:7px;align-items:center;border-bottom:1px solid #1f2937;padding:9px 0}.diag-ok{color:var(--ok);font-weight:900}.diag-bad{color:var(--bad);font-weight:900}.diag-detail{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.event-row{padding:9px 0;border-bottom:1px solid #1f2937}.event-top{display:flex;justify-content:space-between;gap:10px}.event-top time{font-size:11px;color:var(--muted)}.event-row code{display:block;color:#94a3b8;font-size:11px;margin-top:4px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.error-text{color:var(--bad)}#toast{position:fixed;right:20px;bottom:20px;background:#172033;border:1px solid #334155;border-radius:12px;padding:12px 15px;box-shadow:0 15px 50px rgba(0,0,0,.35);z-index:30}#toast[data-bad="true"]{border-color:#7f1d1d;color:#fecaca}
     @media(max-width:900px){header{padding:0 14px}.workspace{grid-template-columns:1fr}.sidebar{min-height:auto}.app-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid,.guide-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.auth-copy{display:none}}@media(max-width:560px){main{padding:12px}.app-list{grid-template-columns:1fr}.brand small{display:none}.diag-row{grid-template-columns:22px 1fr}.diag-detail{grid-column:2}}
-  </style>
+  `; }
+
+function adminPage(): string {
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NAKWOL Connect</title>
+  <style>${connectSharedStyles()}</style>
 </head>
 <body>
 <header>
@@ -87,8 +89,8 @@ function adminPage(): string {
             <div class="field full"><label>서비스 주소</label><input name="homepage_url" required type="url" placeholder="https://example.pages.dev/"></div>
             <div class="field full"><label>Redirect URI</label><textarea name="redirect_uris" required placeholder="https://example.pages.dev/\nhttps://preview.example.dev/"></textarea><small>한 줄에 하나. 로그인 후 돌아올 정확한 URL입니다.</small></div>
             <div class="field"><label>개발 환경</label><select name="framework"><option value="vite">Vite</option><option value="react">React</option><option value="vue">Vue</option><option value="cra">Create React App</option><option value="next_app">Next.js App Router</option><option value="next_pages">Next.js Pages Router</option><option value="sveltekit">SvelteKit</option><option value="html">일반 HTML</option><option value="other">기타</option></select></div>
-            <div class="field"><label>접근 정책</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
-            <div class="field"><label>상태</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select></div>
+            <div class="field"><label>접근 정책 · 기존 앱은 <a href="/developer/apps">정책 관리</a>에서 변경</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
+            <div class="field"><label>상태 · 기존 앱은 조회만 가능</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select><small id="app-status-help">기존 앱의 상태 변경은 아래 관리자 조치의 서비스 잠금·서비스 잠금 해제로 진행하세요.</small></div>
           </div>
           <div class="actions"><button id="reset-app" class="ghost" type="button">되돌리기</button><button id="save-app" class="primary" type="submit">저장</button></div>
         </form>
@@ -99,9 +101,16 @@ function adminPage(): string {
       <section class="content-card"><h3>접근 문제 해결 · 수동 권한</h3>
         <p class="muted">이 서비스에만 수동 접근을 허가합니다. Discord 역할과 AUTH 운영 권한은 변경하지 않습니다. 재인증 요구는 해당 사용자의 모든 서비스 AUTH 로그인을 무효화합니다.</p>
         <div class="form-grid"><div class="field"><label for="support-discord">Discord 사용자 ID</label><input id="support-discord" inputmode="numeric" placeholder="숫자로 된 Discord ID" maxlength="22"></div>
-        <div class="field"><label for="support-reason">조치 사유</label><input id="support-reason" maxlength="500" placeholder="허가·회수·재인증 사유"></div></div>
-        <div class="actions"><button id="support-search" class="ghost" type="button">계정 진단</button><button id="support-grant" class="primary" type="button">수동 허가</button><button id="support-revoke" class="ghost" type="button">허가 회수</button><button id="support-reauth" class="ghost" type="button">재인증 요구</button></div>
+        <div class="field"><label for="support-reason">조치 사유</label><input id="support-reason" maxlength="500" placeholder="3~500자"></div>
+        <div class="field"><label for="support-trace">지원 코드 (Discord ID 대신 조회)</label><input id="support-trace" maxlength="70" placeholder="tr_…"></div>
+        <div class="field"><label for="support-expiry">허가·차단 만료</label><input id="support-expiry" type="datetime-local"><small>허가는 5분~7일. 차단에서 비워 두면 해제할 때까지 유지합니다.</small></div>
+        <div class="field"><label for="support-scope">차단 범위</label><select id="support-scope"><option value="app">현재 서비스</option><option value="global">모든 서비스 (운영자 조치)</option></select></div>
+        <div class="field"><label for="support-policy-operation">되돌릴 정책 변경 ID</label><input id="support-policy-operation" maxlength="128" placeholder="정책 관리에서 받은 operationId"></div></div>
+        <div class="actions"><button id="support-search" class="ghost" type="button">계정 진단</button><button id="support-refresh" class="ghost" type="button">역할 다시 확인</button><button id="support-grant" class="primary" type="button">기한부 허가</button><button id="support-revoke" class="ghost" type="button">허가 회수</button><button id="support-deny" class="ghost" type="button">명시적 차단</button><button id="support-clear-deny" class="ghost" type="button">차단 해제</button><button id="support-reauth" class="ghost" type="button">전체 재인증 요구</button></div>
+        <div class="actions"><button id="support-reauth-self" class="ghost" type="button">운영자 다시 인증</button><button id="support-lock" class="ghost" type="button">서비스 잠금</button><button id="support-unlock" class="ghost" type="button">서비스 잠금 해제</button><button id="support-restore" class="ghost" type="button">정책 되돌리기</button></div>
         <p id="support-status" role="status" aria-live="polite"></p><div id="support-diagnosis"></div>
+        <div id="support-operation" role="status" aria-live="polite"></div>
+        <details><summary>운영 설정 복구 코드</summary><p class="muted">최근 Discord 재인증 후 10분짜리 일회성 코드를 발급할 수 있습니다. 선택 서비스의 잠금 해제와 지정 정책 복원만 가능하며 자료 접근 권한을 주지 않습니다.</p><button id="support-recovery-issue" class="ghost" type="button">복구 코드 발급</button><label for="support-recovery-code">한 번 표시되는 코드</label><input id="support-recovery-code" type="password" readonly autocomplete="off"><a href="/admin/recovery">별도 복구 페이지</a></details>
         <h4>수동 허가 목록</h4><p class="muted">최근 변경 200건까지 표시합니다. 회수는 수동 예외만 제거하며, 원래 역할 조건을 충족하면 접근할 수 있습니다.</p><div id="support-grants"></div>
       </section>
       <section class="content-card"><div class="section-head"><h3>인증·관리자 조치 기록</h3><button id="refresh-events" class="ghost" type="button">새로고침</button></div><p class="muted">Discord ID를 입력하고 계정 진단을 누르면 해당 계정으로 필터링합니다. 서비스 자체의 오류는 포함되지 않습니다.</p><div id="events-area"></div><button id="events-more" class="ghost" type="button" hidden>이전 기록 더 보기</button></section>
@@ -133,7 +142,7 @@ async function adminIdentity(c: Context<{ Bindings: Env }>): Promise<AdminIdenti
     user,
     operatorRole: operator?.role ?? null,
     operatorCount: Number(count?.count ?? 0),
-    canManage: Boolean(operator) || user.membership?.role === 'admin',
+    canManage: Boolean(operator) && user.status === 'active',
   };
 }
 
@@ -292,24 +301,25 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!existing) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: '앱을 찾을 수 없습니다.' } }, 404);
     if ([ADMIN_CLIENT_ID, 'nakwol-auth-selftest'].includes(clientId)) return c.json({ ok: false, error: { code: 'SYSTEM_APP', message: '시스템 앱은 여기서 수정할 수 없습니다.' } }, 403);
     const raw = await c.req.json().catch(() => ({}));
-    const normalized = normalizeAppInput(raw, clientId);
+    const normalized = normalizeAppInput({ ...raw, status: raw?.status ?? existing.status }, clientId);
     if (!normalized.value) return c.json({ ok: false, error: { code: 'INVALID_APP', message: normalized.error } }, 400);
     const v = normalized.value;
+    if (v.accessPolicy !== existing.access_policy) return c.json({ok:false,error:{code:'POLICY_WORKFLOW_REQUIRED',message:'접근 정책은 정책 관리 화면에서 영향 확인과 사유를 남겨 변경하세요.'}},409);
+    if (v.status !== existing.status) return c.json({ ok: false, error: { code: 'APP_STATUS_WORKFLOW_REQUIRED', message: '앱 잠금·해제는 운영자 조치 화면의 영향 확인·감사 절차로 변경하세요.' } }, 409);
     const now = Date.now();
     await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, status = ?, updated_at = ? WHERE client_id = ?`)
-        .bind(v.name, JSON.stringify(v.redirectUris), v.status, now, clientId),
+      c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, updated_at = ? WHERE client_id = ?`)
+        .bind(v.name, JSON.stringify(v.redirectUris), now, clientId),
       c.env.DB.prepare(
         `INSERT INTO application_settings(client_id, homepage_url, framework, access_policy, owner_user_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(client_id) DO UPDATE SET
            homepage_url = excluded.homepage_url,
            framework = excluded.framework,
-           access_policy = excluded.access_policy,
            updated_at = excluded.updated_at`
       ).bind(clientId, v.homepageUrl, v.framework, v.accessPolicy, existing.owner_user_id || identity.userId, existing.created_at || now, now),
     ]);
-    await logAuthEvent(c.env, 'connect.app.updated', identity.userId, clientId, { framework: v.framework, access_policy: v.accessPolicy, status: v.status });
+    await logAuthEvent(c.env, 'connect.app.updated', identity.userId, clientId, { framework: v.framework, status: v.status });
     return c.json({ ok: true, data: await readApp(c.env, clientId) });
   });
 

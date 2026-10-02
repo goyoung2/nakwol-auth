@@ -51,7 +51,7 @@ async function requireOperator(c: Context<{ Bindings: Env }>): Promise<{ userId:
     c.env.DB.prepare(`SELECT role FROM auth_operators WHERE user_id = ?`).bind(userId).first<{ role: string }>(),
     getUserWithMembership(c.env, userId),
   ]);
-  if (!operator && user?.membership?.role !== 'admin') {
+  if (!operator || user?.status !== 'active') {
     return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'NAKWOL Connect 운영 권한이 필요합니다.' } }, 403);
   }
   return { userId };

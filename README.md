@@ -1,5 +1,7 @@
 # NAKWOL Platform Core
 
+서비스 설치·재설정은 [개발자 마법사 안내](docs/DEVELOPER_SETUP.md)를 참고하세요. Connect 0.14.0은 저장한 setup JSON으로 변경 비교와 서버 보호 설치를 지원합니다.
+
 낙월(落月) 서비스들이 **로그인과 공통 게임 데이터를 같은 방식으로 재사용**하도록 만든 중앙 플랫폼입니다.
 
 새 서비스에서 Discord OAuth를 직접 구현하지 않습니다. 공식 **NAKWOL Connect**를 붙이면 NAKWOL AUTH의 중앙 로그인/SSO와, 필요한 경우 NAKWOL DATA까지 연결됩니다.
@@ -119,6 +121,8 @@ Web SDK stable은 **0.3.2**이며 Universal Embed는 같은 브라우저의 중�
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 
+**0.14.0 로컬 후보**에는 검증한 패치 HEAD의 자동 병합과 호스팅 독립 배포·검사·복구 코어가 추가되었습니다. 소유자가 검토한 배포 어댑터와 CI 연결 후 명시적으로 켜며, 기존 설치에는 영향이 없습니다. Cloudflare/Vercel 외 호스팅도 같은 계약을 사용합니다. Workers·Vercel 네이티브 어댑터 생성은 제공하며, 운영 배포와 canary는 별도입니다. [안전한 자동 업데이트 연결 안내](docs/SAFE_AUTOMATIC_UPDATES.md)를 확인하세요.
+
 ## 개발자 권한
 
 NAKWOL 운영자는 `https://nakwol-auth.sepsd21.workers.dev/admin/developers`에서 Discord 사용자 ID를 기준으로 Connect 개발자 권한을 사전 등록할 수 있습니다.
@@ -184,3 +188,7 @@ DATA scopes:
 - DATA scope는 필요한 권한만 최소로 요청합니다.
 
 상세 계약은 [CONNECT.md](./CONNECT.md), [WEB_SDK.md](./WEB_SDK.md), [DATA.md](./DATA.md)를 참고하세요.
+
+### Cloudflare·Vercel 연결 템플릿 (0.14.0 로컬 후보)
+
+기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. Workers·Vercel은 명시적 선택 시 공식 배포·복구 adapter, 암호화 정상본 및 initialize/release CI를 생성합니다. Pages·그 밖의 호스팅은 수동 검사 또는 reviewed adapter를 사용합니다. 운영 canary와 npm 게시·AUTH 배포는 아직 하지 않았습니다. [설치·호스팅 연결 안내](docs/HOSTING_CONNECTIONS.md)를 확인하세요.

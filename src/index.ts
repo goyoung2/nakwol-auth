@@ -1,8 +1,9 @@
-import { diagnoseApplicationAccess } from './policy';
+import { evaluateAccess, diagnoseApplicationAccess } from './policy';
+import { createOAuthTransaction, validateOAuthTransaction } from './oauth-transaction';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { randomToken } from './crypto';
-import { buildDiscordAuthorizeUrl, exchangeDiscordCode, DiscordMembershipUnavailable } from './discord';
+import { buildDiscordAuthorizeUrl, exchangeDiscordCodeTokens, DiscordMembershipUnavailable } from './discord';
+import { saveDiscordCredentials } from './discord-credentials';
 import { registerDemoRoutes } from './demo';
 import { registerConnectOnboardingRoutes } from './connect-onboarding';
 import {
@@ -69,7 +70,7 @@ app.get('/', (c) => c.html(`<!doctype html>
 body{font-family:system-ui,sans-serif;background:#111827;color:#f9fafb;display:grid;place-items:center;min-height:100vh;margin:0}
 main{width:min(680px,calc(100% - 40px));background:#1f2937;border:1px solid #374151;border-radius:18px;padding:32px}
 small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{color:#a5b4fc}.links{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
-</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.2</p><p><code>GET /api/health</code></p><div class="links"><a href="/account">내 낙월 계정</a><a href="/lab">AUTH Lab</a><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
+</style></head><body><main><h1>落月 · NAKWOL AUTH</h1><p>낙월 통합 인증 서비스 v0.2</p><p><code>GET /api/health</code></p><div class="links"><a href="/account">내 낙월 계정</a><a href="/lab">AUTH Lab</a><a href="/demo">Discord 로그인 자가진단</a><a href="/admin/apps">NAKWOL Connect 관리자</a><a href="/developer/apps">내 서비스 정책</a></div><small>Discord OAuth → Nakwol ID → PKCE Authorization Code</small></main></body></html>`));
 
 app.get('/api/health', (c) => c.json({
   ok: true,
@@ -104,8 +105,8 @@ app.get('/authorize', async (c) => {
   if (!clientId || !redirectUri || !codeChallenge || method !== 'S256') {
     return jsonError(c, 400, 'INVALID_AUTHORIZE_REQUEST', 'client_id, redirect_uri, PKCE(S256)가 필요합니다.');
   }
-  if (prompt && prompt !== 'none') {
-    return jsonError(c, 400, 'UNSUPPORTED_PROMPT', 'prompt는 none만 지원합니다.');
+  if (prompt && !['none', 'login'].includes(prompt)) {
+    return jsonError(c, 400, 'UNSUPPORTED_PROMPT', 'prompt는 none 또는 login만 지원합니다.');
   }
 
   const application = await getApplication(c.env, clientId);
@@ -115,17 +116,20 @@ app.get('/authorize', async (c) => {
 
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
   const sessionUserId = await findSessionUser(c.env, sid);
-  if (sessionUserId) {
+  if (sessionUserId && prompt !== 'login') {
     if (await isApplicationAccessAllowed(c.env, sessionUserId, clientId)) {
-      const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
+      const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge, sid);
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
       return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
     }
-    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis: await diagnoseApplicationAccess(c.env, sessionUserId, clientId) });
+    const diagnosis = await diagnoseApplicationAccess(c.env, sessionUserId, clientId);
+    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis });
     if (prompt === 'none') {
-      await deleteSession(c.env, sid);
       const response = c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      if (diagnosis.reason === 'USER_DISABLED' || diagnosis.reason === 'REAUTHENTICATION_REQUIRED') {
+        await deleteSession(c.env, sid);
+        response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      }
       return response;
     }
     // 저장된 역할은 마지막 Discord 로그인 시점 값이다. 역할을 새로 받은 사용자가
@@ -136,7 +140,9 @@ app.get('/authorize', async (c) => {
     return c.redirect(redirectWithParams(redirectUri, { error: 'login_required', state: clientState }), 302);
   }
 
-  const requestId = `req_${randomToken(18)}`;
+  const transaction = await createOAuthTransaction(c.req.header('Cookie'), secureCookie(c.env));
+  if (!transaction) return jsonError(c, 429, 'TOO_MANY_LOGIN_ATTEMPTS', '진행 중인 로그인 창을 완료한 뒤 다시 시도해 주세요.');
+  const requestId = transaction.state;
   const now = Date.now();
   await c.env.DB.prepare(
     `INSERT INTO oauth_requests(id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at)
@@ -144,6 +150,9 @@ app.get('/authorize', async (c) => {
   ).bind(requestId, clientId, redirectUri, codeChallenge, clientState, now + OAUTH_REQUEST_TTL_MS, now).run();
 
   if (Math.random() < 0.03) c.executionCtx.waitUntil(cleanupExpiredAuthData(c.env));
+  c.header('Set-Cookie', transaction.cookie);
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
   return c.redirect(buildDiscordAuthorizeUrl(c.env, requestId), 302);
 });
 
@@ -153,10 +162,15 @@ app.get('/auth/discord/callback', async (c) => {
   const discordError = c.req.query('error');
   if (!requestId) return jsonError(c, 400, 'MISSING_STATE', 'Discord state가 없습니다.');
 
+  const clearTransaction = await validateOAuthTransaction(requestId, c.req.header('Cookie'), secureCookie(c.env));
+  if (!clearTransaction) return jsonError(c, 400, 'INVALID_LOGIN_BROWSER', '로그인을 시작한 브라우저에서 다시 시도해 주세요.');
+  c.header('Set-Cookie', clearTransaction);
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
   const requestRow = await c.env.DB.prepare(
-    `SELECT id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at
-       FROM oauth_requests WHERE id = ?`
-  ).bind(requestId).first<OAuthRequestRow>();
+    `DELETE FROM oauth_requests WHERE id = ? AND expires_at > ?
+     RETURNING id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at`
+  ).bind(requestId, Date.now()).first<OAuthRequestRow>();
 
   if (!requestRow || requestRow.expires_at <= Date.now()) {
     return jsonError(c, 400, 'EXPIRED_LOGIN_REQUEST', '로그인 요청이 만료되었습니다. 다시 로그인해 주세요.');
@@ -168,7 +182,6 @@ app.get('/auth/discord/callback', async (c) => {
   }
 
   if (discordError || !discordCode) {
-    await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
     return c.redirect(redirectWithParams(requestRow.redirect_uri, {
       error: discordError ?? 'discord_authorization_failed',
       state: requestRow.client_state,
@@ -176,11 +189,10 @@ app.get('/auth/discord/callback', async (c) => {
   }
 
   try {
-    const discordAccessToken = await exchangeDiscordCode(c.env, discordCode);
-    const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken);
+    const discordTokens = await exchangeDiscordCodeTokens(c.env, discordCode);
+    const { userId, role } = await refreshDiscordMembership(c.env, discordTokens.accessToken, requestRow.created_at);
+    await saveDiscordCredentials(c.env, userId, discordTokens);
     const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
-
-    await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
 
     if (!allowed) {
       await logAuthEvent(c.env, 'discord.login.access_denied', userId, requestRow.client_id, { role, diagnosis: await diagnoseApplicationAccess(c.env, userId, requestRow.client_id) });
@@ -188,17 +200,22 @@ app.get('/auth/discord/callback', async (c) => {
         error: 'access_denied',
         state: requestRow.client_state,
       }), 302);
-      await deleteSession(c.env, parseCookies(c.req.header('Cookie')).nakwol_sid);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      const previousSid = parseCookies(c.req.header('Cookie')).nakwol_sid;
+      const previousUser = await findSessionUser(c.env, previousSid);
+      const diagnosis = await diagnoseApplicationAccess(c.env, userId, requestRow.client_id);
+      if (previousUser === userId && (diagnosis.reason === 'USER_DISABLED' || diagnosis.reason === 'REAUTHENTICATION_REQUIRED')) {
+        await deleteSession(c.env, previousSid);
+        response.headers.append('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      }
       return response;
     }
 
-    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge);
+    const session = await createSession(c.env, userId);
+    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge, session.token);
     await logAuthEvent(c.env, 'discord.login.success', userId, requestRow.client_id, { role });
 
-    const session = await createSession(c.env, userId);
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
-    response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
+    response.headers.append('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;
   } catch (error) {
     await logAuthEvent(c.env, 'discord.login.error', null, requestRow.client_id, {
@@ -275,9 +292,14 @@ app.get('/me', async (c) => {
   }
 
   const userId = tokenInfo.userId;
-  const access = await diagnoseApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true');
+  const access = await evaluateAccess(c.env, userId, clientId, {requireMember:c.req.header('X-Nakwol-Require-Member') === 'true' && !c.req.header('X-Nakwol-Capabilities')?.split(',').includes('policy-v1'),expiresAt:tokenInfo.expiresAt});
   if (!access.allowed) {
-    const response = c.json({ ok: false, error: { code: 'ACCESS_DENIED', message: '이 앱을 사용할 권한이 없습니다.' } }, 403);
+    const unavailable = access.reason === 'MEMBERSHIP_UNAVAILABLE';
+    const traceId = 'tr_' + crypto.randomUUID();
+    await logAuthEvent(c.env, 'access.support', userId, clientId, { trace_id: traceId, reason: access.reason });
+    const response = c.json({ ok: false, error: { code: unavailable ? 'MEMBERSHIP_UNAVAILABLE' : 'ACCESS_DENIED',
+      trace_id: traceId, reason_code: access.reason,
+      message: unavailable ? 'Discord 역할 확인이 지연됐습니다. 잠시 후 다시 시도해 주세요.' : '이 앱을 사용할 권한이 없습니다.' } }, unavailable ? 503 : 403);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
@@ -288,7 +310,8 @@ app.get('/me', async (c) => {
   }
 
   const response = c.json({ ok: true, data: user, expires_at: tokenInfo.expiresAt,
-    application_access: { client_id: clientId, allowed: true, source: access.reason === 'MANUAL_GRANT' ? 'manual_grant' : 'policy' } });
+    application_access: { client_id: clientId, allowed: true, source: access.source === 'manual-grant' ? 'manual_grant' : 'policy' },
+    authorization_policy: {schemaVersion:1,accessPolicy:access.policy,policyVersion:access.policyVersion,leaseSeconds:access.effectivePolicy.leaseSeconds,authorizationEvidenceValidUntil:access.validUntil,capabilities:['policy-v1']} });
   return origin ? withCorsHeaders(response, origin) : response;
 });
 

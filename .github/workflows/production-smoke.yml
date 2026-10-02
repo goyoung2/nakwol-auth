@@ -1,6 +1,7 @@
 name: Production Smoke
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - stable
@@ -19,6 +20,11 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: stable
+          path: .production-baseline
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,7 +33,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Resolve production AUTH D1
-        run: node scripts/ensure-d1.mjs
+        run: node scripts/ensure-d1.mjs --existing-only
 
       - name: Verify production platform schema and internal applications
         shell: bash
@@ -42,7 +48,7 @@ jobs:
           grep -q 'public' /tmp/apps.json
           echo 'NAKWOL_PLATFORM_D1_SMOKE_OK'
 
-      - name: Verify AUTH v0.2, Connect v0.4 and DATA v0.9 production surfaces
+      - name: Verify existing production baseline and immutable SDK contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -83,17 +89,21 @@ jobs:
           grep -q '"service":"nakwol-auth"' /tmp/health.json
           grep -q '"version":"0.2.0"' /tmp/health.json
 
-          grep -q '"stable":"0.2.0"' /tmp/sdk-manifest.json
-          grep -q '"module":"/sdk/v0.2.0/nakwol-auth-web.js"' /tmp/sdk-manifest.json
+          # Before promotion, inspect the version already serving production.
+          # deploy.yml separately checks the candidate against its source version.
+          sdk_version=$(node -e "const m=require('/tmp/sdk-manifest.json'); if(m.ok!==true || m.name!=='nakwol-auth-web' || !/^\\d+\\.\\d+\\.\\d+$/.test(m.stable) || m.module!=='/sdk/v'+m.stable+'/nakwol-auth-web.js' || m.alias!=='/sdk/nakwol-auth-web.js')process.exit(1); process.stdout.write(m.stable)")
+          curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "$origin/sdk/v$sdk_version/nakwol-auth-web.js" > /tmp/sdk-stable.js
           grep -q "NAKWOL_AUTH_SDK_VERSION = '0.1.0'" /tmp/sdk-v01.js
           grep -q "NAKWOL_AUTH_SDK_VERSION = '0.2.0'" /tmp/sdk-v02.js
           grep -q 'mountNakwolIdentityMenu' /tmp/sdk-v02.js
-          grep -q "NAKWOL_AUTH_SDK_VERSION = '0.2.0'" /tmp/sdk-alias.js
-          cmp -s src/assets/nakwol-auth-web.js.txt /tmp/sdk-v01.js
-          cmp -s src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-v02.js
-          cmp -s src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-alias.js
+          grep -Fq "NAKWOL_AUTH_SDK_VERSION = '$sdk_version'" /tmp/sdk-stable.js
+          grep -q 'mountNakwolIdentityMenu' /tmp/sdk-stable.js
+          cmp -s .production-baseline/src/assets/nakwol-auth-web.js.txt /tmp/sdk-v01.js
+          cmp -s .production-baseline/src/assets/nakwol-auth-web-v0.2.0.js.txt /tmp/sdk-v02.js
+          cmp -s ".production-baseline/src/assets/nakwol-auth-web-v$sdk_version.js.txt" /tmp/sdk-stable.js
+          node -e "const fs=require('fs'); fs.writeFileSync('/tmp/sdk-expected-alias.js',fs.readFileSync('/tmp/sdk-stable.js','utf8').replaceAll('../v0.3.1/nakwol-auth-web.js','./v0.3.1/nakwol-auth-web.js'))"
+          cmp -s /tmp/sdk-expected-alias.js /tmp/sdk-alias.js
 
-          grep -q 'Account Center' /tmp/account.html
           grep -q 'nakwol-account-center' /tmp/account.html
           grep -q '내 낙월 계정' /tmp/account.html
           grep -q 'AUTH LAB' /tmp/lab.html
@@ -104,23 +114,27 @@ jobs:
 
           grep -q 'NAKWOL Connect' /tmp/admin.html
           grep -q '개발자 권한' /tmp/developers.html
-          grep -q '"name":"nakwol-connect"' /tmp/connect-manifest.json
-          grep -q '"version":"0.4.0"' /tmp/connect-manifest.json
+          cli_version=$(node -e "const m=require('/tmp/connect-manifest.json'); if(m.ok!==true || m.name!=='nakwol-connect' || !/^\\d+\\.\\d+\\.\\d+$/.test(m.version) || m.default_auth!=='required' || m.default_access_policy!=='member' || m.embed_is_server_protection!==false || m.auth_origin!=='https://nakwol-auth.sepsd21.workers.dev' || m.tarball!=='https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz' || !['cloudflare-workers','cloudflare-pages'].every(p=>m.server_protection_providers?.includes(p)))process.exit(1); process.stdout.write(m.version)")
+          test "$cli_version" = "$(node -p "require('./.production-baseline/packages/connect-cli/package.json').version")"
+          echo "PRODUCTION_CLI_VERSION=$cli_version" >> "$GITHUB_ENV"
           grep -q 'CLI 연결 승인' /tmp/device-verify.html
           grep -q 'nakwol-connect data describe --json' /tmp/llms.txt
           test -s /tmp/connect-cli.tgz
+          tar -xOf /tmp/connect-cli.tgz package/package.json > /tmp/production-cli-package.json
+          EXPECTED_CLI_VERSION="$cli_version" node -e "const p=require('/tmp/production-cli-package.json'); if(p.name!=='nakwol-connect' || p.version!==process.env.EXPECTED_CLI_VERSION)process.exit(1)"
 
           grep -q '"openapi":"3.1.0"' /tmp/data-openapi.json
           grep -q '"version":"0.9.0"' /tmp/data-openapi.json
 
           echo 'NAKWOL_PLATFORM_PRODUCTION_SURFACES_OK'
 
-      - name: Execute production Connect v0.4 package
+      - name: Execute exact existing production Connect package
         shell: bash
         run: |
           set -euo pipefail
-          npm exec --yes --package=https://nakwol-auth.sepsd21.workers.dev/connect/cli/package.tgz -- nakwol-connect help | tee /tmp/cli-help.txt
-          grep -q 'NAKWOL Connect CLI v0.4' /tmp/cli-help.txt
+          npm exec --yes --package=file:/tmp/connect-cli.tgz -- nakwol-connect help | tee /tmp/cli-help.txt
+          cli_series="${PRODUCTION_CLI_VERSION%.*}"
+          grep -Fq "NAKWOL Connect CLI v$cli_series" /tmp/cli-help.txt
           grep -q 'doctor' /tmp/cli-help.txt
           grep -q 'data' /tmp/cli-help.txt
-          echo 'NAKWOL_CONNECT_V04_PACKAGE_OK'
+          echo 'NAKWOL_CONNECT_PRODUCTION_BASELINE_PACKAGE_OK'

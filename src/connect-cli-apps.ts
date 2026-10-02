@@ -156,8 +156,11 @@ export function registerConnectCliAppRoutes(app: Hono<{ Bindings: Env }>): void 
     if (!name || name.length > 100) return c.json({ ok: false, error: { code: 'INVALID_APP_NAME', message: '앱 이름은 1~100자여야 합니다.' } }, 400);
     if (!canRequestAccessPolicy(principal.isOperator, requestedPolicy)) return c.json({ ok: false, error: { code: 'ACCESS_POLICY_DENIED', message: '이 접근 정책을 사용할 권한이 없습니다.' } }, 403);
     const policy = requestedPolicy === 'public' ? 'guest' : requestedPolicy;
+    if (policy !== current.access_policy) return c.json({ok:false,error:{code:'POLICY_WORKFLOW_REQUIRED',message:'접근 정책은 정책 관리 화면의 검토·감사 절차로 변경하세요.'}},409);
     const framework = body.framework == null ? current.framework : validFramework(String(body.framework));
+    if (body.status !== undefined && !['active', 'disabled'].includes(body.status)) return c.json({ ok: false, error: { code: 'INVALID_APP_STATUS', message: '지원하지 않는 앱 상태입니다.' } }, 400);
     const status = resolveAppStatus(current.status, body.status);
+    if (status !== current.status) return c.json({ ok: false, error: { code: 'APP_STATUS_WORKFLOW_REQUIRED', message: '앱 잠금·해제는 운영자 조치 화면의 영향 확인·감사 절차로 변경하세요.' } }, 409);
     const homepage = body.homepage_url === undefined ? current.homepage_url : body.homepage_url == null ? null : String(body.homepage_url).trim() || null;
     if (homepage) {
       const check = validateConnectRedirectUri(homepage);
@@ -165,11 +168,11 @@ export function registerConnectCliAppRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     const now = Date.now();
     await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE applications SET name = ?, status = ?, updated_at = ? WHERE client_id = ?`).bind(name, status, now, clientId),
-      c.env.DB.prepare(`UPDATE application_settings SET homepage_url = ?, framework = ?, access_policy = ?, updated_at = ? WHERE client_id = ?`)
-        .bind(homepage, framework, policy, now, clientId),
+      c.env.DB.prepare(`UPDATE applications SET name = ?, updated_at = ? WHERE client_id = ?`).bind(name, now, clientId),
+      c.env.DB.prepare(`UPDATE application_settings SET homepage_url = ?, framework = ?, updated_at = ? WHERE client_id = ?`)
+        .bind(homepage, framework, now, clientId),
     ]);
-    await logAuthEvent(c.env, 'connect.cli.app.updated', principal.userId, clientId, { framework, access_policy: policy, status });
+    await logAuthEvent(c.env, 'connect.cli.app.updated', principal.userId, clientId, { framework, status });
     return c.json({ ok: true, data: await readApp(c.env, clientId) });
   });
 

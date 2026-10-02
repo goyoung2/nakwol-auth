@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { Env } from './types';
+import { membershipCredentialStatus } from './membership-refresh';
 import { clearSessionCookie, jsonError, parseCookies } from './http';
 import { authenticateAccessToken, deleteSession, getUserWithMembership } from './store';
 import { listConnectedServices } from './account-store';
@@ -34,6 +35,7 @@ export function accountPageHtml(): string {
     </header>
     <section id="service-recovery" class="card recovery" hidden aria-live="polite">
       <h2 id="recovery-title">접속 문제 해결</h2><p id="recovery-message"></p>
+      <p id="recovery-trace" class="small" hidden></p>
       <a id="return-service" class="button secondary" hidden>서비스로 돌아가기</a>
     </section>
     <p id="loading" class="muted" role="status">계정 정보를 불러오는 중입니다…</p>
@@ -129,6 +131,9 @@ export function accountPageHtml(): string {
         history.replaceState({}, document.title, recoveryLocation.pathname + recoveryLocation.search + recoveryLocation.hash);
         document.querySelector('#recovery-title').textContent = payload.data.name + ' 접속 문제 해결';
         message.textContent = payload.data.message;
+        const trace = document.querySelector('#recovery-trace');
+        trace.textContent = payload.data.traceId ? '관리자에게 전달할 지원 코드: ' + payload.data.traceId : '';
+        trace.hidden = !payload.data.traceId;
         const back = document.querySelector('#return-service');
         if (payload.data.url) { back.href = payload.data.url; back.hidden = false; }
         back.addEventListener('click', () => { try { sessionStorage.removeItem(recoveryKey); } catch {} });
@@ -250,7 +255,11 @@ export function accountPageHtml(): string {
       const member = Boolean(user.membership?.is_member);
       document.querySelector('#membership-state').textContent = member ? '시즌3 맹원 확인됨' : '시즌3 맹원 미확인';
       document.querySelector('#membership-state').dataset.member = String(member);
-      document.querySelector('#membership-help').textContent = member ? '시즌3 맹원으로 확인된 계정입니다.' : '마지막 확인에서 시즌3 맹원 자격이 확인되지 않았습니다. 서비스별 별도 허용 여부는 관리자에게 문의해 주세요.';
+      const renewal = user.membership?.renewal_status;
+      document.querySelector('#membership-help').textContent = renewal === 'automatic'
+        ? (member ? '역할은 Discord에서 자동으로 다시 확인됩니다.' : '역할은 Discord에서 자동으로 다시 확인됩니다. 현재 맹원 역할은 확인되지 않았습니다.')
+        : renewal === 'legacy' ? '자동 역할 확인을 사용하려면 Discord로 다시 로그인해 주세요. 기존 확인 기록은 전환 기한까지만 유효합니다.'
+        : 'Discord 재동의가 필요합니다. 아래 버튼으로 다시 로그인해 주세요.';
       document.querySelector('#membership-checked').textContent = formatDate(user.membership?.checked_at);
       const avatar = document.querySelector('#profile-avatar');
       if (user.avatar_url) {
@@ -362,7 +371,8 @@ export function registerAccountRoutes(app: Hono<{ Bindings: Env }>): void {
     const user = await getUserWithMembership(c.env, userId);
     if (!user) return jsonError(c, 404, 'ACCOUNT_USER_NOT_FOUND', 'NAKWOL 사용자를 찾을 수 없습니다.');
 
+    const renewalStatus = await membershipCredentialStatus(c.env, userId);
     const services = await listConnectedServices(c.env, userId);
-    return c.json({ ok: true, data: { user, services } });
+    return c.json({ ok: true, data: { user: { ...user, membership: { ...user.membership, renewal_status: renewalStatus } }, services } });
   });
 }

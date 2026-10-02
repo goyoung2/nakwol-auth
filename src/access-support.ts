@@ -3,6 +3,9 @@ import type { Env } from './types';
 import { authenticateAccessToken } from './store';
 import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin } from './policy';
 import { randomToken } from './crypto';
+import { ensureFreshMembership } from './membership-refresh';
+import { deliverControl } from './gate-control';
+import { AdminOperationError, operatorAuthenticatedAt } from './admin-operations';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -47,6 +50,11 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
   app.post('/admin/api/access/:clientId', async (c) => {
     const actor = await operator(c);
     if (actor instanceof Response) return actor;
+    try { await operatorAuthenticatedAt(c, actor); }
+    catch (error) {
+      if (error instanceof AdminOperationError) return c.json({ error: { code: error.code, message: 'Discord 운영자 재인증이 필요합니다.' } }, error.status);
+      throw error;
+    }
     const origin = c.req.header('Origin');
     if (origin && origin !== new URL(c.req.url).origin) return c.json({ error: { message: '허용되지 않은 요청 출처입니다.' } }, 403);
     const clientId = c.req.param('clientId');
@@ -54,7 +62,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     if (!body || typeof body !== 'object' || !('discord_user_id' in body) || typeof body.discord_user_id !== 'string'
       || !/^\d{15,22}$/.test(body.discord_user_id) || !('reason' in body) || typeof body.reason !== 'string'
       || !body.reason.trim() || body.reason.length > 500 || !('action' in body)
-      || (body.action !== 'grant' && body.action !== 'revoke' && body.action !== 'reauthenticate')) {
+      || (body.action !== 'grant' && body.action !== 'revoke' && body.action !== 'reauthenticate' && body.action !== 'refresh_membership')) {
       return c.json({ error: { message: 'Discord ID, 조치 종류, 사유(1~500자)가 필요합니다.' } }, 400);
     }
     const application = await c.env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first();
@@ -65,7 +73,23 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     const target = await c.env.DB.prepare(`SELECT user_id FROM auth_identities WHERE provider = 'discord' AND provider_user_id = ?`)
       .bind(body.discord_user_id).first<{ user_id: string }>();
+    if (body.action === 'refresh_membership') {
+      if (!target) return c.json({ ok: false, status: 'reauth-required', recovery_url: `${c.env.AUTH_ORIGIN}/account`,
+        error: { message: '아직 로그인한 적 없는 사용자입니다. 사용자에게 계정 페이지 로그인을 안내하세요.' } }, 404);
+      const refresh = await ensureFreshMembership(c.env, target.user_id, { force: true });
+      await c.env.DB.prepare(`INSERT INTO auth_events(id,user_id,client_id,event_type,detail,created_at) VALUES (?,?,?,?,?,?)`)
+        .bind(`evt_${randomToken(10)}`, target.user_id, clientId, 'admin.access.refresh_membership',
+          JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), result: refresh.kind }), Date.now()).run();
+      const control=await deliverControl(c.env,clientId,target.user_id);
+      return c.json({ ok: refresh.kind === 'fresh', status: refresh.kind, control, checked_at: refresh.checkedAt,
+        valid_until: refresh.validUntil, ...(refresh.kind === 'reauth-required' ? { recovery_url: `${c.env.AUTH_ORIGIN}/account` } : {}) });
+    }
     const now = Date.now();
+    const expiresAt = 'expires_at' in body ? body.expires_at : now + 60 * 60 * 1000;
+    if (body.action === 'grant' && (typeof expiresAt !== 'number' || !Number.isSafeInteger(expiresAt)
+      || expiresAt < now + 5 * 60 * 1000 || expiresAt > now + 7 * 24 * 60 * 60 * 1000)) {
+      return c.json({ error: { message: '수동 허가 만료는 현재부터 5분 이상 7일 이하여야 합니다.' } }, 400);
+    }
     const statements: D1PreparedStatement[] = [];
     if (body.action === 'reauthenticate') {
       if (!target) return c.json({ error: { message: '아직 로그인한 적 없는 사용자입니다. 수동 허가는 미리 등록할 수 있습니다.' } }, 404);
@@ -79,10 +103,10 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, target.user_id),
       );
     } else {
-      statements.push(c.env.DB.prepare(`INSERT INTO application_access_grants(client_id, discord_user_id, status, reason, updated_by, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, discord_user_id) DO UPDATE SET
-        status=excluded.status, reason=excluded.reason, updated_by=excluded.updated_by, updated_at=excluded.updated_at`)
-        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', body.reason.trim(), actor, now));
+      statements.push(c.env.DB.prepare(`INSERT INTO application_access_grants(client_id, discord_user_id, status, reason, updated_by, updated_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, discord_user_id) DO UPDATE SET
+        status=excluded.status, reason=excluded.reason, updated_by=excluded.updated_by, updated_at=excluded.updated_at, expires_at=excluded.expires_at`)
+        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', body.reason.trim(), actor, now, body.action === 'grant' ? expiresAt : null));
       if (target && body.action === 'revoke') statements.push(
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`).bind(now, target.user_id, clientId),
         c.env.DB.prepare(`DELETE FROM auth_codes WHERE user_id = ? AND client_id = ?`).bind(target.user_id, clientId),
@@ -90,9 +114,10 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     statements.push(c.env.DB.prepare(`INSERT INTO auth_events(id, user_id, client_id, event_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(`evt_${randomToken(10)}`, target?.user_id ?? null, clientId, `admin.access.${body.action}`,
-        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim() }), now));
+        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim(), ...(body.action === 'grant' ? { expires_at: expiresAt } : {}) }), now));
     await c.env.DB.batch(statements);
-    return c.json({ ok: true, message: body.action === 'reauthenticate'
+    const control=await deliverControl(c.env,clientId,body.action==='reauthenticate'?target?.user_id:undefined);
+    return c.json({ ok: true, control, message: body.action === 'reauthenticate'
       ? '모든 서비스의 기존 AUTH 토큰을 회수했습니다. 다음 접속 시 Discord 재인증이 필요합니다.'
       : body.action === 'grant' ? '이 서비스에 수동 접근을 허가했습니다.' : '수동 허가를 회수했습니다. 원래 역할 조건을 충족하면 계속 접근할 수 있습니다.' });
   });

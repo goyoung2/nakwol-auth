@@ -38,13 +38,13 @@ test('authorize prompt=none checks only the central session and never opens Disc
   const authorize = source.slice(authorizeStart, callbackStart);
 
   assert.match(authorize, /const prompt = c\.req\.query\('prompt'\) \?\? ''/);
-  assert.match(authorize, /prompt && prompt !== 'none'/);
+  assert.match(authorize, /prompt && !\['none', 'login'\]\.includes\(prompt\)/);
   assert.match(authorize, /prompt === 'none' \? 'authorize\.sso_auto' : 'authorize\.sso'/);
   assert.match(authorize, /if \(prompt === 'none'\)/);
   assert.match(authorize, /error: 'login_required'/);
 
   const silentMiss = authorize.indexOf("if (prompt === 'none')");
-  const createRequest = authorize.indexOf('const requestId = `req_');
+  const createRequest = authorize.indexOf('const transaction = await createOAuthTransaction');
   const discordRedirect = authorize.indexOf('buildDiscordAuthorizeUrl');
   assert.ok(silentMiss >= 0 && silentMiss < createRequest && createRequest < discordRedirect);
 });

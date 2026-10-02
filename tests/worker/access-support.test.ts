@@ -1,3 +1,4 @@
+import { createOAuthTransaction } from '../../src/oauth-transaction';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -15,9 +16,9 @@ test('operator support actions use real D1 and preserve service and identity bou
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql','0004_nakwol_connect_cli.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql', '0017_discord_credentials.sql','0018_gate_control.sql','0020_service_users.sql']) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
-    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
+    for (const statement of sql.replace(/^--.*$/gm, '').match(/\s*CREATE TRIGGER[\s\S]*?END;|[^;]+;/gi) ?? []) await DB.prepare(statement).run();
   }
   const env = { DB, NAKWOL_GUILD_ID: '1493410906456064112', NAKWOL_MEMBER_ROLE_ID: '1553600098661957643',
     DISCORD_CLIENT_ID: 'fixture', DISCORD_CLIENT_SECRET: 'fixture', AUTH_ORIGIN: 'https://auth.test' };
@@ -26,6 +27,7 @@ test('operator support actions use real D1 and preserve service and identity bou
   const discordId = '1553600098661957644';
   for (const id of ['operator', 'ordinary', 'target']) {
     await DB.prepare(`INSERT INTO users VALUES (?, ?, NULL, 'active', 0, 0)`).bind(id, id).run();
+    if (id === 'operator') await createSession(env, id);
     await DB.prepare(`INSERT INTO access_tokens VALUES (?, ?, 'nakwol-connect-admin', ?, NULL, ?)`).bind(await sha256Base64Url(id), id, Date.now() + 60000, Date.now()).run();
   }
   await DB.prepare(`INSERT INTO auth_operators(user_id,created_at) VALUES ('operator',0)`).run();
@@ -38,6 +40,14 @@ test('operator support actions use real D1 and preserve service and identity bou
   }, env);
   const status = () => diagnoseApplicationAccess(env, 'target', 'site');
 
+  await t.test('legacy support mutations also require recent real OAuth authentication', async () => {
+    await DB.prepare(`UPDATE auth_sessions SET created_at=? WHERE user_id='operator'`).bind(Date.now()-900001).run();
+    const response = await request('grant');
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'RECENT_AUTH_REQUIRED');
+    await DB.prepare(`UPDATE auth_sessions SET created_at=? WHERE user_id='operator'`).bind(Date.now()-60000).run();
+  });
+
   await t.test('anonymous and non-operator cannot grant; malformed identity rejected', async () => {
     assert.equal((await request('grant', 'missing')).status, 401);
     assert.equal((await request('grant', 'ordinary')).status, 403);
@@ -47,12 +57,29 @@ test('operator support actions use real D1 and preserve service and identity bou
       body: JSON.stringify({ action: 'grant', discord_user_id: discordId, reason: 'fixture' }),
     }, env)).status, 403);
   });
+  await t.test('manual grants require a finite bounded expiry', async () => {
+    for (const expiry of [null, 'tomorrow', Date.now() + 1000, Date.now() + 8 * 24 * 60 * 60 * 1000]) {
+      const response = await app.request('https://auth.test/admin/api/access/site', {
+        method: 'POST', headers: { Authorization: 'Bearer operator', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'grant', discord_user_id: discordId, reason: 'fixture', expires_at: expiry }),
+      }, env);
+      assert.equal(response.status, 400);
+    }
+  });
+  await t.test('operator force refresh reuses authorization gates and returns recovery for absent credentials', async () => {
+    assert.equal((await request('refresh_membership', 'ordinary')).status, 403);
+    const absent = await request('refresh_membership');
+    assert.equal(absent.status, 404);
+    assert.equal((await absent.json()).recovery_url, 'https://auth.test/account');
+  });
   await t.test('pregrant only links after verified Discord identity and never alters membership', async () => {
     assert.equal((await request('grant')).status, 200);
     assert.equal((await status()).allowed, false);
     await DB.prepare(`INSERT INTO auth_identities VALUES ('target-i','target','discord',?,0,0)`).bind(discordId).run();
     await upsertMembership(env, 'target', false, 'user', []);
     assert.equal((await status()).reason, 'MANUAL_GRANT');
+    const forced = await request('refresh_membership');
+    assert.equal((await forced.json()).status, 'reauth-required');
     assert.equal((await diagnoseApplicationAccess(env, 'target', 'other')).allowed, false);
     const member = await DB.prepare(`SELECT role FROM memberships WHERE user_id='target'`).first();
     assert.equal(member?.role, 'user');
@@ -78,6 +105,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.equal(await inspectAccessToken(env, 'old', 'site'), null);
     assert.equal((await status()).reason, 'REAUTHENTICATION_REQUIRED');
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
+    await DB.prepare(`UPDATE user_reauthentication SET completed_at=? WHERE user_id='target'`).bind(Date.now() + 1).run();
     assert.equal((await status()).allowed, true);
     await DB.prepare(`UPDATE access_tokens SET revoked_at=NULL WHERE user_id='target' AND client_id='site'`).run();
     assert.equal(await inspectAccessToken(env, 'old', 'site'), null);
@@ -100,7 +128,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
     assert.equal((await status()).allowed, true);
     await DB.prepare(`UPDATE memberships SET checked_at=? WHERE user_id='target'`).bind(Date.now() - MEMBERSHIP_MAX_AGE_MS).run();
-    assert.equal((await status()).reason, 'MEMBERSHIP_REFRESH_REQUIRED');
+    assert.equal((await status()).reason, 'MEMBERSHIP_REAUTH_REQUIRED');
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
     assert.equal((await status()).allowed, true);
   });
@@ -114,30 +142,34 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.ok(data.events.some((e: { event_type: string }) => e.event_type === 'admin.access.reauthenticate'));
     assert.equal((await app.request(url, { headers: { Authorization: 'Bearer ordinary' } }, env)).status, 403);
   });
-  await t.test('denied OAuth creates no session or token; retry with new role succeeds', async (t) => {
+  await t.test('denied OAuth preserves prior identity without issuing credentials; retry with new role succeeds', async (t) => {
     let roles: string[] = [];
     t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'discord-fixture' });
+      if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'discord-fixture', refresh_token: 'discord-refresh-fixture',
+        expires_in: 3600, scope: 'identify guilds.members.read' });
       if (url.endsWith('/users/@me')) return Response.json({ id: discordId, username: 'target' });
       return Response.json({ roles });
     });
-    const callback = async (requestId: string, cookie = '') => {
+    const callback = async (cookie = '') => {
+      const transaction = await createOAuthTransaction(undefined, true);
+      assert.ok(transaction);
+      const requestId = transaction.state;
       await DB.prepare(`INSERT INTO oauth_requests VALUES (?, 'site', 'https://site.test/', 'challenge', 'state', ?, ?)`)
         .bind(requestId, Date.now() + 60000, Date.now()).run();
-      return auth.request('https://auth.test/auth/discord/callback?state=' + requestId + '&code=fixture', { headers: { Cookie: cookie } }, env);
+      return auth.request('https://auth.test/auth/discord/callback?state=' + requestId + '&code=fixture', { headers: { Cookie: [cookie, transaction.cookie.split(';')[0]].filter(Boolean).join('; ') } }, env);
     };
     const oldSession = await createSession(env, 'target');
-    const denied = await callback('deny-request', 'nakwol_sid=' + oldSession.token);
+    const denied = await callback('nakwol_sid=' + oldSession.token);
     assert.equal(new URL(denied.headers.get('Location') || '').searchParams.get('error'), 'access_denied');
     assert.match(denied.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal(await findSessionUser(env, oldSession.token), null);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 0);
+    assert.equal(await findSessionUser(env, oldSession.token), 'target');
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
     assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_codes WHERE user_id='target'`).first())?.n, 0);
     roles = [env.NAKWOL_MEMBER_ROLE_ID];
-    const accepted = await callback('retry-request');
+    const accepted = await callback();
     assert.ok(new URL(accepted.headers.get('Location') || '').searchParams.get('code'));
-    assert.doesNotMatch(accepted.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
+    assert.match(accepted.headers.get('Set-Cookie') || '', /nakwol_sid=[^;]+;/);
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 2);
   });
 });

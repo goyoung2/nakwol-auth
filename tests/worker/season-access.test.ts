@@ -18,9 +18,9 @@ test('OAuth season membership gates tokens and additional roles without a bot', 
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_policy_settings.sql', '0016_server_sessions.sql', '0017_discord_credentials.sql','0020_service_users.sql']) {
     const sql = await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8');
-    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(value => value.trim()).filter(Boolean)) {
+    for (const statement of sql.replace(/^--.*$/gm, '').match(/\s*CREATE TRIGGER[\s\S]*?END;|[^;]+;/gi) ?? []) {
       await DB.prepare(statement).run();
     }
   }
@@ -31,7 +31,7 @@ test('OAuth season membership gates tokens and additional roles without a bot', 
   await DB.prepare("INSERT INTO applications VALUES ('site','Site','[\"https://site.test/\"]','active',0,0)").run();
   await DB.prepare("INSERT INTO application_settings(client_id,access_policy,created_at,updated_at) VALUES ('site','member',0,0)").run();
   const expiresAt = Date.now() + 60000;
-  await DB.prepare("INSERT INTO access_tokens VALUES (?, 'u', 'site', ?, NULL, 0)").bind(await sha256Base64Url('existing-token'), expiresAt).run();
+  await DB.prepare("INSERT INTO access_tokens VALUES (?, 'u', 'site', ?, NULL, ?)").bind(await sha256Base64Url('existing-token'), expiresAt, Date.now()).run();
   let roles = [season];
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -89,8 +89,8 @@ test('OAuth season membership gates tokens and additional roles without a bot', 
     assert.equal(new URL(denied.headers.get('Location') ?? '').searchParams.get('error'), 'access_denied');
     roles = [season];
     await refresh();
-    assert.match(denied.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    const freshSession = await createSession(env, 'u');
+    assert.equal(denied.headers.get('Set-Cookie'), null);
+    const freshSession = session;
     const allowed = await app.request(url.toString(), { headers: { Cookie: `nakwol_sid=${freshSession.token}` } }, env);
     assert.equal(allowed.status, 302);
     assert.ok(new URL(allowed.headers.get('Location') ?? '').searchParams.get('code'));

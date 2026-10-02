@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-01T07:15:39.057Z",
+  "node": "v22.23.1",
+  "platform": "win32",
+  "release": "10.0.19045",
+  "arch": "x64",
+  "cpuModels": [
+    "AMD Ryzen 7 5700X3D 8-Core Processor           "
+  ],
+  "logicalCPUs": 16,
+  "totalMemoryBytes": 51480969216,
+  "freeMemoryBytes": 14580006912,
+  "branch": "feature/commercial-auth-foundation",
+  "sourceCommit": "9d57529e70068b359f28957425037dbd21e54d80",
+  "sourceDirty": true,
+  "cpuTestCoordination": "Root status tests and UIworker D1/API tests finished; both deferred CPU tests/typechecks for this sequential measurement.",
+  "scope": "Only local-lease and bounded-control warm states plus public baselines;10warmups30samples;315assets300images50KiB;concurrency300;10syntheticisolates;100msAUTH. Not108matrix,workerd/edgeCPU,Discord or production acceptance."
+}

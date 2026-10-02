@@ -37,7 +37,7 @@ test('Connect public manifest and admin fallback advertise the same protected de
   assert.doesNotMatch(routes, /access_policy:\s*row\.access_policy \?\? 'public'/);
 
   const cliPackage = JSON.parse(await readFile(new URL('../../packages/connect-cli/package.json', import.meta.url), 'utf8'));
-  assert.equal(cliGuide.split(String.fromCharCode(10))[0].split(' ').at(-1), cliPackage.version);
+  assert.equal(cliGuide.split(/\r?\n/)[0].split(' ').at(-1), cliPackage.version);
   assert.match(cliGuide, /auth\s*=\s*required/);
   assert.match(cliGuide, /access_policy\s*=\s*member/);
   assert.match(cliGuide, /테스트 페이지, 정적 사이트, Cloudflare Pages라는 이유만으로 공개 서비스라고 판단하지 않습니다/);

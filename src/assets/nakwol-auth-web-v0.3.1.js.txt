@@ -39,9 +39,9 @@ export class NakwolAuthClient extends NakwolAuthClientV02 {
     this.ssoProbeMiss = false;
   }
 
-  async login() {
+  async login(options = {}) {
     this.storage.removeItem(this.key('sso_suppressed'));
-    return super.login();
+    return super.login(options);
   }
 
   clearDeniedLogin(error) {

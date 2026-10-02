@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 import { authenticateAccessToken, logAuthEvent } from './store';
 import { getRequiredRoleIds, parseRequiredRoleIds, RoleSettingsError } from './role-settings';
 import type { Env } from './types';
+import { AdminOperationError, operatorAuthenticatedAt } from './admin-operations';
 
 type Role = { readonly id: string; readonly name: string };
 class RoleCatalogError extends Error {}
@@ -54,7 +55,7 @@ const auth=new NakwolAuthClient({clientId:'nakwol-connect-admin',redirectUri:loc
 const status=document.querySelector('#status'), apps=document.querySelector('#apps');
 async function api(options={}){const headers=new Headers({'Authorization':'Bearer '+(auth.getAccessToken()||'')});if(options.body)headers.set('Content-Type','application/json');const r=await fetch('/admin/api/roles',{...options,headers});const p=await r.json();if(!r.ok)throw new Error(p.error?.message||p.error?.code||'요청 실패');return p;}
 async function load(){status.textContent='불러오는 중…';apps.replaceChildren();try{const data=await api();document.querySelector('#season').textContent='필수 시즌3 역할: '+data.season_role.name+' ('+data.season_role.id+')';for(const app of data.applications){const card=document.createElement('section'),title=document.createElement('h2'),hint=document.createElement('small');title.textContent=app.name;hint.textContent=app.client_id+' · '+app.access_policy;card.append(title,hint);const checked=new Set(app.required_role_ids);for(const role of data.roles){if(role.id===data.season_role.id)continue;const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=checked.has(role.id);input.disabled=app.access_policy!=='member';input.onchange=()=>input.checked?checked.add(role.id):checked.delete(role.id);label.append(input,document.createTextNode(' '+role.name+' ('+role.id+')'));card.append(label);}const missing=app.required_role_ids.filter(id=>!data.roles.some(role=>role.id===id));if(missing.length){const warning=document.createElement('p');warning.textContent='삭제된 Discord 역할: '+missing.join(', ')+' — 저장하면 목록에서 제거됩니다.';card.append(warning);for(const id of missing)checked.delete(id);}const save=document.createElement('button');save.textContent='요구 역할 저장';save.disabled=app.access_policy!=='member';save.onclick=async()=>{save.disabled=true;try{await api({method:'POST',body:JSON.stringify({client_id:app.client_id,role_ids:[...checked].filter(id=>id!==data.season_role.id)})});status.textContent=app.name+' 역할 조건을 저장했습니다.';}catch(e){status.textContent=e.message;}finally{save.disabled=false;}};card.append(save);apps.append(card);}status.textContent='현재 Discord 역할을 불러왔습니다.';}catch(e){status.textContent=e.message;}}
-document.querySelector('#login').onclick=()=>auth.login();document.querySelector('#reload').onclick=load;
+document.querySelector('#login').onclick=()=>auth.login({reauthenticate:true});document.querySelector('#reload').onclick=load;
 try{const user=await auth.bootstrap();if(user)await load();else status.textContent='로그인 후 앱 관리에서 역할 관리로 이동하세요.';}catch(e){status.textContent=e.message;}
 </script></body></html>`;
 }
@@ -86,6 +87,11 @@ export function registerRoleAdminRoutes(app: Hono<{ Bindings: Env }>): void {
   const save = async (c: Context<{ Bindings: Env }>) => {
     const identity = await requireOperator(c);
     if (identity instanceof Response) return identity;
+    try { await operatorAuthenticatedAt(c, identity.userId); }
+    catch (error) {
+      if (error instanceof AdminOperationError) return c.json({ error: { code: error.code, message: '운영자 로그인 버튼으로 Discord 재인증 후 다시 저장하세요.' } }, error.status);
+      throw error;
+    }
     if (c.req.header('Origin') !== new URL(c.env.AUTH_ORIGIN).origin) return c.json({ error: { code: 'INVALID_ORIGIN' } }, 403);
     if (!c.req.header('Content-Type')?.toLowerCase().startsWith('application/json')) return c.json({ error: { code: 'JSON_REQUIRED' } }, 415);
     let body: unknown;

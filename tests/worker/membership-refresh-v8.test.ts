@@ -30,7 +30,12 @@ function createV8Env() {
         return {
           bind(...args: unknown[]) {
             return {
+              async all() { return { results: [], success: true }; },
               async first() {
+                if (sql.includes('SELECT legacy_deadline_at FROM membership_refresh_policy')) {
+                  return { legacy_deadline_at: Date.now() + 86400000 };
+                }
+                if (sql.includes('SELECT checked_at FROM memberships')) return membership;
                 if (sql.includes("SELECT provider_user_id FROM auth_identities")) {
                   return { provider_user_id: '1493410906456064113' };
                 }

@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:https';
 import assert from 'node:assert/strict';
+import {exerciseAutomaticRollout} from './automatic-update-smoke.mjs';
 const run=promisify(execFile);
 if(!process.env.npm_execpath)throw Error('Run npm run test:managed.');
 const root=await mkdtemp(join(tmpdir(),'nakwol-managed-e2e-'));
@@ -22,17 +23,20 @@ try {
   const {createGate}=await import(pathToFileURL(join(root,'node_modules/nakwol-connect/src/server/gate.mjs')));
   const cert=join(root,'cert.pem'),key=join(root,'key.pem');
   await run('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost']);
-  let gate;
+  let gate,automaticProbe;
   server=createServer({key:await readFile(key),cert:await readFile(cert)},async(req,res)=>{
-    const response=await gate(new Request(`https://localhost:${server.address().port}${req.url}`,{method:req.method,headers:req.headers}),{sessionSecret:'test-only-32-characters-long-secret',serveAsset:()=>{throw Error('Anonymous asset leak');}});
+    const response=automaticProbe?await automaticProbe(req):await gate(new Request(`https://localhost:${server.address().port}${req.url}`,{method:req.method,headers:req.headers}),{sessionSecret:'test-only-32-characters-long-secret',serveAsset:()=>{throw Error('Anonymous asset leak');}});
     res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const url=`https://localhost:${server.address().port}/`;
   gate=createGate({clientId:'smoke',siteUrl:url,authOrigin:'https://auth.test',accessPolicy:'member'});
   await writeFile(join(root,'.nakwol-connect.json'),JSON.stringify({version:2,clientId:'smoke',authOrigin:'https://auth.test',redirectUris:[url]}));
-  const env={...process.env,NODE_EXTRA_CA_CERTS:cert};
-  const command=async(...args)=>JSON.parse((await run(process.execPath,[cli,...args,'--json'],{cwd:root,env})).stdout);
+  const env={...process.env,NODE_EXTRA_CA_CERTS:cert,NAKWOL_SMOKE_SESSION:'smoke_session=member'};
+  const command=async(...args)=>{
+    const options=typeof args.at(-1)==='object'?args.pop():{};
+    return JSON.parse((await run(process.execPath,[cli,...args,'--json'],{cwd:root,env,...options})).stdout);
+  };
   await run(process.execPath,[process.env.npm_execpath,'run','build'],{cwd:root});
   await command('protect','install','--provider','cloudflare-workers','--assets','dist','--url',url);
   await command('protect','automate','--reports');
@@ -46,4 +50,6 @@ try {
   const status=await command('protect','status');assert.equal(status.deployed.status,'version-match');
   const verified=await command('protect','verify','--expect-runtime','installed');assert.equal(verified.ok,true);assert.ok(verified.requestCount>=20);
   console.log(JSON.stringify({ok:true,packagedVersion:status.installedPackageVersion,requestCount:verified.requestCount,flow:'pack/install/automate/npm-ci/build/update/live-HTTPS-status/verify'}));
+  const automatic=await exerciseAutomaticRollout({root,command,url,enableProbe:probe=>automaticProbe=probe});
+  console.log(JSON.stringify({ok:true,flow:'packed CLI automatic rollout and recovery',...automatic}));
 } finally {if(server)await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});}

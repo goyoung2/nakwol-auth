@@ -65,8 +65,8 @@ export async function getConnectPrincipal(env: Env, userId: string, scopes: stri
   const developerRole = activeDeveloper && (developer?.role === 'developer' || developer?.role === 'operator')
     ? developer.role
     : null;
-  const isOperator = Boolean(operator) || developerRole === 'operator' || user.membership?.role === 'admin';
-  if (!isOperator && developerRole !== 'developer') return null;
+  const isOperator = Boolean(operator);
+  if (!isOperator && !activeDeveloper) return null;
   return { userId, scopes, isOperator, developerRole: isOperator ? 'operator' : developerRole };
 }
 

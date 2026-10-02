@@ -7,6 +7,9 @@ const root = resolve('.');
 const packageDir = join(root, 'packages', 'connect-cli');
 const outputPath = join(root, 'src', 'assets', 'nakwol-connect-cli.tgz.b64.js.txt');
 await writeFile(join(root, 'src/assets/gate-spec.js.txt'), await readFile(join(packageDir, 'GATE_SPEC.md')));
+for (const [source, target] of [['hosting-schema.mjs','hosting-schema.js.txt'],['setup-schema.mjs','setup-schema.js.txt'],['presentation-schema.mjs','presentation-schema.js.txt'],['presentation-renderer.mjs','presentation-renderer.js.txt']]) {
+  await writeFile(join(root,'src/assets',target),await readFile(join(packageDir,'src/shared',source)));
+}
 const temp = await mkdtemp(join(tmpdir(), 'nakwol-connect-pack-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 

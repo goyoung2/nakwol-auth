@@ -2,13 +2,14 @@ import { randomToken, safeEqual, sha256Base64Url } from './crypto';
 import type { DiscordUser, Env, MembershipRow, SessionRow, UserRow } from './types';
 import { discordAvatarUrl, fetchDiscordIdentity, resolveNakwolRole } from './discord';
 import { isApplicationAccessAllowed } from './policy';
+import { resolveAuthPolicy } from './auth-policy-settings';
 
 // 중앙 로그인 세션: 마지막 사용 후 10일까지 유지(쓸 때마다 연장), 로그인 시점부터 최대 30일.
 // 맹원 자격은 앱 토큰(1시간)을 새로 발급할 때마다 다시 확인하므로 세션 기간과 권한 회수는 분리된다.
 export const SESSION_IDLE_TTL_MS = 10 * 24 * 60 * 60 * 1000;
 export const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const AUTH_CODE_TTL_MS = 2 * 60 * 1000;
-const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
+
 
 async function credentialsInvalidated(env: Env, userId: string, issuedAt: number): Promise<boolean> {
   const row = await env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
@@ -100,30 +101,33 @@ export async function upsertMembership(env: Env, userId: string, isGuildMember: 
        role = excluded.role,
        status = excluded.status,
        checked_at = excluded.checked_at,
-       role_ids = excluded.role_ids`
+       role_ids = excluded.role_ids WHERE memberships.checked_at <= excluded.checked_at`
   ).bind(userId, env.NAKWOL_GUILD_ID, isGuildMember ? 1 : 0, role, active ? 'active' : 'inactive', now, JSON.stringify(roleIds)).run();
 }
 
 export async function refreshDiscordMembership(
   env: Env,
   discordAccessToken: string,
+  loginStartedAt?: number,
 ): Promise<{ userId: string; role: 'user' | 'member' | 'admin' }> {
   const { user: discordUser, member } = await fetchDiscordIdentity(env, discordAccessToken);
   const role = resolveNakwolRole(env, member);
   const displayName = member?.nick ?? discordUser.global_name ?? discordUser.username;
   const userId = await upsertDiscordUser(env, discordUser, displayName);
   await upsertMembership(env, userId, Boolean(member), role, member?.roles ?? []);
+  if (loginStartedAt) await env.DB.prepare(`UPDATE user_reauthentication SET completed_at=?
+    WHERE user_id=? AND requested_at < ?`).bind(Date.now(), userId, loginStartedAt).run();
   return { userId, role };
 }
 
-export async function createAuthorizationCode(env: Env, userId: string, clientId: string, redirectUri: string, codeChallenge: string): Promise<string> {
+export async function createAuthorizationCode(env: Env, userId: string, clientId: string, redirectUri: string, codeChallenge: string, rawSession?: string): Promise<string> {
   const code = randomToken(32);
   const codeHash = await sha256Base64Url(code);
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO auth_codes(code_hash, user_id, client_id, redirect_uri, code_challenge, expires_at, used_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`
-  ).bind(codeHash, userId, clientId, redirectUri, codeChallenge, now + AUTH_CODE_TTL_MS, now).run();
+      `INSERT INTO auth_codes(code_hash, user_id, client_id, redirect_uri, code_challenge, expires_at, used_at, created_at, auth_session_hash)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+  ).bind(codeHash, userId, clientId, redirectUri, codeChallenge, now + AUTH_CODE_TTL_MS, now, rawSession ? await sha256Base64Url(rawSession) : null).run();
   return code;
 }
 
@@ -146,28 +150,36 @@ export async function exchangeAuthorizationCode(env: Env, args: { code: string; 
 
   const accessToken = randomToken(32);
   const tokenHash = await sha256Base64Url(accessToken);
-  const expiresAt = now + ACCESS_TOKEN_TTL_MS;
-  await env.DB.batch([
-    env.DB.prepare(`UPDATE auth_codes SET used_at = ? WHERE code_hash = ?`).bind(now, codeHash),
+  // D1 executes this batch transactionally: only the first exchange can insert.
+  // The UPDATE is bound to that exchange's token hash, not to a shared timestamp.
+  const results = await env.DB.batch<{token_hash:string}>([
     env.DB.prepare(
-      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)`
-    ).bind(tokenHash, row.user_id, args.clientId, expiresAt, now),
+      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at)
+       SELECT ?, user_id, client_id, ? + 1000 * MIN(
+         COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='global'),3600),
+         COALESCE((SELECT json_extract(settings_json,'$.accessTokenSeconds') FROM auth_policy_settings WHERE scope='app:' || auth_codes.client_id),3600)
+       ), NULL, ? FROM auth_codes
+        WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
+          AND client_id = ? AND redirect_uri = ? AND code_challenge = ? RETURNING token_hash`
+    ).bind(tokenHash, now, now, codeHash, Date.now(), args.clientId, args.redirectUri, expected),
+    env.DB.prepare(
+      `UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL
+         AND EXISTS (SELECT 1 FROM access_tokens WHERE token_hash = ?)`
+    ).bind(now, codeHash, tokenHash),
   ]);
-  return { accessToken, expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000) };
+  if (results[0]?.results.length !== 1 || results[0].results[0]?.token_hash !== tokenHash || results[1]?.meta.changes !== 1) {
+    throw new Error('INVALID_OR_EXPIRED_CODE');
+  }
+  const issued = await env.DB.prepare('SELECT expires_at FROM access_tokens WHERE token_hash = ?').bind(tokenHash).first<{ expires_at: number }>();
+  if (!issued) throw new Error('INVALID_OR_EXPIRED_CODE');
+  return { accessToken, expiresIn: Math.max(0, Math.floor((issued.expires_at - now) / 1000)) };
 }
 
 export async function authenticateAccessToken(env: Env, rawToken: string, clientId: string): Promise<string | null> {
-  const hash = await sha256Base64Url(rawToken);
-  const now = Date.now();
-  const row = await env.DB.prepare(
-    `SELECT user_id, client_id, expires_at, revoked_at, created_at FROM access_tokens WHERE token_hash = ?`
-  ).bind(hash).first<{ user_id: string; client_id: string; expires_at: number; revoked_at: number | null; created_at: number }>();
-  if (!row || row.revoked_at || row.expires_at <= now || row.client_id !== clientId) return null;
-  if (await credentialsInvalidated(env, row.user_id, Number(row.created_at))) return null;
-  return row.user_id;
+  return (await inspectAccessToken(env, rawToken, clientId))?.userId ?? null;
 }
 
-export async function inspectAccessToken(env: Env, rawToken: string, clientId: string): Promise<{ userId: string; clientId: string; expiresAt: number } | null> {
+export async function inspectAccessToken(env: Env, rawToken: string, clientId: string): Promise<{ userId: string; clientId: string; expiresAt: number; createdAt: number } | null> {
   const hash = await sha256Base64Url(rawToken);
   const now = Date.now();
   const row = await env.DB.prepare(
@@ -175,7 +187,12 @@ export async function inspectAccessToken(env: Env, rawToken: string, clientId: s
   ).bind(hash).first<{ user_id: string; client_id: string; expires_at: number; revoked_at: number | null; created_at: number }>();
   if (!row || row.revoked_at || row.expires_at <= now || row.client_id !== clientId) return null;
   if (await credentialsInvalidated(env, row.user_id, Number(row.created_at))) return null;
-  return { userId: row.user_id, clientId: row.client_id, expiresAt: Number(row.expires_at) };
+  const ttlSeconds = (await resolveAuthPolicy(env, clientId)).effective.accessTokenSeconds;
+  const expiresAt = Math.min(Number(row.expires_at), Number(row.created_at) + ttlSeconds * 1000);
+  // Persist a shortened boundary so later policy relaxation cannot resurrect it.
+  if (expiresAt < Number(row.expires_at)) await env.DB.prepare(`UPDATE access_tokens SET expires_at = MIN(expires_at, ?) WHERE token_hash = ?`).bind(expiresAt, hash).run();
+  if (expiresAt <= now) return null;
+  return { userId: row.user_id, clientId: row.client_id, expiresAt, createdAt: Number(row.created_at) };
 }
 
 export async function revokeAccessToken(env: Env, rawToken: string): Promise<void> {

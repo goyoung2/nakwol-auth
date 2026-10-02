@@ -39,6 +39,7 @@ export async function detectProject(root = process.cwd()) {
       'src/pages/_app.tsx', 'src/pages/_app.jsx', 'src/pages/_app.js', 'src/pages/_app.ts',
     ]);
     if (pagesApp) return { framework: 'next_pages', targetFile: pagesApp, projectName, defaultRedirectUri: 'http://localhost:3000/' };
+    return {framework:'next',targetFile:null,projectName,defaultRedirectUri:'http://localhost:3000/'};
   }
 
   if (deps.has('@sveltejs/kit')) {

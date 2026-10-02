@@ -10,6 +10,7 @@ function envWithPolicy(accessPolicy: string | null, status = 'active', role = 'u
         return {
           bind() {
             return {
+              async all() { return { results: [], success: true }; },
               async first() {
                 if (query.includes('FROM applications')) return { status: 'active' };
                 if (query.includes('FROM application_settings')) return accessPolicy == null ? null : { access_policy: accessPolicy };

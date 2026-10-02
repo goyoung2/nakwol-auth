@@ -46,7 +46,7 @@ async function api(path, options = {}) {
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || payload?.error || `HTTP ${response.status}`);
+  if (!response.ok) { const code=payload?.error?.code;const error=new Error(code==='RECENT_AUTH_REQUIRED'?'최근 Discord 재인증이 필요합니다. 운영자 다시 인증 버튼을 눌러 주세요.':payload?.error?.message||code||`HTTP ${response.status}`);error.code=code;throw error; }
   return payload;
 }
 
@@ -180,8 +180,8 @@ function getFormData() {
     homepage_url: String(fd.get('homepage_url') || '').trim(),
     redirect_uris: String(fd.get('redirect_uris') || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
     framework: String(fd.get('framework') || 'other'),
-    access_policy: String(fd.get('access_policy') || 'member'),
-    status: String(fd.get('status') || 'active'),
+    access_policy: String(ui.form.elements.namedItem('access_policy').value || 'member'),
+    ...(state.creating ? {status: String(fd.get('status') || 'active')} : {}),
   };
 }
 
@@ -192,7 +192,10 @@ function fillForm(app) {
   setField('redirect_uris', (app?.redirect_uris || []).join('\n'));
   setField('framework', app?.framework || 'other');
   setField('access_policy', app?.access_policy || 'member');
+  ui.form.elements.namedItem('access_policy').disabled = Boolean(app && !state.creating);
   setField('status', app?.status || 'active');
+  ui.form.elements.namedItem('status').disabled = Boolean(app && !state.creating);
+  $('#app-status-help').hidden = state.creating;
   const clientField = ui.form.elements.namedItem('client_id');
   clientField.readOnly = Boolean(app && !state.creating);
 }
@@ -200,6 +203,11 @@ function fillForm(app) {
 function selectApp(app) {
   supportId.value = "";
   supportStatus.textContent = "";
+  pendingOperation = null;
+  $('#support-operation').replaceChildren();
+  $('#support-recovery-code').value = '';
+  $('#support-trace').value = '';
+  $('#support-policy-operation').value = '';
   $("#support-reason").value = "";
   moreEvents.hidden = true;
   state.creating = false;
@@ -342,7 +350,8 @@ let supportGeneration = 0;
 const supportId = $('#support-discord');
 const supportStatus = $('#support-status');
 const moreEvents = $('#events-more');
-const supportButtons = ['search', 'grant', 'revoke', 'reauth'].map(id => $('#support-' + id));
+const supportButtons = ['search','refresh','grant','revoke','reauth','deny','clear-deny','lock','unlock','restore','recovery-issue'].map(id => $('#support-' + id));
+let pendingOperation = null;
 const formatTime = value => value ? new Date(value).toLocaleString('ko-KR') : '확인 기록 없음';
 function readDetail(value) {
   try { return JSON.parse(value || '{}') || {}; } catch { return {}; }
@@ -376,10 +385,21 @@ function showSupportError(error) { supportStatus.textContent = error.message; su
 async function loadEvents(append = false) {
   if (!state.selected) return;
   const generation = ++supportGeneration;
+  const targetApp = state.selected.client_id;
   const params = new URLSearchParams({ discord_id: supportId.value.trim() });
   if (append === true && eventsCursor) { params.set('before', eventsCursor.created_at); params.set('cursor_id', eventsCursor.id); }
-  const payload = await api('/admin/api/access/' + encodeURIComponent(state.selected.client_id) + '?' + params);
-  if (generation !== supportGeneration) return;
+  const payload = await api('/admin/api/access/' + encodeURIComponent(targetApp) + '?' + params);
+  if (generation !== supportGeneration || state.selected?.client_id !== targetApp) return;
+  const trace = $('#support-trace').value.trim();
+  let extended = null;
+  if (trace || supportId.value.trim()) {
+    const query = new URLSearchParams(trace ? {trace_id:trace} : {discord_id:supportId.value.trim()});
+    extended = await api('/admin/api/operations/' + encodeURIComponent(targetApp) + '/diagnosis?' + query);
+    if (generation !== supportGeneration || state.selected?.client_id !== targetApp) return;
+    payload.user = extended.user;
+    payload.diagnosis = extended.diagnosis;
+    if (trace) supportId.value = extended.discordId;
+  }
   renderEvents(payload.events || [], append === true);
   eventsCursor = payload.events?.at(-1) || null;
   moreEvents.hidden = !payload.has_more;
@@ -392,6 +412,19 @@ async function loadEvents(append = false) {
       el('p', 'muted', '부족한 역할 ID: ' + (d.missing_role_ids.join(', ') || '없음')),
       el('p', 'muted', '재인증 요구: ' + formatTime(d.reauthentication_requested_at) + (d.reauthentication_status === 'completed' ? ' · 재확인 완료' : d.reauthentication_status === 'pending' ? ' · 재확인 대기' : '')));
   } else if (supportId.value.trim()) diagnosis.append(el('p', 'muted', '아직 로그인한 적 없는 Discord ID입니다. 수동 허가는 미리 등록할 수 있습니다.'));
+  if (extended) {
+    diagnosis.append(el('p','muted','서비스 상태: '+extended.application.status+' · 정책 버전 '+extended.policy.policyVersion),
+      el('p','muted','운영 런타임 보고: '+(extended.report?.summary.runtime_version || '확인 기록 없음')+' · 수신 '+formatTime(extended.report?.receivedAt)),
+      el('p','muted','제어 게시: '+formatTime(extended.control?.published_at)+' · 마지막 게이트 수신 확인: '+formatTime(extended.control?.observed_at)),
+      el('p','muted','세션은 마지막 관측 기록이며 온라인 상태가 아닙니다. 빠른 차단 지원 여부는 사이트의 제어 프로필 확인이 필요합니다.'));
+    diagnosis.append(el('p','muted','중앙 SSO 기록 '+extended.centralSessions.length+'개 · 현재 앱 토큰 기록 '+extended.appTokens.length+'개 · 사이트 세션 기록 '+extended.sessions.length+'개 (각 최근 100개까지)'));
+    for (const deny of extended.denies) diagnosis.append(el('p','',deny.scope+' · '+deny.status+' · '+deny.reason+' · 만료 '+(deny.expires_at?formatTime(deny.expires_at):'직접 해제')));
+    for (const session of extended.sessions) {
+      const row=el('div','event-row');row.append(el('code','',session.id),el('p','muted',session.site_origin+' · 마지막 중앙 갱신 '+formatTime(session.last_used_at)+' · 최대 만료 '+formatTime(session.absolute_expires_at)));
+      if (!session.revoked_at) {const stop=el('button','ghost','이 사이트 세션 종료');stop.type='button';stop.onclick=()=>actOnAccess('revoke-session',{sessionId:session.id});row.append(stop);}
+      diagnosis.append(row);
+    }
+  }
   const grants = $('#support-grants'); clear(grants);
   if (!payload.grants.length) grants.append(el('p', 'muted', '수동 허가 기록이 없습니다.'));
   for (const grant of payload.grants) {
@@ -405,25 +438,52 @@ async function loadEvents(append = false) {
 }
 $('#support-search').onclick = () => loadEvents().catch(showSupportError);
 moreEvents.onclick = () => loadEvents(true).catch(showSupportError);
-async function actOnAccess(action) {
+function renderOperation(operation, clientId) {
+  const area=$('#support-operation');clear(area);
+  const delivery=operation.delivery;
+  area.append(el('h4','','조치 '+operation.id),el('p','','접수: '+operation.result+' · 전파: '+delivery.status),el('p','muted','게이트의 수신 확인은 전체 사용자 반영 완료를 뜻하지 않습니다. 제어 프로필 미확인 사이트는 local lease 최대 300초이며 빠른 차단 적용을 표시하지 않습니다.'));
+  for(const receipt of delivery.receipts) area.append(el('p','muted',receipt.client_id+' · 버전 '+receipt.control_seq+' · 게시 '+formatTime(receipt.published_at)+' · 관측 '+formatTime(receipt.observed_at)));
+  const refresh=el('button','ghost','조치 상태 확인');refresh.type='button';refresh.onclick=async()=>{try{const result=await api('/admin/api/operations/'+encodeURIComponent(clientId)+'/'+encodeURIComponent(operation.id));if(state.selected?.client_id===clientId)renderOperation(result,clientId);}catch(e){showSupportError(e);}};
+  const retry=el('button','ghost',operation.action==='refresh-membership'&&['pending-refresh','unavailable'].includes(operation.result)?'역할 재확인 재시도':'전파 재시도');retry.type='button';retry.onclick=async()=>{try{const result=await api('/admin/api/operations/'+encodeURIComponent(clientId)+'/'+encodeURIComponent(operation.id)+'/retry',{method:'POST',body:JSON.stringify({reason:$('#support-reason').value.trim()})});if(state.selected?.client_id===clientId)renderOperation(result,clientId);}catch(e){showSupportError(e);}};
+  area.append(refresh,retry);
+}
+async function actOnAccess(action, extra = {}) {
   if (!state.selected) return;
-  const discordId = supportId.value.trim(), reason = $('#support-reason').value.trim();
-  if (!/^\d{15,22}$/.test(discordId) || !reason) { showSupportError(new Error('Discord ID와 조치 사유를 입력하세요.')); return; }
-  const descriptions = {grant:'시즌3 및 추가 역할 조건을 대신하는 수동 허가', revoke:'수동 허가 회수', reauthenticate:'모든 서비스의 AUTH 로그인 무효화 및 Discord 재인증 요구'};
-  if (!confirm([state.selected.name + ' / Discord ' + discordId, descriptions[action], '사유: ' + reason].join(String.fromCharCode(10)))) return;
+  const discordId = supportId.value.trim(), reason = $('#support-reason').value.trim(),clientId=state.selected.client_id;
+  const applicationAction=['lock-app','unlock-app','restore-policy'].includes(action);
+  if ((!applicationAction&&!/^\d{15,22}$/.test(discordId))||reason.length<3) {showSupportError(new Error('Discord ID와 3자 이상의 사유를 입력하세요.'));return;}
+  const request={action,reason,...(!applicationAction?{discordId}:{}),...extra};
+  if(action==='deny'||action==='clear-deny')request.scope=$('#support-scope').value;
+  if(action==='restore-policy')request.policyOperationId=$('#support-policy-operation').value.trim();
+  const intent=JSON.stringify({clientId,...request,expiry:$('#support-expiry').value});
+  if(action==='grant'||(action==='deny'&&$('#support-expiry').value))request.expiresAt=new Date($('#support-expiry').value).getTime();
   supportButtons.forEach(button => { button.disabled = true; });
   try {
-    const result = await api('/admin/api/access/' + encodeURIComponent(state.selected.client_id), {
-      method:'POST', body:JSON.stringify({discord_user_id:discordId, reason, action}),
-    });
-    supportStatus.className = 'muted'; supportStatus.textContent = result.message;
+    if(!pendingOperation||pendingOperation.intent!==intent) {
+      const preview=await api('/admin/api/operations/'+encodeURIComponent(clientId)+'/preview',{method:'POST',body:JSON.stringify(request)});
+      if(state.selected?.client_id!==clientId)return;
+      if(!confirm([state.selected.name+' · '+action,'범위: '+(request.scope||'app'),'영향받는 활성 사이트 세션: '+preview.affectedSessions,'사유: '+reason,preview.warning].join('\n')))return;
+      pendingOperation={intent,request:{...request,previewToken:preview.previewToken,expectedVersion:preview.version,idempotencyKey:crypto.randomUUID()}};
+    }
+    const result=await api('/admin/api/operations/'+encodeURIComponent(clientId),{method:'POST',body:JSON.stringify(pendingOperation.request)});
+    if(state.selected?.client_id!==clientId)return;
+    pendingOperation=null;
+    renderOperation(result,clientId);supportStatus.className='muted';supportStatus.textContent='조치를 접수했습니다. 게시·관측 상태를 확인하세요.';
     await loadEvents();
-  } catch (error) { showSupportError(error); }
+  } catch (error) { if(['VERSION_CONFLICT','STATE_CONFLICT','PREVIEW_REQUIRED'].includes(error.code))pendingOperation=null;showSupportError(error); }
   finally { supportButtons.forEach(button => { button.disabled = false; }); }
 }
 $('#support-grant').onclick = () => actOnAccess('grant');
+$('#support-refresh').onclick = () => actOnAccess('refresh-membership');
 $('#support-revoke').onclick = () => actOnAccess('revoke');
 $('#support-reauth').onclick = () => actOnAccess('reauthenticate');
+$('#support-deny').onclick=()=>actOnAccess('deny');
+$('#support-clear-deny').onclick=()=>actOnAccess('clear-deny');
+$('#support-lock').onclick=()=>actOnAccess('lock-app');
+$('#support-unlock').onclick=()=>actOnAccess('unlock-app');
+$('#support-restore').onclick=()=>actOnAccess('restore-policy');
+$('#support-reauth-self').onclick=()=>auth.login({reauthenticate:true});
+$('#support-recovery-issue').onclick=async()=>{const clientId=state.selected?.client_id;if(!clientId)return;try{const policyOperationId=$('#support-policy-operation').value.trim();const result=await api('/admin/api/recovery/issue',{method:'POST',body:JSON.stringify({clientId,reason:$('#support-reason').value.trim(),...(policyOperationId?{policyOperationId}:{})})});if(state.selected?.client_id===clientId){$('#support-recovery-code').value=result.code;supportStatus.textContent='10분짜리 일회성 복구 코드입니다. 안전하게 보관하세요.';}}catch(e){showSupportError(e);}};
 
 ui.form.addEventListener('input', (event) => {
   if (state.creating && event.target.name === 'name') {
@@ -465,6 +525,12 @@ ui.refreshEvents.addEventListener('click', () => loadEvents().catch((error) => r
       renderGate();
       return;
     }
+    const usersReturn = sessionStorage.getItem('nakwol.developer.users.return');
+    if (usersReturn !== null) { sessionStorage.removeItem('nakwol.developer.users.return'); location.replace('/developer/users' + (usersReturn ? '?client_id='+encodeURIComponent(usersReturn) : '')); return; }
+    const setupReturn = sessionStorage.getItem('nakwol.developer.setup.return');
+    if (setupReturn !== null) { sessionStorage.removeItem('nakwol.developer.setup.return'); location.replace('/developer/setup' + (/^[a-z0-9][a-z0-9-]{0,63}$/.test(setupReturn) ? '?client_id='+encodeURIComponent(setupReturn) : '')); return; }
+    const developerReturn = sessionStorage.getItem('nakwol.developer.return');
+    if (developerReturn !== null) { sessionStorage.removeItem('nakwol.developer.return'); location.replace('/developer/apps' + (developerReturn ? '?client_id='+encodeURIComponent(developerReturn) : '')); return; }
     await loadSession();
     if (state.session.can_manage) await loadApps();
   } catch (error) {

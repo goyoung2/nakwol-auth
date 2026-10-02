@@ -1,5 +1,7 @@
 상세 기능 계약: [공통 게이트 명세](../packages/connect-cli/GATE_SPEC.md)
 
+서비스 설치·재설정은 [개발자 마법사 안내](DEVELOPER_SETUP.md)를 참고하세요. Connect 0.14.0은 저장한 setup JSON으로 변경 비교와 서버 보호 설치를 지원합니다.
+
 # Connect 서버 보호 설치와 차단 검증
 
 Connect 0.7.1 기준. LLM에게는 [복사용 설치·업데이트 지시문](LLM_INSTALLATION.md)을 전달하세요.
@@ -165,7 +167,7 @@ export function handle(request, sessionSecret, serveProtectedContent) {
 }
 ```
 
-**0.7.1 설정 주의:** `authOrigin`은 위 예시처럼 끝에 `/` 없이 입력하세요. 현재 로그인 스크립트 경로가 문자열로 합쳐지므로 `/`를 붙이면 `//sdk/`가 되어 404로 로그인이 실패합니다. 실제 SDK 로딩까지 확인해야 하며 401 차단 검사만으로는 이 오류를 발견할 수 없습니다. 복수 사이트는 각 콜백을 등록하고 각 배포 origin으로 게이트를 구성하세요.
+**0.8.0 설정:** `authOrigin`은 HTTPS origin이며 마지막 `/` 유무는 정규화됩니다. SDK 경로는 URL로 구성합니다. SDK 로드 실패 시 다시 확인 버튼과 계정 복구 링크가 표시됩니다.
 
 `serveProtectedContent(request)`는 Web Response를 반환하며, 공통 게이트가 권한을 승인한 경우에만 호출됩니다. 모든 보호 경로와 `/__nakwol/*`를 이 핸들러로 연결하고 원본 파일을 별도로 공개하지 마세요. AUTH OAuth를 따로 구현하지 않습니다.
 
@@ -185,3 +187,42 @@ export function handle(request, sessionSecret, serveProtectedContent) {
 업데이트 PR 흐름을 선택할 수 있습니다. 이 모드에서는 위의 범위 기반 빌드 훅
 대신 설치된 로컬 CLI를 사용합니다. 설정 후 별도의 npm 잠금 파일 갱신/커밋과
 사이트 배포 연결이 필요합니다. [운영 절차](MANAGED_GATE_UPDATES.md)를 따르세요.
+
+## Connect 0.8.0 설치·증거 계약
+
+Vercel 정적 빌드 공식 어댑터, manifest 기반 검증, 정상 인증 파일 확인과 출시 판정은 [서버 보호 증거 안내](PROTECTION_EVIDENCE.md)를 따릅니다. 0.7.x는 명시적 갱신과 재배포가 필요합니다.
+
+## 서비스별 정책 관리 (Connect 0.9.0)
+
+AUTH의 `/developer/apps`에서 현재 소유한 서비스의 권한 재확인 간격(60~300초)을
+설정할 수 있습니다. 접근 정책(member/guest/admin/lab)과 전역 상한은 AUTH 운영자만
+영향 확인 후 변경합니다. 변경 사유와 정책 버전이 기록되며 동시 수정 충돌은 409로 거절됩니다.
+관리 작업은 최근 Discord 인증이 필요하고, 화면의 **관리자 인증 갱신**으로 다시 확인합니다.
+
+0.9.0 게이트는 다음 권한 재검증부터 변경을 적용합니다. 기존 0.7/0.8 게이트에는
+자동 반영되지 않으므로 공식 업데이트 후 사이트를 다시 배포해야 합니다. 화면에 저장된
+미사용/최대 세션 시간은 T06 서버 갱신 구현 전에는 긴 로그인 유지 기능으로 작동하지 않습니다.
+사이트의 마지막 관측이 없으면 적용 완료로 표시하지 않습니다.
+
+
+## 0.10 서버 세션 갱신 (T06, 로컬 릴리스 후보)
+
+공식 공통 게이트는 서버 credential을 명시적으로 설정한 사이트에서 서버 콜백과 장기 세션 갱신을 지원합니다. 상세 계약·활성화 순서·최대 300초 회수 지연·기존 방식과의 호환성은 [서버 세션 갱신](SERVER_SESSION_REFRESH.md)을 참조하세요. 운영 배포·npm 게시 전이며 기존 설치가 자동 전환되지는 않습니다.
+
+## 서비스 사용자 관리와 접근 관측 (0.12.0)
+
+현재 앱 소유자는 `/developer/users`에서 자기 서비스의 사용자 조회, 차단/해제, 앱 세션 종료와 위임된 추가 역할 임시 허가를 관리합니다. 중앙 계정과 다른 앱에는 영향을 주지 않습니다. 자세한 계약은 [SERVICE_USER_MANAGEMENT.md](SERVICE_USER_MANAGEMENT.md)를 참고하세요.
+
+실제 접근 관측은 runtime0.12.0 + site credential + 호스팅의 background hook이 있어야 보고됩니다. 구 버전 사이트는 인증 이력만 표시할 수 있습니다. AUTH 배포만으로 설치 사이트의 server gate가 변경되지는 않으며 `protect update` 후 사이트를 재배포하고 `doctor`/`protect verify`로 검사해야 합니다. 자산마다 중앙 호출하는 방식으로 관측을 구현하지 않습니다.
+
+## 선택형 빠른 차단 전파 (0.11.0)
+
+`bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.
+
+## 인증 화면 편집 (0.13 후보)
+
+서비스별 브랜드 설정은 [SERVICE_PRESENTATION.md](SERVICE_PRESENTATION.md)의 공개 published snapshot만 사용합니다. owner 초안/preview/이미지는 인증 범위 안에 유지합니다. official common gate의 두 로그인 모드가 같은 공개 렌더러를 사용하며 콘텐츠 요청의 인증 경로와 캐시를 변경하지 않습니다. 이미지300개와 같이 승인된 자산 요청에서는 presentation 조회0회입니다. 구0.12 이하 게이트는 최초 protect update/재배포가 필요하며 지원 renderer 설치 후 브랜드-only 게시로 세션을 폐기하거나 재설치하지 않습니다.
+
+## 서버 API를 함께 운영하는 서비스
+
+동적 API는 공식 [서버 API 보호 hook](SERVER_API_PROTECTION.md)의 `protectHandler`로 handler 실행 전에 검증합니다. 정적 생성 게이트와 동일한 쿠키·갱신을 사용하고, 서비스 소유권 검사는 별도로 연결합니다. 기존 API를 정적 설치기가 자동 변경하지 않으므로 라우팅·원본 API 폐쇄·두 사용자 소유권 검사를 확인해야 합니다. WebSocket/SSE는 지원하지 않습니다.

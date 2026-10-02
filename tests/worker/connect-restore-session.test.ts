@@ -42,7 +42,7 @@ async function runEmbed(storageSeed: Record<string, string>, dataset: Record<str
   const context = vm.createContext({
     window, document, location: { href: 'https://guide.example/decks/', origin: 'https://guide.example', pathname: '/decks/' },
     CustomEvent: class { type: string; detail: unknown; constructor(type: string, init?: { detail?: unknown }) { this.type = type; this.detail = init?.detail; } },
-    URL, JSON, Date, console,
+    URL, JSON, Date, console, setTimeout:()=>0, clearTimeout:()=>{},
   });
   vm.runInContext(source, context);
   return { events, guardShown: appended.length > 0, bodyLocked: body.hasAttribute('inert'), window, storage };

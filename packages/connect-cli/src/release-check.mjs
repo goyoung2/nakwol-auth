@@ -14,10 +14,13 @@ export async function checkRelease(options = {}) {
   const verification = await verifyProtection({...options,root,expectRuntime:'installed',fetchImpl:options.verificationFetchImpl || options.fetchImpl || fetch});
   const after = await readCurrentDeployment(config,options);
   if (after.id !== current.id) throw new Error('Deployment changed during verification; evidence discarded.');
-  const report = {...verification,deploymentId:current.id};
+  const binding = verification.evidenceBinding;
+  const releaseAccepted = verification.releaseAccepted === true && binding?.deploymentId === current.id && binding.runtimeVersion === config.protection.runtimeVersion && /^[a-f0-9]{64}$/.test(binding.buildHash || '') && /^[a-f0-9]{64}$/.test(binding.manifestHash || '');
+  const report = {...verification,anonymousBlockingVerified:verification.ok === true,ok:releaseAccepted,deploymentId:current.id,releaseAccepted};
   // Persist the failed observation before any mutation so a failed rollback remains diagnosable.
   await writeFile(options.outputFile,JSON.stringify(report,null,2)+'\n');
-  if (report.ok || options.baseline) return report;
+  const exposure = report.checks?.some(check => check.ok === false && (check.classification === 'exposed' || (check.classification === undefined && /^HTTP 2\d\d;/.test(check.detail || ''))));
+  if (report.ok || options.baseline || !exposure) return report;
   const rollback = await rollbackProtection({...options,root,config,failedDeploymentId:current.id,failureReport:report});
   const result = {...rollback,ok:false,releaseAccepted:false,failedVerification:report};
   await writeFile(options.outputFile,JSON.stringify(result,null,2)+'\n');

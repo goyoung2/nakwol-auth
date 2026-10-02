@@ -14,20 +14,23 @@ const guild = '1493410906456064112';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT);
+  db.exec(`CREATE TABLE auth_policy_settings(scope TEXT PRIMARY KEY,version INTEGER,settings_json TEXT);
+    CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT);
     CREATE TABLE users(id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE application_settings(client_id TEXT PRIMARY KEY, access_policy TEXT);
     CREATE TABLE auth_operators(user_id TEXT PRIMARY KEY, role TEXT);
     CREATE TABLE access_tokens(token_hash TEXT PRIMARY KEY,user_id TEXT,client_id TEXT,expires_at INTEGER,revoked_at INTEGER,created_at INTEGER);
+    CREATE TABLE auth_sessions(user_id TEXT,created_at INTEGER,expires_at INTEGER);
     CREATE TABLE user_reauthentication(user_id TEXT PRIMARY KEY,requested_at INTEGER);
     CREATE TABLE auth_events(id TEXT,user_id TEXT,client_id TEXT,event_type TEXT,detail TEXT,created_at INTEGER);
     INSERT INTO applications VALUES ('site','사이트');
     INSERT INTO application_settings VALUES ('site','member');
     INSERT INTO auth_operators VALUES ('operator','operator');
     INSERT INTO users VALUES ('operator','active');`);
+  db.prepare('INSERT INTO auth_sessions VALUES(?,?,?)').run('operator',Date.now()-1000,Date.now()+60000);
   db.exec(readFileSync(new URL('../../migrations/0011_season_roles.sql', import.meta.url), 'utf8'));
   for (const [token, user, client] of [['admin-token','operator','nakwol-connect-admin'], ['wrong-client','operator','site'], ['member-token','member','nakwol-connect-admin']]) {
-    db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,0)').run(await sha256Base64Url(token), user, client, Date.now()+60000);
+    db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,?)').run(await sha256Base64Url(token), user, client, Date.now()+60000, Date.now());
   }
   function prepare(sql: string, args: (string | number | null)[] = []) {
     return {
@@ -75,6 +78,10 @@ test('role admin enforces operator token audience, origin, member scope and live
   });
   const valid = JSON.stringify({client_id:'site',role_ids:[subdivision]});
   try {
+    db.prepare('UPDATE auth_sessions SET created_at=?').run(Date.now()-900001);
+    assert.equal((await request(valid)).status,403);
+    assert.equal(calls,0);
+    db.prepare('UPDATE auth_sessions SET created_at=?').run(Date.now()-1000);
     assert.equal((await app.request('/admin/api/roles',{},env)).status,401);
     assert.equal((await request(valid,'wrong-client')).status,401);
     assert.equal((await request(valid,'member-token')).status,403);

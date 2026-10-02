@@ -23,8 +23,9 @@ export function connectOnboardingPageHtml(): string {
   <section class="hero">
     <div class="eyebrow">落月 · DEVELOPER</div>
     <h1>NAKWOL Connect 시작하기</h1>
+    <div class="links"><a href="/developer/setup">서비스 설치·재설정 마법사 시작</a></div>
     <p>낙월 서비스에 Discord 기반 로그인과 공통 DATA를 붙이는 공식 연동 경로입니다. 각 서비스는 Discord OAuth나 Client Secret을 직접 다루지 않고 중앙 NAKWOL AUTH와 Connect를 사용합니다.</p>
-    <div class="chips"><span class="chip">AUTH 0.2.0</span><span class="chip">Web SDK 0.3.0</span><span class="chip">Connect CLI 0.6.0</span><span class="chip">required + member 기본값</span><span class="chip">자동 SSO</span><span class="chip">PKCE S256</span><span class="chip">Discord secret 불필요</span></div>
+    <div class="chips"><span class="chip">AUTH 0.2.0</span><span class="chip">Web SDK 0.3.0</span><span class="chip">Connect CLI 0.14.0</span><span class="chip">required + member 기본값</span><span class="chip">자동 SSO</span><span class="chip">PKCE S256</span><span class="chip">Discord secret 불필요</span></div>
   </section>
 
   <section class="panel">

@@ -1,0 +1,1104 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "AUTH 503 recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "AUTH 429 recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "AUTH timeout recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "control 503 initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control 503 existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control 503 warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 503 warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 503 fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "control 503 handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 503 denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "control 503 recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "control 429 initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control 429 existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control 429 warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 429 warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 429 fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "control 429 handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control 429 denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "control 429 recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "control timeout initial grant",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control timeout existing bounded approval",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "control timeout warm AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control timeout warm control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control timeout fail closed",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "control timeout handler bypasses",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "control timeout denial cache",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "control timeout recovery",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "previous key within rotation window",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "removed previous key",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "expired previous key",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "login start",
+      "actual": 302,
+      "expected": 302,
+      "passed": true
+    },
+    {
+      "name": "synthetic code exchange",
+      "actual": 303,
+      "expected": 303,
+      "passed": true
+    },
+    {
+      "name": "untrusted signed control key",
+      "actual": 503,
+      "expected": 503,
+      "passed": true
+    },
+    {
+      "name": "untrusted signed control handler calls",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "restored control trust",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "external public cache overwritten {}",
+      "actual": "private, no-cache, max-age=0, must-revalidate",
+      "expected": "private, no-cache, max-age=0, must-revalidate",
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed CDN-Cache-Control {}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Cloudflare-CDN-Cache-Control {}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Surrogate-Control {}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "anonymous cached variant blocked {}",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous handler calls",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "external public cache overwritten {\"method\":\"HEAD\"}",
+      "actual": "private, no-cache, max-age=0, must-revalidate",
+      "expected": "private, no-cache, max-age=0, must-revalidate",
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed CDN-Cache-Control {\"method\":\"HEAD\"}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Cloudflare-CDN-Cache-Control {\"method\":\"HEAD\"}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Surrogate-Control {\"method\":\"HEAD\"}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "anonymous cached variant blocked {\"method\":\"HEAD\"}",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous handler calls",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "external public cache overwritten {\"headers\":{\"Range\":\"bytes=0-3\"}}",
+      "actual": "private, no-store, max-age=0",
+      "expected": "private, no-store, max-age=0",
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed CDN-Cache-Control {\"headers\":{\"Range\":\"bytes=0-3\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Cloudflare-CDN-Cache-Control {\"headers\":{\"Range\":\"bytes=0-3\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Surrogate-Control {\"headers\":{\"Range\":\"bytes=0-3\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "anonymous cached variant blocked {\"headers\":{\"Range\":\"bytes=0-3\"}}",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous handler calls",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "external public cache overwritten {\"headers\":{\"If-None-Match\":\"\\\"synthetic\\\"\"}}",
+      "actual": "private, no-cache, max-age=0, must-revalidate",
+      "expected": "private, no-cache, max-age=0, must-revalidate",
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed CDN-Cache-Control {\"headers\":{\"If-None-Match\":\"\\\"synthetic\\\"\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Cloudflare-CDN-Cache-Control {\"headers\":{\"If-None-Match\":\"\\\"synthetic\\\"\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "external shared cache directive removed Surrogate-Control {\"headers\":{\"If-None-Match\":\"\\\"synthetic\\\"\"}}",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "anonymous cached variant blocked {\"headers\":{\"If-None-Match\":\"\\\"synthetic\\\"\"}}",
+      "actual": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous handler calls",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "login transaction quota",
+      "actual": 429,
+      "expected": 429,
+      "passed": true
+    },
+    {
+      "name": "quota public fallback count",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation false protects 300 images",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "observation false AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation false control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation false transmission count",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation false measured duplicate events",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation true protects 300 images",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "300 protected responses complete while observation collectors are held",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "observation true AUTH requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation true control requests",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation true transmission count",
+      "actual": 10,
+      "expected": 10,
+      "passed": true
+    },
+    {
+      "name": "observation true measured duplicate events",
+      "actual": 9,
+      "expected": 9,
+      "passed": true
+    },
+    {
+      "name": "queue bound before flush",
+      "actual": 128,
+      "expected": 128,
+      "passed": true
+    },
+    {
+      "name": "queue overflow before flush",
+      "actual": 872,
+      "expected": 872,
+      "passed": true
+    },
+    {
+      "name": "outage retry attempts",
+      "actual": 6,
+      "expected": 6,
+      "passed": true
+    },
+    {
+      "name": "outage lost events",
+      "actual": 1000,
+      "expected": 1000,
+      "passed": true
+    },
+    {
+      "name": "outage queue after flush",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "observation recovery delivered",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "presentation cold version",
+      "actual": 7,
+      "expected": 7,
+      "passed": true
+    },
+    {
+      "name": "presentation cold request count",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "presentation cache-hit version",
+      "actual": 7,
+      "expected": 7,
+      "passed": true
+    },
+    {
+      "name": "presentation cache-hit request count",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "presentation failure version",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "presentation failure request count",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "presentation failure-cache-hit version",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "presentation failure-cache-hit request count",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "presentation recovery version",
+      "actual": 7,
+      "expected": 7,
+      "passed": true
+    },
+    {
+      "name": "presentation recovery request count",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    }
+  ],
+  "faults": [
+    {
+      "boundary": "AUTH",
+      "fault": 503,
+      "elapsedMs": 1.2720999999999947,
+      "failure": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 1
+      }
+    },
+    {
+      "boundary": "AUTH",
+      "fault": 429,
+      "elapsedMs": 0.9970000000000141,
+      "failure": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 1
+      }
+    },
+    {
+      "boundary": "AUTH",
+      "fault": "timeout",
+      "elapsedMs": 7001.7315,
+      "failure": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 1,
+        "control": 0,
+        "protectedHandlerCalls": 1
+      }
+    },
+    {
+      "boundary": "control",
+      "fault": 503,
+      "elapsedMs": 0.7665999999999258,
+      "failure": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 1
+      }
+    },
+    {
+      "boundary": "control",
+      "fault": 429,
+      "elapsedMs": 0.757900000000518,
+      "failure": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 1
+      }
+    },
+    {
+      "boundary": "control",
+      "fault": "timeout",
+      "elapsedMs": 4016.7892,
+      "failure": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 0
+      },
+      "recovery": {
+        "auth": 0,
+        "control": 1,
+        "protectedHandlerCalls": 1
+      }
+    }
+  ],
+  "counters": {
+    "auth": 14,
+    "control": 11,
+    "observations": 17,
+    "presentation": 3,
+    "assets": 624,
+    "bytes": 15702,
+    "presentationBytes": 1626
+  },
+  "quota": {
+    "scope": "site pending login transactions",
+    "limit": 8,
+    "publicFallbacks": 0
+  },
+  "observations": {
+    "batches": [
+      {
+        "enabled": false,
+        "images": 300,
+        "isolates": 10,
+        "wallMs": 182.47029999999904,
+        "cpuMs": 234,
+        "upstreamRequests": 0,
+        "bytes": 0,
+        "isolateMetrics": [
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          },
+          {
+            "scheduled": 0,
+            "sent": 0,
+            "dropped": 0,
+            "bytes": 0,
+            "supported": false,
+            "queued": 0
+          }
+        ],
+        "emittedEvents": 0,
+        "uniqueSessionBuckets": 0,
+        "duplicateEventsAcrossIsolates": 0,
+        "protectedResponsesCompletedWhileCollectorHeld": false
+      },
+      {
+        "enabled": true,
+        "images": 300,
+        "isolates": 10,
+        "wallMs": 170.61629999999968,
+        "cpuMs": 203,
+        "upstreamRequests": 10,
+        "bytes": 1410,
+        "isolateMetrics": [
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          },
+          {
+            "scheduled": 1,
+            "sent": 1,
+            "dropped": 0,
+            "bytes": 141,
+            "supported": true,
+            "queued": 0
+          }
+        ],
+        "emittedEvents": 10,
+        "uniqueSessionBuckets": 1,
+        "duplicateEventsAcrossIsolates": 9,
+        "protectedResponsesCompletedWhileCollectorHeld": true
+      }
+    ],
+    "overflowBeforeFlush": {
+      "scheduled": 1,
+      "sent": 0,
+      "dropped": 872,
+      "bytes": 0,
+      "supported": true,
+      "queued": 128
+    },
+    "outage": {
+      "scheduled": 1,
+      "sent": 0,
+      "dropped": 1000,
+      "bytes": 14144,
+      "supported": true,
+      "queued": 0
+    },
+    "outageRequests": 6,
+    "lastObservedLag": "not measured: collector persistence is outside site runtime",
+    "totalRequests": 17
+  },
+  "presentation": [
+    {
+      "label": "cold",
+      "wallMs": 2.3148999999993976,
+      "upstreamRequests": 1,
+      "responseBytes": 813,
+      "presentationVersion": 7
+    },
+    {
+      "label": "cache-hit",
+      "wallMs": 0.033400000000256114,
+      "upstreamRequests": 0,
+      "responseBytes": 0,
+      "presentationVersion": 7
+    },
+    {
+      "label": "failure",
+      "wallMs": 0.624099999999089,
+      "upstreamRequests": 1,
+      "responseBytes": 0,
+      "presentationVersion": 0
+    },
+    {
+      "label": "failure-cache-hit",
+      "wallMs": 0.016499999999723514,
+      "upstreamRequests": 0,
+      "responseBytes": 0,
+      "presentationVersion": 0
+    },
+    {
+      "label": "recovery",
+      "wallMs": 0.36920000000100117,
+      "upstreamRequests": 1,
+      "responseBytes": 813,
+      "presentationVersion": 7
+    }
+  ],
+  "boundaries": [
+    "Synthetic AUTH endpoint exercises upstream 503/429/abort responses; Discord calls occur centrally and are not directly made or measured by this site gate.",
+    "D03 measurements exercise the actual shared presentation loader, not browser module transfer, DOM paint or LCP.",
+    "No provider billing quota or external CDN enforcement is simulated; transaction quota and origin response cache header rewriting are measured."
+  ]
+}

@@ -1,4 +1,6 @@
-# NAKWOL Connect CLI 0.7.1
+# NAKWOL Connect CLI 0.14.0
+
+설치·재설정 마법사와 `protect plan/install/update --setup-file nakwol-setup.json`은 [개발자 설치 안내](docs/DEVELOPER_SETUP.md)를 따릅니다. 최초 정적 빌드 후 게이트를 설치하고 다시 빌드하세요.
 
 NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 프로젝트에 연결하고, 현재 DATA API 계약까지 자동 발견하는 공식 도구입니다.
 
@@ -32,7 +34,8 @@ npx --yes nakwol-connect init --auth optional --access-policy guest
 
 - 신규 Workers/Pages 정적 사이트: [protect install](docs/CONNECT_SERVER_PROTECTION.md).
 - 기존 공식 게이트: protect update → 빌드 → 배포 → protect verify --expect-runtime installed.
-- Vercel/Netlify/자체 서버: nakwol-connect/server의 createGate를 연결합니다. 자동 생성 provider가 아닙니다.
+- Vercel 정적 빌드: `protect install --provider vercel`로 공식 공통 게이트를 생성합니다.
+- Netlify/자체 서버: nakwol-connect/server의 createGate를 연결하고 공식 background hook을 제공합니다.
 - 업데이트 PR·운영 버전·보고: [관리형 업데이트](docs/MANAGED_GATE_UPDATES.md).
 - 기존 앱을 보존하고 init을 반복해 clientId를 새로 만들지 않습니다.
 
@@ -144,4 +147,10 @@ const custom = await data.request('/v1/game-accounts');
 
 ## 배포
 
-현재 npm 패키지는 `nakwol-connect@0.7.1`입니다. npm 패키지는 Trusted Publishing OIDC로 배포하며 공개 패키지와 Worker fallback 배포는 항상 같은 버전을 유지합니다.
+현재 소스 패키지는 `nakwol-connect@0.13.0` 릴리스 후보입니다. 이 변경의 npm 게시와 운영 배포는 아직 수행하지 않았습니다. npm 패키지는 Trusted Publishing OIDC로 배포하며 공개 패키지와 Worker fallback 배포는 항상 같은 버전을 유지합니다.
+
+소스의 `/developer/users`는 자기 서비스의 사용자 조회·앱 차단/해제·앱 세션 종료를 제공합니다. Connect0.12.0의 server-session 게이트는 승인 관측을 비동기로 병합 전송합니다. 기존 사이트는 공통 게이트 업데이트와 재배포를 해야 관측이 활성화되며, 관측 미지원이어도 콘텐츠 보호는 유지합니다. [권한·제한·적용 순서](docs/SERVICE_USER_MANAGEMENT.md)를 확인하세요.
+
+## 서비스 인증 화면 편집 (0.13 후보)
+
+서비스 owner는 `/developer/presentation`에서 위젯 노출/배치/테마와 인증 전 화면을 초안→미리보기→게시→복원합니다. 스키마는 `nakwol-connect/presentation`을 공유하며 정책/로그인 lease와 별개입니다. 이미 지원되는 설정은 다음 화면 로드/최대60초 캐시 뒤 반영하며 자산마다 설정을 조회하지 않습니다. 기존0.12 이하 서버 게이트에는 처음 한 번 protect update와 재배포가 필요합니다. hidden/headless를 선택해도 로그인 전 모든 보호 경로의 차단을 유지해야 합니다. 상세 API·업로드 한도·비용·배포 순서는 [SERVICE_PRESENTATION.md](docs/SERVICE_PRESENTATION.md)를 따르세요. 로컬 후보 버전이며 npm/운영 배포 완료를 뜻하지 않습니다.

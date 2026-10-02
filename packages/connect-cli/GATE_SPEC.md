@@ -1,6 +1,6 @@
 # NAKWOL 공통 서버 게이트 기능 명세
 
-명세 버전: 0.7.0 / 대상: Connect 0.7.0, AUTH의 24시간 역할 재확인 정책.
+명세 버전: 0.8.0 / 대상: Connect 0.8.0, AUTH의 24시간 역할 재확인 정책.
 본 문서는 구현 계약이다. 운영 적용 여부는 배포 기록과 검증 결과로 별도 확인한다.
 
 ## 1. 책임과 보호 경계
@@ -75,7 +75,7 @@
 
 ## 7. 업데이트, 호환성, 롤백
 
-- 공식 설치: npm 빌드 훅으로 `nakwol-connect@~0.7.0 protect update` 실행. 0.7.x 패치 업데이트를 따라가며 다음 minor/major는 검토 후 명시적 전환.
+- 공식 설치: npm 빌드 훅으로 `nakwol-connect@~0.8.0 protect update` 실행. 0.8.x 패치 업데이트를 따라가며 다음 minor/major는 검토 후 명시적 전환.
 - 기존 `~0.6.3` 빌드 훅은 0.7.0을 자동 적용하지 않는다. 5분 권한 회수 지연을 검토한 뒤 `npx --yes nakwol-connect@0.7.0 protect update`와 사이트 빌드·배포·검증을 수행한다. AUTH만 배포해서 기존 사이트 게이트가 바뀌지 않는다.
 - 기존 공식 설치는 최신 CLI의 protect update로 최초 1회 전환. 자체 호스팅은 공통 API와 패키지 업데이트를 빌드 파이프라인에 연결.
 - 앱/정책/주소 보존, 파일 해시 검증, 수정된 설치 파일은 덮어쓰기 거부. Pages clean build의 누락 생성물만 재생성 허용. 실제 사용한 runtimeVersion 기록.
@@ -98,7 +98,7 @@
 | G09 | 패키지 API import, Workers/Pages 런타임, 빌드 훅 갱신, 수정 파일 보호 |
 | G10 | 운영 원본·이전 배포·별도 도메인 목록 확인 및 각 주소 차단/폐쇄 증거 |
 
-protect verify는 열거한 주소·경로만 검증한다. 401/403 + gate header + no-store만 합격; 200/206/302/404/503은 차단 검사 합격이 아니다. 삭제된 주소는 별도 폐쇄 증거로 기록한다. 실사용 OAuth와 호스팅별 라우팅은 운영 검증을 별도로 기록한다.
+protect verify는 열거한 주소·경로만 검증한다. 401/403 + gate header + no-store와 bounded body 검사로 익명 차단을 판정한다. 이 결과만으로 출시 합격을 표시하지 않는다; 200/206/302/404/503은 차단 검사 합격이 아니다. 삭제된 주소는 별도 폐쇄 증거로 기록한다. 실사용 OAuth와 호스팅별 라우팅은 운영 검증을 별도로 기록한다.
 
 ### 자동 접속 확인 안내
 
@@ -117,3 +117,51 @@ responses. Managed update PRs require review; no production auto-merge. Optional
 release-check rollback requires a pinned verified baseline, current deployment
 identity checks and externally serialized deployments. Report-only credentials
 never authorize users; all deployment summaries remain informational.
+
+## 0.8.0 호스팅·증거 확장
+
+공식 어댑터는 Workers, Pages, Vercel static이며 동일 공통 게이트 소스를 사용합니다. Vercel은 모든 경로를 matcher에 포함하고 기존 라우팅 설정을 덮어쓰지 않습니다. Next/SSR 자동 설치는 미지원입니다. AUTH origin은 정규화하며 SDK 실패 시 동작하는 재시도·계정 복구 수단을 제공합니다.
+
+`protect manifest`와 `verify --manifest --origins-file --session-cookie-env`는 빌드 경로·크기·SHA256, 배포 ID, runtime을 묶습니다. bounded body와 canary/hash, 원주소 캐시/304, 정상 인증 파일을 검사합니다. 단순 익명 차단(ok)과 출시 증명(releaseAccepted)을 분리합니다. 기존 헤더 검사 보고서는 자동 롤백 승인의 근거로 쓰지 않으며 재검증해야 합니다. 세부 계약은 [보호 증거 안내](../../docs/PROTECTION_EVIDENCE.md)를 따릅니다.
+
+## 0.9.0 동적 권한 정책 계약
+
+공통 게이트는 `/me`에 `X-Nakwol-Capabilities: policy-v1`을 보내고, 응답의
+`authorization_policy`에서 schemaVersion, accessPolicy, policyVersion, leaseSeconds,
+authorizationEvidenceValidUntil을 검사한다. lease는 60~300초이며 토큰 만료와
+실제로 사용한 승인 증거의 만료를 넘을 수 없다. 잘못된 정책은 세션을 발급하지 않는다.
+정책 필드가 없는 기존 AUTH 응답은 기존 설치 정책으로 검증한다.
+
+유효 lease에서는 쿠키의 암호학적 검증 후 자산을 제공하며 중앙 정책 저장소나 `/me`를
+조회하지 않는다. 저장된 정책 변경은 다음 재검증 때 반영되므로 현재 lease가 남아 있으면
+최대 5분 지연될 수 있다. 0.7.x/0.8.x에 동적 정책 적용을 주장하지 않는다.
+이미 설치된 사이트는 패키지 업데이트와 재빌드·배포가 필요하다.
+
+현재 사이트 쿠키는 기존 토큰 만료(최대 1시간)에 묶인다. 관리 화면의 session idle/absolute
+저장 계약은 준비되었지만, 긴 세션 지속 및 자동 갱신은 T06 구현 전까지 지원하지 않는다.
+정책 저장·전파 대기·실제 배포 관측은 별개의 상태다. pending outbox는 적용 완료가 아니다.
+
+
+## 0.10 서버 세션 갱신 (T06, 로컬 릴리스 후보)
+
+공식 공통 게이트는 서버 credential을 명시적으로 설정한 사이트에서 서버 콜백과 장기 세션 갱신을 지원합니다. 상세 계약·활성화 순서·최대 300초 회수 지연·기존 방식과의 호환성은 [서버 세션 갱신](../../docs/SERVER_SESSION_REFRESH.md)을 참조하세요. 운영 배포·npm 게시 전이며 기존 설치가 자동 전환되지는 않습니다.
+
+## 비동기 접근 관측 (0.12.0)
+
+server-session 모드의 승인된 asset 응답에서만 앱·사용자·5분 구간 대표 이벤트를 만듭니다. Workers/Pages `ctx.waitUntil`, Vercel `@vercel/functions.waitUntil`, custom `createGate({…})` 호출 옵션의 `waitUntil`로 전송을 응답에서 분리합니다. hook/site credential 없는 호스트는 관측 미지원입니다.
+
+isolate 큐128건, batch50건, 작업당3batch, timeout2초/재시도1회/drop 집계로 제한합니다. 수신 API는 site credential app/origin과 승인된 session을 검사하고 user identity를 중앙 session에서 도출합니다. 다중 isolate 전송은 허용하며 수신 upsert가 같은 앱/사용자/5분 구간을 합칩니다. 장애/포화/누락이 승인 결과를 변경하거나 자산마다 동기 중앙 쓰기를 만들면 안 됩니다. 마지막 관측은 온라인 상태가 아닙니다. 기존 authorization lease와 cache/security 계약은 유지합니다.
+
+drop 집계는 isolate당 최대128개 binding에 한정하고, 성공적으로 전달한 집계의 남은 값이0이면 삭제합니다. 전송 중 새로 생긴 drop은 다음 batch에 전달하며 binding 식별자나 credential을 진단 지표에 노출하지 않습니다.
+
+## 선택형 빠른 차단 전파 (0.11.0)
+
+`bounded-control`은 서명된 앱 제어 문서를 최대 30초 동안 isolate 메모리에서 검증하며, 문서가 유효한 자산 요청에는 중앙 호출이 없습니다. 만료 또는 차가운 isolate에는 추가 RTT가 발생합니다. 만료 문서와 제어 장애는 503으로 차단합니다. 기존 `local-lease` 기본값은 변경하지 않습니다. 활성화·키 고정·게시/수신 확인·권한 변경 시 전체 앱 증명 재검증 비용은 [BOUNDED_GATE_CONTROL](../../docs/BOUNDED_GATE_CONTROL.md)에 설명되어 있습니다. 운영 활성화는 T11 지역 성능 검증 후 별도 결정합니다.
+
+## Presentation isolation (runtime0.13 candidate)
+
+Published presentation is a separate public brand document (schemaVersion1/version/widget/theme/screens/support). The official login bridge and rolling Connect embed share `/presentation/v1/renderer.mjs`; owner drafts never enter public bootstrap. One document-level request, <=60s cache, <=16KiB, 1.5s timeout; unsupported schema/load failure uses built-in theme. No per-asset settings fetch, policy epoch change, lease invalidation or protection bypass. Widget hidden only hides identity UI. Runtime owns checking250ms/8s, denial/login/retry/recovery and actual authentication state. Existing gate deployments require one update/redeploy to adopt the renderer; brand-only publication then needs no reinstall. See docs/SERVICE_PRESENTATION.md for shared schema, preview/CAS/rollback, bounded decoded uploads and rollout prerequisites.
+
+## 동적 API hook (T10, 0.14.0 로컬 후보)
+
+`nakwol-connect/server`는 `protectHandler(handler,settings)` 및 `authorizeRequest(request,context)`를 제공합니다. 기존 암호화 세션/lease/control을 재사용하며 GET/HEAD/POST/PUT/PATCH/DELETE의 handler 호출 전에 검증합니다. 변경 요청은 정확한 Origin과 cross-site 거부, 클라이언트 사용자/역할 헤더 제거, body 미소비를 적용합니다. principal은 userId/clientId/scopes/policyVersion이고 현재 로그인 proof의 scopes는 빈 배열입니다. API 성공도 no-store이며 갱신 쿠키와 서비스 쿠키를 모두 보존합니다. 사용자별 row 권한은 서비스의 검사이며 SDK 로그인만으로 타인 데이터 수정이 허용되면 안 됩니다. WebSocket/SSE는501, API hook의 예약 경로는404입니다. 정적 자동 설치가 외부 API/공개 원본을 보호했다고 표시하지 않으며 알려진 모든 원본과 사용자 A/B 권한 검증이 필요합니다. 자세한 계약과 플랫폼 연결은 [SERVER_API_PROTECTION](../../docs/SERVER_API_PROTECTION.md)을 참조하세요.

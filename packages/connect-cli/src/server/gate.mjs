@@ -1,6 +1,7 @@
 import { loginPage } from './login.mjs';
+import { serveServerSession } from './session.mjs';
 
-export const RUNTIME_VERSION = '0.7.1';
+export const RUNTIME_VERSION = '0.14.0';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -55,7 +56,7 @@ async function verify(token, settings) {
     const url = new URL('/me', settings.authOrigin);
     url.searchParams.set('client_id', settings.clientId);
     const result = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
+      headers: { Authorization: `Bearer ${token}`, 'X-Nakwol-Capabilities':'policy-v1', ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
       cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(7000),
     });
     if (result.status !== 200) return { status: [401, 403].includes(result.status) ? result.status : 503 };
@@ -65,15 +66,21 @@ async function verify(token, settings) {
       || !['policy', 'manual_grant'].includes(body.application_access.source)) return { status: 403 };
     const manualGrant = body.application_access?.client_id === settings.clientId
       && body.application_access?.allowed === true && body.application_access?.source === 'manual_grant';
-    if (settings.accessPolicy === 'member' && body.data?.membership?.is_member !== true && !manualGrant) return { status: 403 };
+    if (!body.authorization_policy && settings.accessPolicy === 'member' && body.data?.membership?.is_member !== true && !manualGrant) return { status: 403 };
     if (!Number.isFinite(body.expires_at) || body.expires_at <= Date.now()) return { status: 401 };
-    const leaseUntil = Math.min(body.expires_at, verifiedAt + AUTHORIZATION_LEASE_MS);
+    const policy = body.authorization_policy;
+    let leaseMs=AUTHORIZATION_LEASE_MS, evidenceUntil=body.expires_at;
+    if (policy !== undefined) {
+      if (policy?.schemaVersion !== 1 || !['member','guest','admin','lab'].includes(policy.accessPolicy) || !Number.isSafeInteger(policy.policyVersion) || policy.policyVersion < 0 || !Number.isInteger(policy.leaseSeconds) || policy.leaseSeconds < 60 || policy.leaseSeconds > 300 || !Number.isFinite(policy.authorizationEvidenceValidUntil)) return {status:503};
+      leaseMs=policy.leaseSeconds*1000; evidenceUntil=policy.authorizationEvidenceValidUntil;
+    }
+    const leaseUntil = Math.min(body.expires_at, verifiedAt + leaseMs, evidenceUntil);
     if (leaseUntil <= Date.now()) return { status: 503 };
     return { status: 200, expires: body.expires_at, authorization: {
       clientId: settings.clientId, siteOrigin: new URL(settings.siteUrl).origin,
       authOrigin: settings.authOrigin, accessPolicy: settings.accessPolicy,
       userId: body.data.id, allowed: true, source: body.application_access.source,
-      verifiedAt, leaseUntil,
+      verifiedAt, leaseUntil, ...(policy ? {policyVersion:policy.policyVersion, authorizationEvidenceValidUntil:evidenceUntil} : {}),
     } };
   } catch { return { status: 503 }; } // AUTH outages fail closed at the request boundary.
 }
@@ -130,6 +137,16 @@ async function sessionCookie(session, secret, audience) {
 }
 
 export async function serveProtected(request, env, settings) {
+  const api = typeof env.NAKWOL_API_HANDLER === 'function';
+  if (request.headers.has('Upgrade') || /(?:^|,)\s*upgrade\s*(?:,|$)/i.test(request.headers.get('Connection') || '') || /text\/event-stream/i.test(request.headers.get('Accept') || '')) return response(null, 501);
+  if (api) {
+    if (new URL(request.url).pathname.startsWith('/__nakwol/')) return response(null, 404);
+    if (!['GET','HEAD','POST','PUT','PATCH','DELETE'].includes(request.method)) return response(null, 405);
+    if (!['GET','HEAD'].includes(request.method) && (request.headers.get('Origin') !== new URL(settings.siteUrl).origin || request.headers.get('Sec-Fetch-Site') === 'cross-site')) return response(null, 403);
+  }
+  if(env.NAKWOL_CONTROL_PROFILE && !['local-lease','bounded-control'].includes(env.NAKWOL_CONTROL_PROFILE))return denied(request,503,settings);
+  if(env.NAKWOL_CONTROL_PROFILE==='bounded-control'&&!env.NAKWOL_SITE_CREDENTIAL)return denied(request,503,settings);
+  if (env.NAKWOL_SITE_CREDENTIAL) return serveServerSession(request, env, settings);
   const url = new URL(request.url);
   // Only the explicitly registered deployment origin can serve protected content.
   if (url.origin !== new URL(settings.siteUrl).origin) return response(null, 403);
@@ -177,30 +194,35 @@ export async function serveProtected(request, env, settings) {
     if (isRevoked(sessionId(token, settings))) return denied(request, 401, settings);
     return response(null, 204, { 'Set-Cookie': cookie });
   }
-  if (!['GET', 'HEAD'].includes(request.method)) return response(null, 405);
+  if (!api && !['GET', 'HEAD'].includes(request.method)) return response(null, 405);
   if (url.pathname === '/__nakwol/login' || (url.pathname === '/' && (url.searchParams.has('code') || url.searchParams.has('error')))) return denied(request, 401, settings);
   if (!session) return denied(request, 401, settings);
   if (isRevoked(sessionId(session.token, settings))) return denied(request, 401, settings);
   // Only the previously shipped token-only format can migrate via central validation.
   const legacy = session.version === undefined && session.authorization === undefined;
   if (!legacy && !validAuthorization(session, settings)) return denied(request, 403, settings);
-  let renewedCookie;
+  let renewedCookie, activeAuthorization = session.authorization;
   if (legacy || session.authorization.leaseUntil <= Date.now()) {
     const checked = await verifyConcurrent(session.token, settings);
     if (checked.status !== 200) return denied(request, checked.status, settings);
     const expires = Math.min(session.expires, checked.expires);
     if (expires <= Date.now()) return denied(request, 401, settings);
     const authorization = { ...checked.authorization, leaseUntil: Math.min(checked.authorization.leaseUntil, expires) };
+    activeAuthorization = authorization;
     renewedCookie = await sessionCookie({ version: 2, token: session.token, expires, authorization }, env.NAKWOL_SESSION_SECRET, audience);
   }
   if (isRevoked(sessionId(session.token, settings))) return denied(request, 401, settings);
-  const asset = await env.ASSETS.fetch(request);
+  const asset = api ? await env.NAKWOL_API_HANDLER(request, {userId:activeAuthorization.userId,clientId:activeAuthorization.clientId,scopes:[],policyVersion:activeAuthorization.policyVersion ?? 0}) : await env.ASSETS.fetch(request);
   const headers = new Headers(asset.headers);
+  for (const name of ['CDN-Cache-Control', 'Cloudflare-CDN-Cache-Control', 'Surrogate-Control']) {
+    if (api) headers.set(name, 'private, no-store, max-age=0');
+    else headers.delete(name);
+  }
   // Conditional requests also require a valid authorization lease before returning 304.
-  headers.set('Cache-Control', asset.headers.has('ETag') && [200, 304].includes(asset.status)
+  headers.set('Cache-Control', !api && asset.headers.has('ETag') && [200, 304].includes(asset.status)
     ? 'private, no-cache, max-age=0, must-revalidate' : 'private, no-store, max-age=0');
   headers.set('Vary', [headers.get('Vary'), 'Cookie'].filter(Boolean).join(', '));
-  if (renewedCookie) headers.set('Set-Cookie', renewedCookie);
+  if (renewedCookie) headers.append('Set-Cookie', renewedCookie);
   headers.set('X-Nakwol-Gate', 'v1');
   headers.set('X-Nakwol-Runtime', RUNTIME_VERSION);
   headers.set('X-Content-Type-Options', 'nosniff');
@@ -209,14 +231,30 @@ export async function serveProtected(request, env, settings) {
 
 // Public server API: hosts provide only their secret and protected content handler.
 export function createGate(settings) {
-  const config = Object.freeze({ ...settings });
+  return requestGate(settings, false);
+}
+export function createApiGate(settings) {
+  return requestGate(settings, true);
+}
+function requestGate(settings, api) {
+  const config = { ...settings };
   for (const name of ['siteUrl', 'authOrigin']) {
     const url = new URL(config[name]);
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error(`${name} must be HTTPS`);
   }
+  config.authOrigin = new URL(config.authOrigin).origin;
+  config.siteUrl = new URL(config.siteUrl).href;
+  Object.freeze(config);
   if (!config.clientId || !['member', 'guest', 'admin'].includes(config.accessPolicy)) throw new Error('clientId and accessPolicy are required');
-  return (request, { sessionSecret, serveAsset }) => serveProtected(request, {
+  return (request, { sessionSecret, serveAsset, apiHandler, waitUntil, siteCredential = config.siteCredential, sessionPreviousSecret = config.sessionPreviousSecret, sessionPreviousUntil = config.sessionPreviousUntil, controlProfile=config.controlProfile, controlPublicKeys=config.controlPublicKeys }) => serveProtected(request, {
+    ...(api ? {NAKWOL_API_HANDLER:apiHandler} : {}),
+    NAKWOL_WAIT_UNTIL:waitUntil,
     NAKWOL_SESSION_SECRET: sessionSecret,
+    NAKWOL_SITE_CREDENTIAL: siteCredential,
+    NAKWOL_CONTROL_PROFILE:controlProfile,
+    NAKWOL_CONTROL_PUBLIC_KEYS:controlPublicKeys,
+    NAKWOL_SESSION_PREVIOUS_SECRET: sessionPreviousSecret,
+    NAKWOL_SESSION_PREVIOUS_UNTIL: sessionPreviousUntil,
     ASSETS: { fetch: serveAsset },
   }, config);
 }

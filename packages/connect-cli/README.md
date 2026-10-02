@@ -1,5 +1,7 @@
 ### 서버 보호 설치와 검증 (Connect 0.7)
 
+서비스 설치·재설정은 [개발자 마법사 안내](../../docs/DEVELOPER_SETUP.md)를 참고하세요. Connect 0.14.0은 저장한 setup JSON으로 변경 비교와 서버 보호 설치를 지원합니다.
+
 **member는 중앙의 시즌3 역할 보유자를 뜻합니다. 개발자는 역할 ID를 입력하지 않습니다.**
 개발자 권한을 받은 앱 소유자는 member/guest를 선택할 수 있으며 admin 정책과 추가 역할은 AUTH 운영자가 설정합니다.
 
@@ -248,3 +250,34 @@ observed deployment version; `protect verify --expect-runtime installed` require
 both anonymous blocking and the expected gate version. No auto-merge, deployment
 credentials or automated rollback are installed. See
 [managed update operations](../../docs/MANAGED_GATE_UPDATES.md) for setup and limits.
+
+### Safe automatic updates (0.14.0 local candidate)
+
+`protect automate --auto-merge` adds an opt-in controller that validates the actual
+Dependabot PR, exact SDK-only patch, npm integrity and protected gate check before
+atomically merging the inspected HEAD. A repository-scoped owner token is required;
+PR code and hosting credentials are not used in the privileged job.
+
+`protect rollout --candidate-manifest FILE --output-file FILE` invokes an owner-reviewed,
+hash-pinned hosting adapter. It rechecks the verified baseline, deploys, verifies blocking
+and authenticated file hashes, and restores the previous artifact on rejection. Recovery
+still exits 1. Host deployment APIs/CI must be connected explicitly; this is a portable
+protocol, not preinstalled native adapters. Fixed origin inventory, serialization and
+compare-before-write are required. Existing installations/default automation are unchanged.
+See [setup, protocol and operational limits](../../docs/SAFE_AUTOMATIC_UPDATES.md).
+
+### 0.8.0 static adapters and release evidence
+
+Adds `protect install --provider vercel` for static builds with full-path middleware using the shared gate. Existing routing/SSR configurations are not overwritten. `protect manifest --deployment-id ID --output-file evidence.json` records the exact build; `protect verify --manifest evidence.json --origins-file origins.json --session-cookie-env NAKWOL_VERIFY_COOKIE` checks anonymous blocking and authenticated file hashes separately. Legacy header-only reports cannot approve automatic rollback. Existing 0.7.x installations require explicit version selection and redeployment. See [evidence contract and limits](../../docs/PROTECTION_EVIDENCE.md). Source changes are not npm publication or production deployment evidence.
+
+### Service presentation (0.13 candidate)
+
+Owners edit their own service at AUTH `/developer/presentation`. `nakwol-connect/presentation` exports the shared schema validator and TypeScript declarations. Widget hidden does not weaken server protection. Existing gates need one protect update/redeploy to adopt the shared public renderer; supported brand-only updates then require no reinstall. Draft preview is owner-authenticated; public bootstrap contains only published brand data and caches for at most60s, never per asset. Full contract: repository docs/SERVICE_PRESENTATION.md. This is a local release candidate until publication/rollout is recorded.
+
+## 동적 API 보호
+
+공식 `nakwol-connect/server`의 `protectHandler`와 `authorizeRequest`는 기존 서버 세션 검증을 재사용합니다. 변경 요청의 CSRF, server-only principal, no-store와 갱신 쿠키를 처리하며, 덱 소유권은 서비스가 검사해야 합니다. 정적 자동 설치가 기존 API 라우팅까지 보호했다고 간주하면 안 됩니다. [서버 API 연결·원본 차단 안내](../../docs/SERVER_API_PROTECTION.md)를 따르세요. WebSocket/SSE는 미지원입니다.
+
+### Cloudflare·Vercel 연결 템플릿 (0.14.0 로컬 후보)
+
+기존 설치 마법사와 CLI에서 Secret 없는 호스팅 JSON을 만들고, 지정 프로젝트 API 조회·전체 자산 차단 검증 CI를 생성합니다. 기본은 수동 배포 + 검사입니다. Workers·Vercel은 명시적 선택 시 공식 배포·복구 adapter, 암호화 정상본 및 initialize/release CI를 생성합니다. Pages·그 밖의 호스팅은 수동 검사 또는 reviewed adapter를 사용합니다. 운영 canary와 npm 게시·AUTH 배포는 아직 하지 않았습니다. [설치·호스팅 연결 안내](../../docs/HOSTING_CONNECTIONS.md)를 확인하세요.

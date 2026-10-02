@@ -1,4 +1,6 @@
 import { readProjectConfig } from './config.mjs';
+import { readProtectionManifest } from './protection-inventory.mjs';
+import { resolve } from 'node:path';
 import { verifyProtection } from './protection-verify.mjs';
 
 const identifier = /^[a-zA-Z0-9_-]+$/;
@@ -23,7 +25,9 @@ export function validateRollbackConfig(config) {
   requireId(previous?.deploymentId, 'previous deployment ID');
   if (!/^\d+\.\d+\.\d+$/.test(previous.runtimeVersion || '')) throw new Error('Previous verified runtime version is required.');
   const report = previous.report;
-  if (report?.ok !== true || report.deploymentId !== previous.deploymentId || report.protectionStatus !== 'anonymous-blocking-verified' || !report.checks?.length || !report.checks.every(c => c.ok === true) || report.inspectionScope !== 'installed-assets' || report.requestCount !== report.checks.length || report.requestCount < 4 || !Number.isFinite(Date.parse(report.checkedAt)) || report.observedRuntimeVersions?.length !== 1 || report.observedRuntimeVersions[0] !== previous.runtimeVersion || !report.origins?.includes(config.protection.siteUrl) || report.expectedRuntime !== previous.runtimeVersion) throw new Error('Previous deployment needs a matching successful verification report.');
+  if (report?.ok !== true || report.deploymentId !== previous.deploymentId || report.protectionStatus !== 'anonymous-blocking-verified' || !report.checks?.length || !report.checks.every(c => c.ok === true) || report.inspectionScope !== 'installed-assets' || (report.probeCount ?? report.requestCount) !== report.checks.length + (report.authenticatedChecks?.length || 0) || report.requestCount < 4 || !Number.isFinite(Date.parse(report.checkedAt)) || report.observedRuntimeVersions?.length !== 1 || report.observedRuntimeVersions[0] !== previous.runtimeVersion || !report.origins?.includes(config.protection.siteUrl) || report.expectedRuntime !== previous.runtimeVersion) throw new Error('Previous deployment needs a matching successful verification report.');
+  const binding = report.evidenceBinding;
+  if (report.releaseAccepted !== true || report.manifestUnchanged !== true || binding?.schemaVersion !== 1 || binding.deploymentId !== previous.deploymentId || binding.runtimeVersion !== previous.runtimeVersion || !/^[a-f0-9]{64}$/.test(binding.buildHash || '') || !/^[a-f0-9]{64}$/.test(binding.manifestHash || '') || !report.authenticatedChecks?.length || !report.authenticatedChecks.every(c => c.ok === true)) throw new Error('Previous evidence binding requires strong re-verification before automatic rollback.');
   return policy;
 }
 
@@ -62,7 +66,7 @@ export async function rollbackProtection(options = {}) {
   const previous = policy.previousVerified;
   if (failedId === previous.deploymentId) throw new Error('Failed and previous deployment IDs must differ.');
   const failure = options.failureReport;
-  const observedExposure = failure?.checks?.some(c => c.ok === false && /^HTTP 2\d\d;/.test(c.detail || ''));
+  const observedExposure = failure?.checks?.some(c => c.ok === false && (c.classification === 'exposed' || (c.classification === undefined && /^HTTP 2\d\d;/.test(c.detail || ''))));
   if (failure?.ok !== false || failure.deploymentId !== failedId || !failure.origins?.includes(config.protection.siteUrl) || !observedExposure) {
     return { ok: false, rollbackAccepted: false, status: 'not-eligible', recoveryVerification: null };
   }
@@ -81,10 +85,19 @@ export async function rollbackProtection(options = {}) {
   if ((await current())?.id !== failedId) throw new Error('Deployment changed before rollback; rollback refused.');
   const result = await api(workers ? resource : `${resource}/deployments/${previous.deploymentId}/rollback`, workers ? { strategy: 'percentage', versions: target.versions.map(({ version_id, percentage }) => ({ version_id, percentage })) } : {});
   const response = { ok: false, rollbackAccepted: true, status: 'recovery-unverified', failedDeploymentId: failedId, targetDeploymentId: previous.deploymentId, recoveryDeploymentId: result.id || null, recoveryVerification: null };
+  const cookieEnv = options.sessionCookieEnv;
+  if (!previous.manifestFile || !cookieEnv || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(cookieEnv) || !process.env[cookieEnv]) return response;
   try {
+    const manifestFile = resolve(root, previous.manifestFile);
+    const manifest = await readProtectionManifest(manifestFile, {deploymentId:previous.deploymentId,buildHash:previous.report.evidenceBinding.buildHash});
+    if (manifest.manifestHash !== previous.report.evidenceBinding.manifestHash || manifest.runtimeVersion !== previous.runtimeVersion) throw new Error('Recovery manifest differs from the verified target artifact.');
+    const serving = await current();
+    if (!response.recoveryDeploymentId || serving.id !== response.recoveryDeploymentId) throw new Error('Recovery deployment is not serving.');
     const verify = options.verifyImpl || verifyProtection;
-    response.recoveryVerification = await verify({ root, url: config.protection.siteUrl, alternateOrigins: previous.report.origins.filter(origin => origin !== config.protection.siteUrl).join(','), expectRuntime: previous.runtimeVersion, fetchImpl: options.verificationFetchImpl || globalThis.fetch });
-    response.ok = response.recoveryVerification.ok === true;
+    response.recoveryVerification = await verify({ root, manifest:manifestFile, sessionCookieEnv:cookieEnv, deploymentId:previous.deploymentId, url: config.protection.siteUrl, alternateOrigins: previous.report.origins.filter(origin => origin !== config.protection.siteUrl).join(','), expectRuntime: previous.runtimeVersion, fetchImpl: options.verificationFetchImpl || globalThis.fetch });
+    const proof = response.recoveryVerification;
+    const binding = proof.evidenceBinding;
+    response.ok = proof.ok === true && proof.releaseAccepted === true && proof.manifestUnchanged === true && binding?.deploymentId === previous.deploymentId && binding.runtimeVersion === previous.runtimeVersion && binding.buildHash === manifest.buildHash && binding.manifestHash === manifest.manifestHash && proof.authenticatedChecks?.length > 0 && proof.authenticatedChecks.every(check => check.ok === true) && (await current()).id === serving.id;
     response.status = response.ok ? 'recovery-verified' : 'recovery-failed';
   } catch {
     response.status = 'recovery-indeterminate';

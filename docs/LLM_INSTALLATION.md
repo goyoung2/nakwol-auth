@@ -55,6 +55,12 @@ https://github.com/goyoung2/nakwol-auth/blob/dev/packages/connect-cli/GATE_SPEC.
 - 자동 업데이트를 요청한 경우 MANAGED_GATE_UPDATES.md에 따라 protect automate를 검토해.
   exact dependency와 lockfile을 커밋하고 기존 CI를 보존해. 자동 병합·배포·롤백이
   저절로 켜지는 기능으로 설명하지 마. 사용자가 금지한 자동 배포를 추가하지 마.
+- 0.14.0 로컬 후보의 자동 모드를 연결할 때는 SAFE_AUTOMATIC_UPDATES.md를 따라.
+  검토한 호스팅 adapter/hash·전체 origin·배포 lock·비공개 정상본 증거·최소 권한 token을
+  먼저 준비해. Cloudflare/Vercel 이름만으로 배포·복구가 연결됐다고 하지 마.
+  지원되지 않는 호스팅/미완전 origin/약한 정상본 증거에서는 자동 배포를 켜지 마.
+  권한 있는 병합 job에 PR 코드·artifact·호스팅 Secret을 주입하지 마.
+  기존 CI를 덮어쓰지 말고 기본 모드/명시적 자동 모드/실제 운영 반영을 구분해.
 
 5. 완료 검증
 - init/sync가 보호 미완료로 exit 1을 반환하면 JSON의 실제 실패 항목을 읽어.
