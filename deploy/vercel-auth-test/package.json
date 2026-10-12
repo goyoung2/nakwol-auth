@@ -12,8 +12,7 @@
     "test": "cd ../.. && node --test tests/vercel/*.test.mjs"
   },
   "dependencies": {
-    "@vercel/functions": "3.9.11",
-    "nakwol-auth": "file:../.."
+    "@vercel/functions": "3.9.11"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260702.1",
