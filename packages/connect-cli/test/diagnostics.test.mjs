@@ -11,7 +11,7 @@ function fixture(fetchImpl) {
   for(const id of ['start','cancel','copy','download','login','status','results','reference','upload'])nodes.set('diagnostics-'+id,{textContent:'',disabled:false,replaceChildren(){},append(){},onclick:null});
   const values=new Map();
   const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
-  const context=vm.createContext({window:{fetch:fetchImpl,navigator:{userAgent:'Firefox fixture'}},navigator:{userAgent:'Firefox fixture'},document:{getElementById:id=>nodes.get(id),createElement:()=>({textContent:''})},sessionStorage:storage,crypto:webcrypto,location:{origin:'https://site.test'},URL,Blob,Headers,AbortController,TextEncoder,performance,setTimeout,clearTimeout,console});
+  const context=vm.createContext({window:{fetch:fetchImpl,navigator:{userAgent:'Firefox fixture'}},navigator:{userAgent:'Firefox fixture'},document:{getElementById:id=>nodes.get(id),createElement:()=>({textContent:''})},sessionStorage:storage,crypto:webcrypto,location:{origin:'https://site.test'},URL,Blob,Response,DOMException,Headers,AbortController,TextEncoder,performance,setTimeout,clearTimeout,console});
   const runtime=vm.runInContext(diagnosticScript({clientId:'site',authOrigin:'https://auth.test',sitePing:true,redirectUri:'https://site.test/'}),context);
   return {runtime,nodes,context,values};
 }
@@ -99,4 +99,27 @@ test('cancel remains active while ticket response JSON is pending',async()=>{
   });
   const running=f.runtime.run();await pendingBody;f.runtime.cancel();await running;
   assert.equal(f.nodes.get('diagnostics-start').disabled,false);assert.equal(f.runtime.localReport().upload_confirmed,false);
+});
+
+test('storage denial preserves offline diagnostic run and sanitized export',async()=>{
+ const f=fixture(async()=>{throw new Error('offline private');});
+ f.context.sessionStorage={getItem(){throw new Error('Storage denied');},setItem(){throw new Error('Storage denied');},removeItem(){throw new Error('Storage denied');}};
+ const runtime=vm.runInContext(diagnosticScript({clientId:'site',authOrigin:'https://auth.test',sitePing:true}),f.context);
+ await runtime.run();assert.equal(runtime.localReport().observations.length,4);assert.equal(runtime.localReport().upload_confirmed,false);assert.equal(JSON.stringify(runtime.localReport()).includes('private'),false);
+});
+test('diagnosed response completion bounds stalled bodies, preserves caller cancellation and caps bytes',async()=>{
+ const reference='dg_'+'a'.repeat(24),capability='b'.repeat(43);let mode='ok';
+ const f=fixture(async(url)=>{
+  if(url.includes('/tickets'))return Response.json({reference,capability,expires_at:Date.now()+60000});
+  if(url.includes('/reports/'))return Response.json({ok:true,reference});
+  if(url.includes('/me'))return mode==='large'?new Response(new Uint8Array(65537)):mode==='stall'?new Response(new ReadableStream({start(){}})):Response.json({ok:true});
+  return Response.json({ok:true});
+ });
+ await f.runtime.run();mode='stall';f.context.setTimeout=(fn,ms)=>setTimeout(fn,Math.min(ms,5));
+ await assert.rejects(f.runtime.fetchImpl('https://auth.test/me?client_id=site'),/aborted/);
+ assert.equal(f.runtime.localReport().observations.at(-1).outcome,'timeout_or_cors');
+ const caller=new AbortController();const pending=f.runtime.fetchImpl('https://auth.test/me?client_id=site',{signal:caller.signal});caller.abort();await assert.rejects(pending,/aborted/);
+ assert.equal(f.runtime.localReport().observations.at(-1).outcome,'cancelled');
+ mode='large';await assert.rejects(f.runtime.fetchImpl('https://auth.test/me?client_id=site'),/TOO_LARGE/);
+ mode='ok';const complete=await f.runtime.fetchImpl('https://auth.test/me?client_id=site');assert.deepEqual(await complete.json(),{ok:true});
 });

@@ -26,7 +26,7 @@ export function diagnosticRuntime(settings) {
       if(/^local-[a-f0-9-]{36}$/.test(saved.localReference)) localReference=saved.localReference;
       acknowledgement=Boolean(ticket&&saved.acknowledgement);
       uploadStatus=acknowledgement?'이전 보고서 접수를 AUTH에서 확인했습니다.':'현재 보고서의 접수를 확인하지 못했습니다. 로컬 자료가 남아 있습니다.';
-    } catch {sessionStorage.removeItem(key);}
+    } catch {try{sessionStorage.removeItem(key);}catch{/* Storage is unavailable; keep the in-memory report usable. */}}
   };
   restore();
   const labels={site_ping:'사이트 연결',auth_ping:'AUTH 연결',sdk:'로그인 모듈',application:'앱·DB 확인',token:'인증 코드 교환',me:'접근 권한 확인',site_session:'사이트 로그인 저장',page_navigation:'현재 페이지 이동'};
@@ -37,7 +37,7 @@ export function diagnosticRuntime(settings) {
     if($('reference')) $('reference').textContent=acknowledgement?'접수된 진단 번호: '+ticket.reference:(ticket?'발급된 진단 번호 (현재 보고서 미접수): '+ticket.reference+' · ':'')+'로컬 보고서 번호: '+localReference;
     if($('upload')) $('upload').textContent=uploadStatus;
     for(const name of ['copy','download']) if($ (name)) $(name).disabled=!report.observations.length;
-    if($('login')) $('login').disabled=running || !ticket || settings.central;
+    if($('login')) $('login').disabled=running || !ticket || ticket.expires_at<=Date.now() || settings.central;
   };
   const observe=(probe,outcome,start,http_status=null,timing)=>{acknowledgement=false;revision++;uploadStatus='새 관측 자료의 접수를 아직 확인하지 못했습니다.';report.observations.push({probe,outcome,duration_ms:Math.max(0,Math.min(120000,Math.round(performance.now()-start))),http_status,...(timing===undefined?{}:{timing})});report.observations=report.observations.slice(-16);save();render();};
   async function request(url,options={},timeout=5000,json=false) {
@@ -103,13 +103,34 @@ export function diagnosticRuntime(settings) {
     let stage=target.origin===settings.authOrigin&&target.pathname==='/token'?'token':target.origin===settings.authOrigin&&target.pathname==='/me'?'me':target.origin===location.origin&&target.pathname==='/__nakwol/session'?'site_session':null;
     if(!ticket || !stage || ticket.expires_at<=Date.now()) return nativeFetch(url,options);
     const headers=new Headers(options.headers);headers.set('X-Nakwol-Diagnostic-Reference',ticket.reference);headers.set('X-Nakwol-Diagnostic-Capability',ticket.capability);
-    const start=performance.now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-    try {const response=await nativeFetch(url,{...options,headers,signal:controller.signal});observe(stage,response.ok?'ok':'http_error',start,response.status);return response;}
-    catch(error){observe(stage,'timeout_or_cors',start);throw error;}
-    finally{clearTimeout(timer);}
+    const start=performance.now(),controller=new AbortController();
+    const callerAbort=()=>controller.abort(options.signal?.reason);
+    if(options.signal?.aborted)callerAbort();else options.signal?.addEventListener('abort',callerAbort,{once:true});
+    const timer=setTimeout(()=>controller.abort(),15000);
+    let reader;
+    try {
+      const response=await nativeFetch(url,{...options,headers,signal:controller.signal});
+      const chunks=[];let size=0;
+      if(response.body){
+        reader=response.body.getReader();
+        let rejectAbort;
+        const aborted=new Promise((_,reject)=>{rejectAbort=()=>reject(new DOMException('Diagnostic request aborted','AbortError'));});
+        controller.signal.addEventListener('abort',rejectAbort,{once:true});
+        try {
+          if(controller.signal.aborted)rejectAbort();
+          for(;;){const part=await Promise.race([reader.read(),aborted]);if(part.done)break;size+=part.value.byteLength;if(size>65536)throw new Error('DIAGNOSTIC_RESPONSE_TOO_LARGE');chunks.push(part.value);}
+        }finally{controller.signal.removeEventListener('abort',rejectAbort);}
+      }
+      const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+      const complete=new Response([204,205,304].includes(response.status)?null:bytes,{status:response.status,statusText:response.statusText,headers:response.headers});
+      observe(stage,response.ok?'ok':'http_error',start,response.status);return complete;
+    }
+    catch(error){if(reader)reader.cancel().catch(()=>{});observe(stage,options.signal?.aborted?'cancelled':'timeout_or_cors',start);throw error;}
+    finally{clearTimeout(timer);options.signal?.removeEventListener('abort',callerAbort);}
   }
   async function retryLogin(auth) {
-    if(!ticket || ticket.expires_at<=Date.now() || settings.central) return;
+    if(settings.central)return;
+    if(!ticket || ticket.expires_at<=Date.now()){status('진단 번호가 만료되었습니다. 진단 시작·다시 검사로 새 번호를 받은 뒤 로그인해 주세요.');render();return;}
     const encode=bytes=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
     const verifier=encode(crypto.getRandomValues(new Uint8Array(48))),state=encode(crypto.getRandomValues(new Uint8Array(24)));
     const challenge=encode(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
@@ -134,7 +155,7 @@ export function diagnosticRuntime(settings) {
     if(navigation&&navigation.duration>0) observe('page_navigation','ok',performance.now()-Math.min(navigation.duration,120000));
   }
   render();
-  return {run,cancel,upload,fetchImpl,retryLogin,localReport,hasTicket:()=>Boolean(ticket)};
+  return {run,cancel,upload,fetchImpl,retryLogin,localReport,hasTicket:()=>Boolean(ticket&&ticket.expires_at>Date.now())};
 }
 export function diagnosticMarkup(central = false) {
   return `<section class="diagnostic-card" aria-labelledby="diagnostics-title"><h2 id="diagnostics-title">접속 진단</h2>
