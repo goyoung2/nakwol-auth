@@ -14,7 +14,7 @@ node --test tests/vercel/runtime.test.mjs
 npm run build --prefix deploy/vercel-auth-test
 ```
 
-The local build packs the existing Connect CLI and bundles Hono/shared source and text assets with esbuild. Upload **only** `deploy/vercel-auth-test` to the separate Vercel project; its build reads the already uploaded `runtime/auth-runtime.mjs` and creates an empty `public` output directory. No source outside the uploaded directory is needed at Vercel build/runtime. Only `api/index.mjs` is a Function. All requests rewrite there; runtime and bootstrap helpers are not static public files. `.vercelignore` excludes DB deployment files, local credentials, logs, and installed dependencies.
+The local build packs the existing Connect CLI and bundles Hono/shared source and text assets with esbuild. Upload **only** `deploy/vercel-auth-test` to the separate Vercel project; its build reads the already uploaded `runtime/auth-runtime.mjs` and creates a `public` output directory containing only a harmless `robots.txt`. No source outside the uploaded directory is needed at Vercel build/runtime. Only `api/index.mjs` is a Function. All requests rewrite there; runtime and bootstrap helpers are not static public files. `.vercelignore` excludes DB deployment files, local credentials, logs, and installed dependencies.
 
 The API adapts streamed Node bodies and Vercel parsed JSON/form bodies to a native Request. Response status, headers, distinct Set-Cookie values and body are preserved; HEAD sends no body. ExecutionContext.waitUntil uses `@vercel/functions`. Node 22 supplies native WebCrypto. No raw errors, SQL, tokens, IPs or bridge secrets are logged by this adaptation.
 
