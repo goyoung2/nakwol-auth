@@ -33,7 +33,7 @@ test('npm publish workflow supports first-token publish and later OIDC trusted p
   assert.match(workflow, /secrets\.NPM_TOKEN/);
   assert.match(workflow, /npm publish \.\/packages\/connect-cli/);
   assert.match(workflow, /FIRST_PUBLISH_REQUIRES_NPM_TOKEN/);
-  assert.match(workflow, /\$PKG@\$VERSION/);
+  assert.ok(workflow.includes('node scripts/check-npm-release.mjs --verify'));
   assert.match(workflow, /NAKWOL_CONNECT_NPM_PUBLISH_OK/);
 });
 

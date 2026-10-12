@@ -13,6 +13,10 @@ permissions:
   pull-requests: read
   id-token: write
 
+concurrency:
+  group: nakwol-connect-npm-production
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -37,46 +41,8 @@ jobs:
         run: |
           npm test
           npm run typecheck
-      - name: Inspect package and registry ownership
-        shell: bash
-        run: |
-          set -euo pipefail
-          PKG='nakwol-connect'
-          VERSION=$(node -p "require('./packages/connect-cli/package.json').version")
-          EXPECTED_REPO='https://github.com/goyoung2/nakwol-auth'
-          echo "PACKAGE_NAME=$PKG" >> "$GITHUB_ENV"
-          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo 'PACKAGE_EXISTS=false' >> "$GITHUB_ENV"
-          echo 'ALREADY_PUBLISHED=false' >> "$GITHUB_ENV"
-          set +e
-          npm view "$PKG" name repository.url --json > /tmp/npm-existing.json 2> /tmp/npm-existing.err
-          VIEW_STATUS=$?
-          set -e
-          if [ "$VIEW_STATUS" -eq 0 ]; then
-            echo 'PACKAGE_EXISTS=true' >> "$GITHUB_ENV"
-            cat /tmp/npm-existing.json
-            ACTUAL_REPO=$(node - <<'NODE'
-          const fs = require('fs');
-          const value = JSON.parse(fs.readFileSync('/tmp/npm-existing.json', 'utf8'));
-          const item = Array.isArray(value) ? value[0] : value;
-          const repo = item?.['repository.url'] ?? item?.repository?.url ?? '';
-          process.stdout.write(repo || '');
-          NODE
-            )
-            normalize_repo() { printf '%s' "$1" | sed -E 's#^git\+##; s#\.git$##; s#/$##'; }
-            if [ "$(normalize_repo "$ACTUAL_REPO")" != "$(normalize_repo "$EXPECTED_REPO")" ]; then
-              echo "::error::PACKAGE_NAME_TAKEN: npm package '$PKG' already exists and is not owned by this repository."
-              exit 1
-            fi
-          else
-            if grep -qiE 'E404|404 Not Found|is not in this registry' /tmp/npm-existing.err; then echo "NPM_PACKAGE_NAME_AVAILABLE:$PKG"; else cat /tmp/npm-existing.err >&2; exit "$VIEW_STATUS"; fi
-          fi
-          if npm view "$PKG@$VERSION" version --json > /tmp/npm-version.json 2>/dev/null; then
-            echo 'ALREADY_PUBLISHED=true' >> "$GITHUB_ENV"
-            echo "NPM_VERSION_ALREADY_PUBLISHED:$PKG@$VERSION"
-          else
-            echo "NPM_VERSION_READY_TO_PUBLISH:$PKG@$VERSION"
-          fi
+      - name: Inspect exact package content and registry ownership
+        run: node scripts/check-npm-release.mjs
       - name: Require one-time token for first publication
         if: env.ALREADY_PUBLISHED != 'true' && env.PACKAGE_EXISTS != 'true'
         env:
@@ -104,13 +70,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for i in {1..12}; do
-            PUBLISHED=$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version 2>/dev/null || true)
-            echo "attempt=$i published=${PUBLISHED:-missing}"
-            if [ "$PUBLISHED" = "$PACKAGE_VERSION" ]; then break; fi
-            sleep 5
-          done
-          test "$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version)" = "$PACKAGE_VERSION"
+          PKG="$PACKAGE_NAME"
+          VERSION="$PACKAGE_VERSION"
+          node scripts/check-npm-release.mjs --verify
           npm exec --yes --package="$PACKAGE_NAME@$PACKAGE_VERSION" -- nakwol-connect help | tee /tmp/nakwol-connect-help.txt
           CLI_SERIES="${PACKAGE_VERSION%.*}"
           grep -q "NAKWOL Connect CLI v${CLI_SERIES}" /tmp/nakwol-connect-help.txt

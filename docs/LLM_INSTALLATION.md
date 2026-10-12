@@ -1,6 +1,6 @@
 # LLM으로 NAKWOL Connect 설치·업데이트하기
 
-기준: Connect **0.7.1**, 2026-09-29 npm 게시·AUTH 운영 배포 확인. 이후 버전은 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json)와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
+기준: Connect **0.7.2**, 2026-10-13 npm 레지스트리·AUTH 운영 manifest 조회 확인. 이후 버전은 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json)와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
 
 ## 아래 지시문을 코딩 에이전트에게 복사하세요
 
@@ -91,17 +91,17 @@ DATA가 필요한 경우만 data describe --json으로 현재 API를 확인하�
 `dist`, 프로젝트 이름, 운영 브랜치는 예시를 그대로 사용하지 말고 실제 값을 확인하세요.
 호스팅별 명령은 [서버 보호 설치](CONNECT_SERVER_PROTECTION.md), 장기 운영은 [관리형 업데이트](MANAGED_GATE_UPDATES.md)를 따릅니다.
 
-## 0.7.1 업데이트 예시
+## 0.7.2 업데이트 예시
 
 이미 공식 설치 메타데이터가 있는 사이트에서 실행합니다. 자체 어댑터에 이 명령을 강제로 적용하지 않습니다.
 
 ```sh
-npx --yes nakwol-connect@0.7.1 protect update
+npx --yes nakwol-connect@0.7.2 protect update
 npm run build
 # 기존 사이트의 승인된 배포 절차 실행
-npx --yes nakwol-connect@0.7.1 protect status --json
-npx --yes nakwol-connect@0.7.1 protect verify --expect-runtime installed --json
-npx --yes nakwol-connect@0.7.1 doctor --json
+npx --yes nakwol-connect@0.7.2 protect status --json
+npx --yes nakwol-connect@0.7.2 protect verify --expect-runtime installed --json
+npx --yes nakwol-connect@0.7.2 doctor --json
 ```
 
 관리형 모드는 [protect automate 설정](MANAGED_GATE_UPDATES.md)을 사용합니다. 생성된 PR 검사는 배포를 대신하지 않습니다. 관리자 보고와 자동 롤백도 각각 별도 연결이 필요합니다.

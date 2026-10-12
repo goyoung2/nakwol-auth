@@ -8,7 +8,21 @@
 - **NAKWOL Connect** — 새 프로젝트에 AUTH/DATA를 설치·등록·검증하는 공식 CLI + Universal Embed
 - **NAKWOL DATA** — 장수·전법·장비·덱 등 낙월 서비스가 공유하는 사용자 게임 데이터
 
-## 설치·업데이트 안내 (Connect 0.7.1)
+## 버전 확인
+
+아래 표는 이 브랜치의 **소스 버전**입니다. 운영·npm 게시 완료를 뜻하지 않습니다. `npm run versions:sync`로 갱신하고 CI에서 검사합니다. [버전 관리 절차](docs/VERSION_MANAGEMENT.md)를 참고하세요. 실제 운영 버전은 AUTH `/api/health`, `/sdk/manifest.json`, `/connect/cli/manifest.json`, DATA `/api/health`와 npm 레지스트리에서 각각 확인합니다. 개발판 버전을 운영판으로 안내하지 마세요.
+
+<!-- component-versions:start -->
+| 구성 요소 | 이 브랜치의 소스 버전 |
+|---|---:|
+| AUTH | 0.2.0 |
+| Connect CLI·공통 게이트 | 0.7.2 |
+| Web SDK | 0.3.2 |
+| DATA | 0.9.0 |
+| DATA 스키마 | 4 |
+<!-- component-versions:end -->
+
+## 설치·업데이트 안내
 
 **LLM에게 맡기려면 [복사용 설치·업데이트 지시문](docs/LLM_INSTALLATION.md)을 사용하세요.** 신규 설치, 기존 연동 보존, 호스팅별 서버 보호, 운영 검증까지 포함합니다.
 
@@ -48,7 +62,7 @@ access_policy = member
 
 **https://nakwol-auth.sepsd21.workers.dev/connect**
 
-현재 공식 CLI는 **`nakwol-connect@0.7.1`**입니다.
+공식 CLI의 현재 게시 버전은 [npm 레지스트리](https://www.npmjs.com/package/nakwol-connect)에서 확인합니다. 이 브랜치의 소스 버전은 위 표를 참고하세요.
 
 프로젝트 루트에서:
 
@@ -115,7 +129,7 @@ Web SDK stable은 **0.3.2**이며 Universal Embed는 같은 브라우저의 중�
 
 중앙 Embed 변경은 중앙 스크립트를 사용하는 사이트에 반영되지만, 서버 게이트는 **패키지 업데이트 → 사이트 빌드 → 배포**가 필요합니다. AUTH 배포만으로 소비자 서버 코드는 교체되지 않습니다.
 
-0.7.1 공통 게이트는 유효한 5분 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. 중앙 권한 회수에는 최대 5분의 추가 지연이 있으며, Discord 역할 정보의 최대 24시간 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
+0.7.2 공통 게이트는 유효한 5분 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. 중앙 권한 회수에는 최대 5분의 추가 지연이 있으며, Discord 역할 정보의 최대 24시간 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 
@@ -155,15 +169,15 @@ NAKWOL 운영자는 `https://nakwol-auth.sepsd21.workers.dev/admin/developers`�
 
 ### NAKWOL Connect
 
-- CLI/distribution: **Connect 0.7.1**
-- npm package: **`nakwol-connect@0.7.1`**
+- CLI/distribution 소스 버전: 위 구성 요소 표
+- npm package: **`nakwol-connect`** · 게시 여부는 레지스트리에서 별도 확인
 - 기본값: **`required + member`**
 - 앱 등록/재사용, callback 등록, AUTH/DATA 자동 연동, doctor, DATA OpenAPI discovery를 담당합니다.
 
 ### NAKWOL DATA
 
 - production runtime: **DATA 0.9.0**
-- schema: **3**
+- schema: **4**
 - origin: `https://nakwol-data.sepsd21.workers.dev`
 - OpenAPI 3.1: `/openapi.json`
 
