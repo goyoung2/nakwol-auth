@@ -1,0 +1,7 @@
+{
+  "name": "nakwol-auth-vercel-test-d1-bridge",
+  "main": "bridge-worker.mjs",
+  "compatibility_date": "2026-10-09",
+  "vars": { "NAKWOL_D1_TEST_BRIDGE": "true" },
+  "d1_databases": [{ "binding": "DB", "database_name": "REPLACE_WITH_SEPARATE_TEST_DATABASE_NAME", "database_id": "REPLACE_WITH_SEPARATE_TEST_DATABASE_UUID", "migrations_dir": "../../migrations" }]
+}

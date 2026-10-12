@@ -1,0 +1,11 @@
+node_modules
+.vercel
+bridge-worker.mjs
+bridge.wrangler.jsonc
+bridge.wrangler.jsonc.example
+bootstrap.sql.template
+.env
+.env.*
+.dev.vars
+.wrangler
+*.log
