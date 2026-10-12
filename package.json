@@ -9,7 +9,10 @@
     "predeploy": "npm run cli:pack",
     "deploy": "wrangler deploy",
     "test:unit": "tsx --test tests/worker/*.test.ts packages/connect-cli/test/*.test.mjs",
-    "test": "npm run cli:pack && npm run test:unit",
+    "test": "npm run versions:check && npm run test:release && npm run cli:pack && npm run test:unit",
+    "versions:check": "node scripts/verify-component-versions.mjs",
+    "versions:sync": "node scripts/verify-component-versions.mjs --write",
+    "test:release": "node --test tests/release/*.test.mjs",
     "typecheck": "npm run cli:pack && tsc --noEmit",
     "cli:pack": "node scripts/build-connect-cli-package.mjs",
     "db:migrate:local": "wrangler d1 migrations apply nakwol-auth --local",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240101.0",
+    "tar": "7.5.22",
     "tsx": "^4.20.0",
     "typescript": "^5.7.0",
     "wrangler": "^4.119.0"

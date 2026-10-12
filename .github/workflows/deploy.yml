@@ -121,6 +121,7 @@ jobs:
         run: |
           set -euo pipefail
           origin='https://nakwol-auth.sepsd21.workers.dev'
+          export EXPECTED_CONNECT_VERSION=$(node -p "require('./packages/connect-cli/package.json').version")
           for i in {1..18}; do
             hs=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/health -w '%{http_code}' "$origin/api/health" || true)
             ss=$(curl -sS -H 'Cache-Control: no-cache' -o /tmp/sdk -w '%{http_code}' "$origin/sdk/v0.3.2/nakwol-auth-web.js" || true)
@@ -142,7 +143,7 @@ jobs:
                  grep -q '"default_auth":"required"' /tmp/connect-manifest && \
                  grep -q '"default_access_policy":"member"' /tmp/connect-manifest && \
                  grep -q '"name":"nakwol-connect"' /tmp/cli-manifest && \
-                 grep -q '"version":"0.7.2"' /tmp/cli-manifest && \
+                 node -e "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync('/tmp/cli-manifest','utf8'));if(m.version!==process.env.EXPECTED_CONNECT_VERSION)process.exit(1)" && \
                  grep -q '"default_auth":"required"' /tmp/cli-manifest && \
                  grep -q '"default_access_policy":"member"' /tmp/cli-manifest && \
                  grep -q 'init --auth optional' /tmp/cli-manifest && \
