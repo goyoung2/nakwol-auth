@@ -27,3 +27,11 @@
 - Empty, loading and API-error states are distinct. Never present missing reports as a healthy deployment. Reports are publisher observations, not central attestation.
 - Switching apps invalidates pending responses; render report values through textContent only. Refresh is keyboard accessible, results use a polite live region.
 - This is an operator surface; do not add deployment details to ordinary users' account page.
+
+## User-initiated AUTH diagnostics
+
+- Central and official gate use the existing AUTH dark palette, 720px column, 16px mobile gutters, 16px cards and 44px controls. Shared runtime and markup live in Connect's server diagnostics module.
+- Start/retry, progress, cancel, completed observations, local/server reference, upload status, copy/download and explicit diagnostic login are separate states. Buttons never rely on color alone; progress and receipt status use polite live regions.
+- Technical privacy/retention copy is collapsed in details. The selected registered service name uses textContent. Central has a registered-service link; diagnostic login runs on the service's registered callback origin.
+- Operator reports reuse content-card, section-head, event-row, muted/error-text and el(). App switch invalidates pending results. Trusted server timings and untrusted browser observations have separate headings; every network sample states its observation source.
+- DNS/TCP/TLS/first-response timing is optional for owned public ping endpoints only. Reused or inaccessible setup metrics are null and display as unobserved.

@@ -1,6 +1,6 @@
-import { loginPage } from './login.mjs';
+import { loginPage, diagnosticsPage } from './login.mjs';
 
-export const RUNTIME_VERSION = '0.7.2';
+export const RUNTIME_VERSION = '0.7.3';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -49,13 +49,13 @@ async function readSession(request, secret, audience) {
     return typeof session.token === 'string' && Number.isFinite(session.expires) && session.expires > Date.now() ? session : null;
   } catch { return null; } // Untrusted or obsolete cookies never grant access.
 }
-async function verify(token, settings) {
+async function verify(token, settings, diagnostic) {
   const verifiedAt = Date.now();
   try {
     const url = new URL('/me', settings.authOrigin);
     url.searchParams.set('client_id', settings.clientId);
     const result = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
+      headers: { ...(diagnostic || {}), Authorization: `Bearer ${token}`, ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
       cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(7000),
     });
     if (result.status !== 200) return { status: [401, 403].includes(result.status) ? result.status : 503 };
@@ -95,7 +95,7 @@ function isRevoked(id) {
   revokedSessions.delete(id);
   return false;
 }
-function verifyConcurrent(token, settings, fresh = false) {
+function verifyConcurrent(token, settings, fresh = false, diagnostic) {
   const id = sessionId(token, settings);
   if (isRevoked(id)) return Promise.resolve({ status: 401 });
   const cached = completedChecks.get(id);
@@ -104,7 +104,7 @@ function verifyConcurrent(token, settings, fresh = false) {
   const pending = pendingChecks.get(id);
   if (pending) return pending;
   if (pendingChecks.size >= 256) return Promise.resolve({ status: 503 });
-  const check = verify(token, settings).then(result => {
+  const check = verify(token, settings, diagnostic).then(result => {
     // Logout may finish while /me is in flight: never resurrect that grant.
     if (isRevoked(id)) return { status: 401 };
     if (result.status === 200) remember(completedChecks, id, result);
@@ -133,6 +133,14 @@ export async function serveProtected(request, env, settings) {
   const url = new URL(request.url);
   // Only the explicitly registered deployment origin can serve protected content.
   if (url.origin !== new URL(settings.siteUrl).origin) return response(null, 403);
+  if (['/__nakwol/diagnostics', '/__nakwol/diagnostics/ping'].includes(url.pathname)) {
+    if (!['GET','HEAD'].includes(request.method)) return response(null,405);
+    if (request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) return response(null,403);
+    if (request.headers.get('Sec-Fetch-Site') === 'cross-site' && url.pathname.endsWith('/ping')) return response(null,403);
+    if (request.headers.has('Range')) return response(null,416);
+    const ping = url.pathname.endsWith('/ping');
+    return response(request.method === 'HEAD' ? null : ping ? JSON.stringify({ok:true,gate:RUNTIME_VERSION}) : diagnosticsPage({...settings,redirectUri:settings.siteUrl,sitePing:true}),200,{'Content-Type':ping?'application/json':'text/html; charset=utf-8','Referrer-Policy':'no-referrer',...(ping?{'Timing-Allow-Origin':url.origin}:{})});
+  }
   if (typeof env.NAKWOL_SESSION_SECRET !== 'string' || env.NAKWOL_SESSION_SECRET.length < 32) return denied(request, 503, settings);
   const audience = `${url.origin}/${settings.clientId}`;
   const session = await readSession(request, env.NAKWOL_SESSION_SECRET, audience);
@@ -169,7 +177,9 @@ export async function serveProtected(request, env, settings) {
     let token;
     try { token = JSON.parse(new TextDecoder().decode(bytes)).access_token; } catch { return response(null, 400); }
     if (typeof token !== 'string' || token.length < 1 || token.length > 2048) return response(null, 400);
-    const checked = await verifyConcurrent(token, settings, true);
+    const ref=request.headers.get('X-Nakwol-Diagnostic-Reference'), cap=request.headers.get('X-Nakwol-Diagnostic-Capability');
+    const diagnostic=/^dg_[A-Za-z0-9_-]{24}$/.test(ref || '')&&/^[A-Za-z0-9_-]{43}$/.test(cap || '')?{'X-Nakwol-Diagnostic-Reference':ref,'X-Nakwol-Diagnostic-Capability':cap}:undefined;
+    const checked = await verifyConcurrent(token, settings, true, diagnostic);
     if (checked.status !== 200) return denied(request, checked.status, settings);
     const expires = Math.min(checked.expires, Date.now() + 3600000);
     const authorization = { ...checked.authorization, leaseUntil: Math.min(checked.authorization.leaseUntil, expires) };

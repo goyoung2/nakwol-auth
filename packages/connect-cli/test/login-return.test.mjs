@@ -6,11 +6,11 @@ for (const path of ['/?deck=123#detail', '/build/100?user=1#unit']) {
   test(`login preserves original URL ${path} across OAuth callback`, async () => {
     const storage = new Map();
     const sessionStorage = { getItem: k => storage.get(k) || null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) };
-    const elements = Object.fromEntries(['status','login','retry','recovery'].map(k => [k, {}]));
+    const elements = Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(k => [k, {}]));
     let authenticated = false, target;
     const sdk = { NakwolAuthClient: class { async bootstrap() { return authenticated ? {} : null; } getAccessToken() { return 'test'; } } };
     const source = loginPage({ clientId: 'site', authOrigin: 'https://auth.test', siteUrl: 'https://site.test/' }, 401).split('<script type="module">')[1].split('</script>')[0].replace("await import(settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js')", 'sdk');
-    const run = new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',source);
+    const run = new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
     async function visit(path) {
       const url = new URL(path, 'https://site.test');
       await run(sdk, { origin:url.origin, pathname:url.pathname, search:url.search, hash:url.hash, replace:p=>{target=p;} }, {getElementById:k=>elements[k]}, sessionStorage, async()=>new Response(null,{status:204}));
@@ -24,9 +24,9 @@ for (const path of ['/?deck=123#detail', '/build/100?user=1#unit']) {
 
 for (const status of [401,403]) test(`server session denial ${status} clears credentials and allows manual retry`, async () => {
   const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("await import(settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js')",'sdk');
-  const run=new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',source);
+  const run=new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
   let cleared=0,denied=0,retried=0;
-  const elements=Object.fromEntries(['status','login','retry','recovery'].map(k=>[k,{}]));
+  const elements=Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(k=>[k,{}]));
   const sdk={NakwolAuthClient:class{
     async bootstrap(){return {};}
     getAccessToken(){return 'fixture';}
@@ -44,12 +44,12 @@ for (const status of [401,403]) test(`server session denial ${status} clears cre
 
 for (const outcome of ['authenticated', 'anonymous', 'error']) test(`login controls wait for automatic SSO: ${outcome}`, async () => {
   const html = loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401);
-  const elements = Object.fromEntries(['status','login','retry','recovery'].map(id => [id, {hidden: new RegExp(`<[^>]+id="${id}"[^>]* hidden`).test(html)}]));
+  const elements = Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(id => [id, {hidden: new RegExp(`<[^>]+id="${id}"[^>]* hidden`).test(html)}]));
   const source = html.split('<script type="module">')[1].split('</script>')[0].replace("await import(settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js')",'sdk');
   let resolveUser, rejectUser;
   const pending = new Promise((resolve,reject) => {resolveUser=resolve;rejectUser=reject;});
   const sdk = {NakwolAuthClient:class {bootstrap(){return pending;} getAccessToken(){return 'fixture';}}};
-  const run = new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',source);
+  const run = new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
   let target;
   const completed = run(sdk,{origin:'https://site.test',pathname:'/',search:'',hash:'',replace:p=>{target=p;}},{getElementById:id=>elements[id]},{getItem(){return null;},setItem(){},removeItem(){}},async()=>new Response(null,{status:204}));
   assert.equal(elements.login.hidden,true);

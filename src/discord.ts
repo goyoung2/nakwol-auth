@@ -1,3 +1,4 @@
+import { measured, type DiagnosticTrace } from './diagnostic-trace';
 import type { DiscordGuildMember, DiscordUser, Env } from './types';
 
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -44,20 +45,22 @@ export async function exchangeDiscordCode(env: Env, code: string): Promise<strin
   return payload.access_token;
 }
 
-export async function fetchDiscordIdentity(env: Env, accessToken: string): Promise<DiscordIdentityResult> {
+export async function fetchDiscordIdentity(env: Env, accessToken: string, trace?: DiagnosticTrace): Promise<DiscordIdentityResult> {
   const authHeaders = { Authorization: `Bearer ${accessToken}` };
-  const userResponse = await fetch(`${DISCORD_API}/users/@me`, { headers: authHeaders });
-  if (!userResponse.ok) throw new Error(`Discord /users/@me failed (${userResponse.status}).`);
-  const user = await userResponse.json() as DiscordUser;
-
-  const memberResponse = await fetch(`${DISCORD_API}/users/@me/guilds/${env.NAKWOL_GUILD_ID}/member`, { headers: authHeaders });
-  if (memberResponse.status === 404) return { user, member: null };
-  if (!memberResponse.ok) {
-    const detail = await memberResponse.text();
-    throw new Error(`Discord guild member lookup failed (${memberResponse.status}): ${detail.slice(0, 300)}`);
-  }
-
-  const member = await memberResponse.json() as DiscordGuildMember;
+  const user = await measured(trace, 'discord_identity', async () => {
+    const response = await fetch(`${DISCORD_API}/users/@me`, { headers: authHeaders, signal: trace ? AbortSignal.timeout(10000) : undefined });
+    if (!response.ok) throw new Error(`Discord /users/@me failed (${response.status}).`);
+    return await response.json() as DiscordUser;
+  });
+  const member = await measured(trace, 'discord_member', async () => {
+    const response = await fetch(`${DISCORD_API}/users/@me/guilds/${env.NAKWOL_GUILD_ID}/member`, { headers: authHeaders, signal: trace ? AbortSignal.timeout(10000) : undefined });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Discord guild member lookup failed (${response.status}): ${detail.slice(0, 300)}`);
+    }
+    return await response.json() as DiscordGuildMember;
+  });
   return { user, member };
 }
 

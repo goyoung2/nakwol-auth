@@ -44,9 +44,10 @@ export function generatedAssetPaths(protection) {
 }
 async function generatedFiles(settings, directory, provider, projectName) {
   const gate = await readFile(new URL('./server/gate.mjs', import.meta.url), 'utf8');
-  const login = await readFile(new URL('./server/login.mjs', import.meta.url), 'utf8');
+  const diagnostics = await readFile(new URL('./server/diagnostics.mjs', import.meta.url), 'utf8');
+  const login = diagnostics + '\n' + (await readFile(new URL('./server/login.mjs', import.meta.url), 'utf8')).replace(/^import .*diagnostics.mjs.*\r?\n/m, '').replace('export { diagnosticsPage };', '');
   if (provider === 'cloudflare-pages') return {
-    [`${directory}/_worker.js`]: `${login.replace(/^export /gm, '')}\n${gate.replace(/^export /gm, '').replace("import { loginPage } from './login.mjs';", '')}\nconst settings = ${JSON.stringify(settings)};\nexport default { fetch(request, env) { return serveProtected(request, env, settings); } };\n`,
+    [`${directory}/_worker.js`]: `${login.replace(/^export /gm, '')}\n${gate.replace(/^export /gm, '').replace("import { loginPage, diagnosticsPage } from './login.mjs';", '')}\nconst settings = ${JSON.stringify(settings)};\nexport default { fetch(request, env) { return serveProtected(request, env, settings); } };\n`,
     [`${directory}/_routes.json`]: JSON.stringify({ version:1, include:['/*'], exclude:[] }, null, 2) + '\n',
     [WRANGLER_FILE]: JSON.stringify({ name:projectName, pages_build_output_dir:directory, compatibility_date:'2026-09-01' }, null, 2) + '\n',
   };

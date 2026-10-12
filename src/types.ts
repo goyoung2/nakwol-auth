@@ -19,6 +19,7 @@ export interface ApplicationRow {
 }
 
 export interface OAuthRequestRow {
+  diagnostic_ref?: string | null;
   id: string;
   client_id: string;
   redirect_uri: string;

@@ -117,3 +117,7 @@ responses. Managed update PRs require review; no production auto-merge. Optional
 release-check rollback requires a pinned verified baseline, current deployment
 identity checks and externally serialized deployments. Report-only credentials
 never authorize users; all deployment summaries remain informational.
+
+## Public diagnostic exceptions (0.7.3)
+
+Only `/__nakwol/diagnostics` and `/__nakwol/diagnostics/ping` are public operational GET/HEAD endpoints. They enforce the configured site origin, reject Range, never invoke ASSETS, and expose no protected content. The self-contained browser runtime runs only when the user starts diagnostics; it exports sanitized local reports during AUTH/SDK outages. All other paths retain required authentication/member policy and the existing local authorization lease. Existing installations need `protect update`, build and redeploy.

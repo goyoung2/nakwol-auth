@@ -15,8 +15,8 @@
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.0 |
-| Connect CLI·공통 게이트 | 0.7.2 |
+| AUTH | 0.2.1 |
+| Connect CLI·공통 게이트 | 0.7.3 |
 | Web SDK | 0.3.2 |
 | DATA | 0.9.0 |
 | DATA 스키마 | 4 |
@@ -198,3 +198,5 @@ DATA scopes:
 - DATA scope는 필요한 권한만 최소로 요청합니다.
 
 상세 계약은 [CONNECT.md](./CONNECT.md), [WEB_SDK.md](./WEB_SDK.md), [DATA.md](./DATA.md)를 참고하세요.
+
+AUTH 0.2.1 / Connect 0.7.3 소스에는 사용자 접속 진단이 포함됩니다. 로컬 구현이며 배포·npm 공개는 별도입니다. [진단 기능 계약과 게이트 갱신](docs/AUTH_DIAGNOSTICS.md)을 참고하세요.
