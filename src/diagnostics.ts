@@ -116,7 +116,7 @@ export function registerDiagnosticRoutes(app: Hono<{Bindings:Env}>): void {
     if(!record(input.value)||Object.keys(input.value).length) return respond(c.json({ok:false,error:{code:'INVALID_REQUEST'}},400));
     await cleanupDiagnostics(c.env);
     // Global guard before network guard bounds persistent network rows, even for random addresses.
-    if(!await guard(c.env,'global',300)||!await guard(c.env,'network:'+ (c.req.header('CF-Connecting-IP') || 'unavailable'),6))
+    if(!await guard(c.env,'global',300)||!await guard(c.env,'network:'+ (c.env.DIAGNOSTIC_NETWORK_KEY || c.req.header('CF-Connecting-IP') || 'unavailable'),6))
       return respond(c.json({ok:false,error:{code:'RATE_LIMITED'}},429));
     const reference='dg_'+randomToken(18), capability=randomToken(32), now=Date.now();
     await c.env.DB.batch([

@@ -1,6 +1,7 @@
 import { BRIDGE_PATH, BridgeError, LIMITS, boundedText, parseRpc, secretValid } from './protocol';
 import type { Rpc, Statement } from './protocol';
-interface BridgeEnv { readonly DB: D1Database; readonly D1_BRIDGE_SECRET: string; readonly NAKWOL_D1_TEST_BRIDGE: string }
+import { CANARY_DATABASE_ID, uuidValid } from './deployment';
+interface BridgeEnv { readonly DB: D1Database; readonly D1_BRIDGE_SECRET: string; readonly NAKWOL_D1_TEST_BRIDGE?: string; readonly NAKWOL_D1_BRIDGE_MODE?: string; readonly NAKWOL_D1_BRIDGE_DATABASE_ID?: string }
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 async function authorized(header: string | null, secret: string): Promise<boolean> {
   if (!secretValid(secret) || !header || header.length > 300) return false;
@@ -27,8 +28,10 @@ export default {
   async fetch(request: Request, env: BridgeEnv): Promise<Response> { // no-excuse-ok: catch -- HTTP boundary sanitizes all SQL failures.
     const url = new URL(request.url);
     if (url.pathname !== BRIDGE_PATH || url.search || request.method !== 'POST') return json({ ok: false }, 404);
-    if (env.NAKWOL_D1_TEST_BRIDGE !== 'true' || !secretValid(env.D1_BRIDGE_SECRET || '')) return json({ ok: false }, 503);
+    const production = env.NAKWOL_D1_BRIDGE_MODE === 'production';
+    if (!secretValid(env.D1_BRIDGE_SECRET || '') || production && (env.NAKWOL_D1_TEST_BRIDGE === 'true' || !uuidValid(env.NAKWOL_D1_BRIDGE_DATABASE_ID) || env.NAKWOL_D1_BRIDGE_DATABASE_ID.toLowerCase() === CANARY_DATABASE_ID) || !production && (env.NAKWOL_D1_TEST_BRIDGE !== 'true' || env.NAKWOL_D1_BRIDGE_MODE !== undefined && env.NAKWOL_D1_BRIDGE_MODE !== 'canary')) return json({ ok: false }, 503);
     if (!await authorized(request.headers.get('Authorization'), env.D1_BRIDGE_SECRET)) return json({ ok: false }, 401);
+    if (production ? request.headers.get('X-Nakwol-Database-ID')?.toLowerCase() !== env.NAKWOL_D1_BRIDGE_DATABASE_ID?.toLowerCase() : request.headers.has('X-Nakwol-Database-ID')) return json({ ok: false }, 403);
     if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') return json({ ok: false }, 415);
     const deadline = Date.now() + LIMITS.deadline;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -37,6 +40,11 @@ export default {
         const text = await boundedText(request.body, LIMITS.body);
         let input: unknown; try { input = JSON.parse(text); } catch (error) { if (error instanceof SyntaxError) throw new BridgeError('INVALID_REQUEST'); throw error; }
         const rpc = parseRpc(input);
+        if (production) {
+          if (rpc.method === 'exec') return json({ ok: false }, 400);
+          const statements = rpc.method === 'batch' ? rpc.statements : [rpc.statement];
+          if (statements.some(statement => statement.query.includes(';') || !/^(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b/i.test(statement.query.trimStart()))) return json({ ok: false }, 400);
+        }
         if (Date.now() >= deadline) throw new BridgeError('UNAVAILABLE');
         const result = await execute(env, rpc);
         const payload = JSON.stringify({ ok: true, result });

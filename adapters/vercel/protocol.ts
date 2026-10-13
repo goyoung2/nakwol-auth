@@ -1,5 +1,10 @@
 /** Private canary transport. Limits apply before SQL execution, including authenticated callers. */
 export const BRIDGE_PATH = '/rpc';
+export function endpointValid(value: string | undefined): value is string {
+  if (!value) return false;
+  try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && url.pathname === BRIDGE_PATH; }
+  catch (error) { if (error instanceof TypeError) return false; throw error; }
+}
 export const LIMITS = { body: 262144, query: 16384, batch: 64, params: 100, response: 2097152, deadline: 10000 } as const;
 export type Value = string | number | null | { readonly bytes: readonly number[] };
 export type Statement = { readonly query: string; readonly params: readonly Value[] };

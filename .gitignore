@@ -11,3 +11,5 @@ deploy/vercel-auth-test/runtime/auth-runtime.mjs
 deploy/vercel-auth-test/bridge-worker.mjs
 deploy/vercel-auth-test/bridge.wrangler.jsonc
 deploy/vercel-auth-test/public/
+
+deploy/vercel-auth-production/

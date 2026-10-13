@@ -1,5 +1,6 @@
 import { BRIDGE_PATH, BridgeError, LIMITS, boundedText, parseRpc, secretValid } from './protocol';
 import type { Rpc, Statement, Value } from './protocol';
+import { uuidValid } from './deployment';
 type Transport = typeof fetch;
 function encodeValue(value: unknown): Value {
   if (value === null || typeof value === 'string' || typeof value === 'number' && Number.isFinite(value)) return value;
@@ -18,9 +19,10 @@ class HttpStatement implements D1PreparedStatement {
   raw<T = unknown[]>(options?: { columnNames?: boolean }): Promise<T[] | [string[], ...T[]]> { return this.database.rpc({ method: 'raw', statement: this.input, columnNames: options?.columnNames === true }); }
 }
 export class HttpD1Database implements D1Database {
-  constructor(readonly endpoint: string, private readonly secret: string, private readonly transport: Transport = fetch) {
+  constructor(readonly endpoint: string, private readonly secret: string, private readonly transport: Transport = fetch, private readonly databaseId?: string) {
     const url = new URL(endpoint);
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== BRIDGE_PATH || !secretValid(secret)) throw new BridgeError('INVALID_REQUEST');
+    if (databaseId !== undefined && !uuidValid(databaseId)) throw new BridgeError('INVALID_REQUEST');
   }
   prepare(query: string): D1PreparedStatement { return new HttpStatement(this, { query, params: [] }); }
   batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
@@ -36,7 +38,7 @@ export class HttpD1Database implements D1Database {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), LIMITS.deadline);
     try {
       // Exactly one attempt. A timeout does not establish whether an auth write committed.
-      const response = await this.transport(this.endpoint, { method: 'POST', headers: { Authorization: `Bearer ${this.secret}`, 'Content-Type': 'application/json' }, body, signal: controller.signal, redirect: 'error' });
+      const response = await this.transport(this.endpoint, { method: 'POST', headers: { Authorization: `Bearer ${this.secret}`, 'Content-Type': 'application/json', ...(this.databaseId ? { 'X-Nakwol-Database-ID': this.databaseId } : {}) }, body, signal: controller.signal, redirect: 'error' });
       if (!response.ok) throw new BridgeError('UNAVAILABLE');
       const text = await boundedText(response.body, LIMITS.response);
       const envelope: unknown = JSON.parse(text);
