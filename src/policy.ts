@@ -1,7 +1,7 @@
 import type { Env } from './types';
-import { getUserWithMembership } from './store';
+import type { MembershipRow } from './types';
 import { getAuthLabPrivilege } from './platform-access';
-import { getRequiredRoleIds } from './role-settings';
+import { parseRequiredRoleIds, RoleSettingsError } from './role-settings';
 
 export const MEMBERSHIP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -39,28 +39,81 @@ export async function isApplicationAccessAllowed(env: Env, userId: string, clien
   return (await diagnoseApplicationAccess(env, userId, clientId, requireMember)).allowed;
 }
 
-type AccessReadContext = {
-  readonly user: Awaited<ReturnType<typeof getUserWithMembership>>;
-  readonly applicationStatus: string | null;
+type AccessUser = {
+  readonly id: string; readonly display_name: string; readonly avatar_url: string | null; readonly status: string;
+  readonly membership: { readonly is_guild_member: boolean; readonly is_member: boolean;
+    readonly role: MembershipRow['role']; readonly checked_at: number | null; };
 };
 
-export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false, context?: AccessReadContext) {
-  // Reuse only this request's reads. Never cache an authorization decision across requests.
-  if (context?.user && context.user.id !== userId) throw new Error('ACCESS_CONTEXT_USER_MISMATCH');
-  const [policy, user, requiredRoles, membership, reauth, grant, application] = await Promise.all([
-    getApplicationAccessPolicy(env, clientId),
-    context ? Promise.resolve(context.user) : getUserWithMembership(env, userId),
-    getRequiredRoleIds(env, clientId),
-    env.DB.prepare(`SELECT role_ids FROM memberships WHERE user_id = ? AND guild_id = ?`)
-      .bind(userId, env.NAKWOL_GUILD_ID).first<{ role_ids: string }>(),
-    env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
-      .bind(userId).first<{ requested_at: number }>(),
-    env.DB.prepare(`SELECT g.status FROM application_access_grants g
-      JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
-      WHERE i.user_id = ? AND g.client_id = ?`).bind(userId, clientId).first<{ status: string }>(),
-    context ? Promise.resolve({ status: context.applicationStatus }) :
-      env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first<{ status: string }>(),
-  ]);
+type AccessSnapshot = {
+  readonly application_status: string | null;
+  readonly access_policy: string | null;
+  readonly user_id: string | null;
+  readonly display_name: string;
+  readonly avatar_url: string | null;
+  readonly user_status: string;
+  readonly is_guild_member: number | null;
+  readonly membership_role: MembershipRow['role'] | null;
+  readonly membership_status: string | null;
+  readonly checked_at: number | null;
+  readonly role_ids: string | null;
+  readonly required_role_ids: string | null;
+  readonly requested_at: number | null;
+  readonly grant_status: string | null;
+};
+
+class AccessSnapshotError extends Error {}
+
+export async function inspectApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
+  const row = await env.DB.prepare(
+    `SELECT a.status AS application_status, s.access_policy, u.id AS user_id,
+       COALESCE(u.display_name, '') AS display_name, u.avatar_url, COALESCE(u.status, '') AS user_status,
+       m.is_guild_member, m.role AS membership_role, m.status AS membership_status, m.checked_at, m.role_ids,
+       rr.role_ids AS required_role_ids, r.requested_at,
+       (SELECT g.status FROM application_access_grants g
+          JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
+          WHERE i.user_id = input.user_id AND g.client_id = input.client_id) AS grant_status
+     FROM (SELECT ? AS user_id, ? AS client_id) input
+     LEFT JOIN users u ON u.id = input.user_id
+     LEFT JOIN applications a ON a.client_id = input.client_id
+     LEFT JOIN application_settings s ON s.client_id = input.client_id
+     LEFT JOIN memberships m ON m.user_id = input.user_id AND m.guild_id = ?
+     LEFT JOIN application_role_requirements rr ON rr.client_id = input.client_id
+     LEFT JOIN user_reauthentication r ON r.user_id = input.user_id`
+  ).bind(userId, clientId, env.NAKWOL_GUILD_ID).first<AccessSnapshot>();
+  if (!row) throw new AccessSnapshotError('AUTHORIZATION_SNAPSHOT_UNAVAILABLE');
+  const user = row.user_id ? {
+    id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url, status: row.user_status,
+    membership: {
+      is_guild_member: Boolean(row.is_guild_member),
+      is_member: row.membership_role === 'member' && row.membership_status === 'active' && Boolean(row.is_guild_member),
+      role: row.membership_role ?? 'user', checked_at: row.checked_at,
+    },
+  } : null;
+  return { user, access: await diagnoseSnapshot(env, userId, row, user, requireMember) };
+}
+
+export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
+  return (await inspectApplicationAccess(env, userId, clientId, requireMember)).access;
+}
+
+async function diagnoseSnapshot(env: Env, userId: string, row: AccessSnapshot,
+  user: AccessUser | null, requireMember: boolean) {
+  const policy: ApplicationAccessPolicy = row.access_policy === 'public' ? 'guest'
+    : row.access_policy === 'guest' || row.access_policy === 'admin' || row.access_policy === 'lab' ? row.access_policy : 'member';
+  let requiredValue: unknown = [];
+  if (row.required_role_ids !== null) {
+    try { requiredValue = JSON.parse(row.required_role_ids); }
+    catch (error) {
+      if (error instanceof SyntaxError) throw new RoleSettingsError('Invalid stored role requirements');
+      throw error;
+    }
+  }
+  const requiredRoles = parseRequiredRoleIds(requiredValue);
+  const membership = { role_ids: row.role_ids };
+  const reauth = row.requested_at === null ? null : { requested_at: row.requested_at };
+  const grant = { status: row.grant_status };
+  const application = { status: row.application_status };
   let parsed: unknown = null;
   try { parsed = JSON.parse(membership?.role_ids ?? 'null'); } catch { parsed = null; }
   const roles: string[] = Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string') ? parsed : [];

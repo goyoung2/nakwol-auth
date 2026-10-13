@@ -5,6 +5,7 @@ import * as miniflare from 'miniflare';
 import auth from '../../src/index';
 import { sha256Base64Url } from '../../src/crypto';
 import { MEMBERSHIP_MAX_AGE_MS } from '../../src/policy';
+import { createAuthorizationCode, exchangeAuthorizationCode } from '../../src/store';
 
 test('stale membership remains denied but can recover without a false role denial', async t => {
   const options = { modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] };
@@ -56,15 +57,24 @@ test('stale membership remains denied but can recover without a false role denia
     assert.equal(new URL(response.headers.get('Location') ?? '').hostname, 'discord.com');
   });
   await DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='user'").bind(Date.now()).run();
-  await t.test('fresh member /me succeeds with one application and one user read', async () => {
+  await t.test('fresh member /me uses at most three database round trips', async () => {
     queries.length = 0;
     const response = await me();
     assert.equal(response.status, 200);
     const payload: {data: {id: string}} = await response.json();
     assert.equal(payload.data.id, 'user');
     assert.equal(queries.filter(q => q.includes('FROM applications')).length, 1);
-    assert.equal(queries.filter(q => q.includes('FROM users WHERE')).length, 1);
-    assert.equal(queries.length, 10);
+    assert.ok(queries.length <= 3, 'authorization must not fan out into independent remote reads');
+  });
+  await t.test('concurrent redemption issues exactly one token per authorization code', async () => {
+    const code=await createAuthorizationCode(env,'user','site','https://site.test/',await sha256Base64Url('verifier'));
+    const before=await DB.prepare('SELECT COUNT(*) AS n FROM access_tokens').first<{n:number}>();
+    const redeem=()=>exchangeAuthorizationCode(env,{code,clientId:'site',redirectUri:'https://site.test/',codeVerifier:'verifier'});
+    const outcomes=await Promise.allSettled([redeem(),redeem(),redeem()]);
+    assert.equal(outcomes.filter(result=>result.status==='fulfilled').length,1);
+    const after=await DB.prepare('SELECT COUNT(*) AS n FROM access_tokens').first<{n:number}>();
+    assert.equal(Number(after?.n)-Number(before?.n),1);
+    await assert.rejects(redeem(),/INVALID_OR_EXPIRED_CODE/);
   });
   await t.test('unregistered origin and wrong token stay denied', async () => {
     assert.equal((await me('https://evil.test')).status, 403);
