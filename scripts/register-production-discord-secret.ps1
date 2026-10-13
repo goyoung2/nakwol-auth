@@ -32,16 +32,19 @@ try {
   $taskSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($taskBstr)
   if ([string]::IsNullOrWhiteSpace($taskSecret) -or $taskSecret.Contains("`n") -or $taskSecret.Contains("`r")) { throw 'Invalid Secret input.' }
   $env:CLOUDFLARE_ACCOUNT_ID = $taskProfile.accountId
-  $taskCfOutput = $taskSecret | & node $Wrangler secret put DISCORD_CLIENT_SECRET --config $taskConfig 2>&1
-  if ($LASTEXITCODE -ne 0) { throw 'Cloudflare Secret registration failed. No Vercel credential write was attempted.' }
-  Write-Host 'Existing Cloudflare Worker updated. Keeping its new Secret is required for rollback.'
-  $taskVcOutput = $taskSecret | & npx.cmd --yes vercel env add DISCORD_CLIENT_SECRET production --force --sensitive --yes --cwd $taskUpload --scope $taskProfile.vercelTeamId 2>&1
-  if ($LASTEXITCODE -ne 0) { throw 'Cloudflare has the new Secret, but Vercel registration failed. Retry registration with that SAME new Secret; do not reset it again.' }
+  $taskPreviousErrorAction = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $taskRegisterOutput = $taskSecret | & node (Join-Path $PSScriptRoot 'register-production-secret.mjs') --profile $Profile --wrangler $Wrangler --secret-name DISCORD_CLIENT_SECRET 2>&1
+  } finally { $ErrorActionPreference = $taskPreviousErrorAction }
+  if ($LASTEXITCODE -ne 0) {
+    if ($taskRegisterOutput -match 'VERCEL_SECRET_REGISTRATION_FAILED_KEEP_NEW_CLOUDFLARE_SECRET') { throw 'Cloudflare has the new Secret, but Vercel registration failed. Retry with the SAME value; do not reset Discord again.' }
+    throw 'Cloudflare Secret registration failed. No Vercel credential write was attempted.'
+  }
   Write-Host 'Both server Secret stores updated. Vercel must be redeployed and real login verified before switching services.'
 } finally {
   $taskSecret = $null
-  $taskCfOutput = $null
-  $taskVcOutput = $null
+  $taskRegisterOutput = $null
   $env:CLOUDFLARE_ACCOUNT_ID = $taskPreviousAccount
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($taskBstr)
   $taskSecure.Dispose()
