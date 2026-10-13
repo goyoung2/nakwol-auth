@@ -2,6 +2,92 @@ import { measured, type DiagnosticTrace } from './diagnostic-trace';
 import type { DiscordGuildMember, DiscordUser, Env } from './types';
 
 const DISCORD_API = 'https://discord.com/api/v10';
+const DISCORD_REQUEST_TIMEOUT_MS = 5000;
+const DISCORD_RESPONSE_MAX_BYTES = 64 * 1024;
+
+type DiscordOperation = 'token' | 'identity' | 'member';
+type DiscordFailure = 'timeout' | 'network' | 'http' | 'invalid_response' | 'response_too_large';
+
+export class DiscordRequestError extends Error {
+  readonly name = 'DiscordRequestError';
+  constructor(readonly operation: DiscordOperation, readonly code: DiscordFailure, readonly httpStatus?: number) {
+    super(`DISCORD_${operation.toUpperCase()}_${code.toUpperCase()}${httpStatus ? ` (HTTP ${httpStatus})` : ''}`);
+  }
+}
+
+async function requestDiscordJson(operation: DiscordOperation, url: string, init: RequestInit): Promise<unknown> {
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new DiscordRequestError(operation, 'timeout'));
+      controller.abort();
+      if (reader) void reader.cancel().catch(() => undefined);
+    }, DISCORD_REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([deadline, (async () => {
+      const response = await fetch(url, { ...init, signal: controller.signal, redirect: 'error' });
+      if (operation === 'member' && response.status === 404) {
+        if (response.body) void response.body.cancel().catch(() => undefined);
+        return null;
+      }
+      if (!response.ok) {
+        if (response.body) void response.body.cancel().catch(() => undefined);
+        throw new DiscordRequestError(operation, 'http', response.status);
+      }
+      if (!response.body) throw new DiscordRequestError(operation, 'invalid_response');
+      reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > DISCORD_RESPONSE_MAX_BYTES) throw new DiscordRequestError(operation, 'response_too_large');
+        chunks.push(chunk.value);
+      }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      try {
+        const payload: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
+        if (payload === null) throw new DiscordRequestError(operation, 'invalid_response');
+        return payload;
+      }
+      catch (error) {
+        if (error instanceof Error) throw new DiscordRequestError(operation, 'invalid_response');
+        throw error;
+      }
+    })()]);
+  } catch (error) {
+    if (error instanceof DiscordRequestError) throw error;
+    throw new DiscordRequestError(operation, controller.signal.aborted ? 'timeout' : 'network');
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    controller.abort();
+    if (reader) void reader.cancel().catch(() => undefined);
+  }
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalText(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
+function parseDiscordMember(value: unknown): DiscordGuildMember | null {
+  if (value === null) return null;
+  if (!record(value) || !Array.isArray(value.roles)
+      || !value.roles.every((role: unknown): role is string => typeof role === 'string' && /^\d{17,20}$/.test(role))
+      || !optionalText(value.nick) || !optionalText(value.avatar)) {
+    throw new DiscordRequestError('member', 'invalid_response');
+  }
+  return { roles: value.roles, nick: value.nick, avatar: value.avatar };
+}
 
 export interface DiscordIdentityResult {
   user: DiscordUser;
@@ -29,38 +115,35 @@ export async function exchangeDiscordCode(env: Env, code: string): Promise<strin
     redirect_uri: callback,
   });
 
-  const response = await fetch('https://discord.com/api/oauth2/token', {
+  const payload = await requestDiscordJson('token', 'https://discord.com/api/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Discord token exchange failed (${response.status}): ${detail.slice(0, 300)}`);
+  if (!record(payload) || typeof payload.access_token !== 'string' || !payload.access_token.trim()) {
+    throw new DiscordRequestError('token', 'invalid_response');
   }
-
-  const payload = await response.json() as { access_token?: string };
-  if (!payload.access_token) throw new Error('Discord access_token is missing.');
   return payload.access_token;
 }
 
 export async function fetchDiscordIdentity(env: Env, accessToken: string, trace?: DiagnosticTrace): Promise<DiscordIdentityResult> {
   const authHeaders = { Authorization: `Bearer ${accessToken}` };
-  const user = await measured(trace, 'discord_identity', async () => {
-    const response = await fetch(`${DISCORD_API}/users/@me`, { headers: authHeaders, signal: trace ? AbortSignal.timeout(10000) : undefined });
-    if (!response.ok) throw new Error(`Discord /users/@me failed (${response.status}).`);
-    return await response.json() as DiscordUser;
-  });
-  const member = await measured(trace, 'discord_member', async () => {
-    const response = await fetch(`${DISCORD_API}/users/@me/guilds/${env.NAKWOL_GUILD_ID}/member`, { headers: authHeaders, signal: trace ? AbortSignal.timeout(10000) : undefined });
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Discord guild member lookup failed (${response.status}): ${detail.slice(0, 300)}`);
-    }
-    return await response.json() as DiscordGuildMember;
-  });
+  const [user, member] = await Promise.all([
+    measured(trace, 'discord_identity', async (): Promise<DiscordUser> => {
+      const payload = await requestDiscordJson('identity', `${DISCORD_API}/users/@me`, { headers: authHeaders });
+      if (!record(payload) || typeof payload.id !== 'string' || !/^\d{17,20}$/.test(payload.id)
+          || typeof payload.username !== 'string' || !payload.username.trim()
+          || !optionalText(payload.global_name) || !optionalText(payload.avatar)) {
+        throw new DiscordRequestError('identity', 'invalid_response');
+      }
+      return { id: payload.id, username: payload.username, global_name: payload.global_name, avatar: payload.avatar };
+    }),
+    measured(trace, 'discord_member', async () => {
+      const payload = await requestDiscordJson('member', `${DISCORD_API}/users/@me/guilds/${env.NAKWOL_GUILD_ID}/member`, { headers: authHeaders });
+      return parseDiscordMember(payload);
+    }),
+  ]);
   return { user, member };
 }
 
@@ -84,26 +167,16 @@ export async function fetchCurrentGuildMember(env: Env, discordUserId: string): 
   const botToken = env.DISCORD_BOT_TOKEN2 || env.DISCORD_BOT_TOKEN;
   if (!botToken || !/^\d{17,20}$/.test(env.NAKWOL_GUILD_ID)
       || !/^\d{17,20}$/.test(discordUserId)) throw new DiscordMembershipUnavailable();
-  let response: Response;
   try {
-    response = await fetch(`${DISCORD_API}/guilds/${env.NAKWOL_GUILD_ID}/members/${discordUserId}`, {
+    const payload = await requestDiscordJson('member', `${DISCORD_API}/guilds/${env.NAKWOL_GUILD_ID}/members/${discordUserId}`, {
       headers: { Authorization: `Bot ${botToken}`, 'Cache-Control': 'no-cache' },
-      signal: AbortSignal.timeout(5000),
-      redirect: 'error',
     });
+    return parseDiscordMember(payload);
   } catch (error) {
+    if (error instanceof DiscordRequestError) throw new DiscordMembershipUnavailable(error.httpStatus);
     if (error instanceof Error) throw new DiscordMembershipUnavailable();
     throw error;
   }
-  if (response.status === 404) return null;
-  if (!response.ok) throw new DiscordMembershipUnavailable(response.status);
-  const member: unknown = await response.json();
-  if (typeof member !== 'object' || member === null || !('roles' in member)
-      || !Array.isArray(member.roles)
-      || !member.roles.every((id: unknown): id is string => typeof id === 'string' && /^\d{17,20}$/.test(id))) {
-    throw new DiscordMembershipUnavailable();
-  }
-  return { roles: member.roles };
 }
 
 export function discordAvatarUrl(user: DiscordUser): string | null {

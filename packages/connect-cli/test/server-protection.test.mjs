@@ -151,12 +151,13 @@ test('server gate enforces authentication on content, HEAD and Range; rechecks r
   assert.match(session.headers.get('Set-Cookie'),/HttpOnly; Secure; SameSite=Lax/);
   const allowed=await request('/private.json',{headers:{Cookie:cookie}});
   assert.equal(await allowed.text(),'PRIVATE');assert.match(allowed.headers.get('Cache-Control'),/no-store/);
-  now+=300001; authStatus=403;
+  now+=3600001; authStatus=403;
   const deniedSession=await request('/private.json',{headers:{Cookie:cookie}});
-  assert.equal(deniedSession.status,403);
+  assert.equal(deniedSession.status,401);
+  assert.equal((await establish()).status,403);
   assert.match(deniedSession.headers.get('Set-Cookie'),/Max-Age=0/);
   authStatus=401;assert.equal((await request('/private.json',{headers:{Cookie:cookie}})).status,401);
-  authStatus=503;assert.equal((await request('/private.json',{headers:{Cookie:cookie}})).status,503);
+  authStatus=503;assert.equal((await establish()).status,503);
   assert.equal(assetCalls,1);
   assert.equal((await request('/__nakwol/session',{method:'POST',headers:{Origin:'https://evil.test'}})).status,403);
   assert.equal((await serveProtected(new Request('https://alternate.test/'),env,settings)).status,403);

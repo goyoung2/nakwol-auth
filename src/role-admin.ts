@@ -49,11 +49,11 @@ function rolePage(): string {
 <p>멤버 사이트는 시즌3 역할이 반드시 필요합니다. 추가로 선택한 세부 역할도 모두 보유해야 입장할 수 있습니다. AUTH 운영 권한은 멤버 입장 권한을 대신하지 않습니다.</p>
 <p id="season"></p><button id="login">운영자 로그인</button> <button id="reload">역할 새로고침</button><p id="status" role="status"></p><main id="apps"></main>
 <script type="module">
-import { NakwolAuthClient } from '/sdk/v0.1.0/nakwol-auth-web.js';
+import { NakwolAuthClient } from '/sdk/v0.3.3/nakwol-auth-web.js';
 const auth=new NakwolAuthClient({clientId:'nakwol-connect-admin',redirectUri:location.origin+'/admin/apps',authOrigin:location.origin});
 const status=document.querySelector('#status'), apps=document.querySelector('#apps');
 async function api(options={}){const headers=new Headers({'Authorization':'Bearer '+(auth.getAccessToken()||'')});if(options.body)headers.set('Content-Type','application/json');const r=await fetch('/admin/api/roles',{...options,headers});const p=await r.json();if(!r.ok)throw new Error(p.error?.message||p.error?.code||'요청 실패');return p;}
-async function load(){status.textContent='불러오는 중…';apps.replaceChildren();try{const data=await api();document.querySelector('#season').textContent='필수 시즌3 역할: '+data.season_role.name+' ('+data.season_role.id+')';for(const app of data.applications){const card=document.createElement('section'),title=document.createElement('h2'),hint=document.createElement('small');title.textContent=app.name;hint.textContent=app.client_id+' · '+app.access_policy;card.append(title,hint);const checked=new Set(app.required_role_ids);for(const role of data.roles){if(role.id===data.season_role.id)continue;const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=checked.has(role.id);input.disabled=app.access_policy!=='member';input.onchange=()=>input.checked?checked.add(role.id):checked.delete(role.id);label.append(input,document.createTextNode(' '+role.name+' ('+role.id+')'));card.append(label);}const missing=app.required_role_ids.filter(id=>!data.roles.some(role=>role.id===id));if(missing.length){const warning=document.createElement('p');warning.textContent='삭제된 Discord 역할: '+missing.join(', ')+' — 저장하면 목록에서 제거됩니다.';card.append(warning);for(const id of missing)checked.delete(id);}const save=document.createElement('button');save.textContent='요구 역할 저장';save.disabled=app.access_policy!=='member';save.onclick=async()=>{save.disabled=true;try{await api({method:'POST',body:JSON.stringify({client_id:app.client_id,role_ids:[...checked].filter(id=>id!==data.season_role.id)})});status.textContent=app.name+' 역할 조건을 저장했습니다.';}catch(e){status.textContent=e.message;}finally{save.disabled=false;}};card.append(save);apps.append(card);}status.textContent='현재 Discord 역할을 불러왔습니다.';}catch(e){status.textContent=e.message;}}
+async function load(){status.textContent='불러오는 중…';apps.replaceChildren();try{const data=await api();document.querySelector('#season').textContent='필수 시즌3 역할: '+data.season_role.name+' ('+data.season_role.id+')';for(const app of data.applications){const card=document.createElement('section'),title=document.createElement('h2'),hint=document.createElement('small');title.textContent=app.name;hint.textContent=app.client_id+' · '+app.access_policy;card.append(title,hint);const checked=new Set(app.required_role_ids);for(const role of data.roles){if(role.id===data.season_role.id)continue;const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=checked.has(role.id);input.disabled=app.access_policy!=='member';input.onchange=()=>input.checked?checked.add(role.id):checked.delete(role.id);label.append(input,document.createTextNode(' '+role.name+' ('+role.id+')'));card.append(label);}const missing=app.required_role_ids.filter(id=>id!==data.season_role.id&&!data.roles.some(role=>role.id===id));for(const id of missing){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=true;input.disabled=app.access_policy!=='member';input.onchange=()=>input.checked?checked.add(id):checked.delete(id);label.append(input,document.createTextNode(' 목록에서 확인하지 못한 역할 ('+id+')'));card.append(label);}const manualLabel=document.createElement('label'),manual=document.createElement('input');manual.type='text';manual.placeholder='추가 역할 ID (쉼표로 구분)';manual.disabled=app.access_policy!=='member';manualLabel.append(document.createTextNode('역할 ID 직접 입력 '),manual);card.append(manualLabel);const confirmLabel=document.createElement('label'),confirm=document.createElement('input');confirm.type='checkbox';confirm.disabled=app.access_policy!=='member';confirmLabel.append(confirm,document.createTextNode('역할 목록 조회 실패 시 직접 확인한 ID로 저장합니다. 잘못된 ID는 접근을 차단할 수 있습니다.'));card.append(confirmLabel);const save=document.createElement('button');save.textContent='요구 역할 저장';save.disabled=app.access_policy!=='member';save.onclick=async()=>{save.disabled=true;try{await api({method:'POST',body:JSON.stringify({client_id:app.client_id,role_ids:[...new Set([...checked,...manual.value.split(',').map(id=>id.trim()).filter(Boolean)])].filter(id=>id!==data.season_role.id),manual_role_ids:confirm.checked})});status.textContent=app.name+' 역할 조건을 저장했습니다.';}catch(e){status.textContent=e.message;}finally{save.disabled=false;}};card.append(save);apps.append(card);}status.textContent=data.catalog_warning?data.catalog_warning+' 기존 조건은 유지됩니다. Discord 개발자 모드에서 역할 ID를 복사해 직접 입력할 수 있습니다.':'현재 Discord 역할을 불러왔습니다.';}catch(e){status.textContent=e.message;}}
 document.querySelector('#login').onclick=()=>auth.login();document.querySelector('#reload').onclick=load;
 try{const user=await auth.bootstrap();if(user)await load();else status.textContent='로그인 후 앱 관리에서 역할 관리로 이동하세요.';}catch(e){status.textContent=e.message;}
 </script></body></html>`;
@@ -71,12 +71,19 @@ export function registerRoleAdminRoutes(app: Hono<{ Bindings: Env }>): void {
     const identity = await requireOperator(c);
     if (identity instanceof Response) return identity;
     try {
-      const roles = await fetchRoleCatalog(c.env);
-      const seasonRole = roles.find(role => role.id === c.env.NAKWOL_MEMBER_ROLE_ID);
-      if (!seasonRole) throw new RoleCatalogError('필수 시즌3 역할이 서버에 없습니다.');
+      let roles: readonly Role[] = [];
+      let catalogWarning: string | null = null;
+      try { roles = await fetchRoleCatalog(c.env); }
+      catch (error) {
+        if (!(error instanceof RoleCatalogError)) throw error;
+        catalogWarning = error.message;
+      }
+      const seasonRole = roles.find(role => role.id === c.env.NAKWOL_MEMBER_ROLE_ID)
+        ?? { id: c.env.NAKWOL_MEMBER_ROLE_ID, name: '시즌3 (설정된 역할 ID)' };
+      if (!catalogWarning && !roles.some(role => role.id === seasonRole.id)) catalogWarning = '필수 시즌3 역할이 서버 목록에 없습니다. 저장 전에 서버 설정을 확인하세요.';
       const rows = await c.env.DB.prepare(`SELECT a.client_id, a.name, COALESCE(s.access_policy, 'member') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id = a.client_id ORDER BY a.name`).all<{ client_id: string; name: string; access_policy: string }>();
       const applications = await Promise.all(rows.results.map(async row => ({ ...row, required_role_ids: await getRequiredRoleIds(c.env, row.client_id) })));
-      return c.json({ ok: true, roles, season_role: seasonRole, applications });
+      return c.json({ ok: true, roles, season_role: seasonRole, applications, catalog_available: roles.length > 0 && !catalogWarning, catalog_warning: catalogWarning });
     } catch (error) {
       if (error instanceof RoleSettingsError || error instanceof RoleCatalogError) return c.json({ error: { code: 'ROLE_CONFIGURATION_UNAVAILABLE', message: error.message } }, 503);
       throw error;
@@ -101,17 +108,20 @@ export function registerRoleAdminRoutes(app: Hono<{ Bindings: Env }>): void {
     const row = await c.env.DB.prepare(`SELECT COALESCE(s.access_policy, 'member') AS access_policy FROM applications a LEFT JOIN application_settings s ON s.client_id = a.client_id WHERE a.client_id = ?`).bind(body.client_id).first<{ access_policy: string }>();
     if (!row) return c.json({ error: { code: 'APP_NOT_FOUND' } }, 404);
     if (row.access_policy !== 'member') return c.json({ error: { code: 'MEMBER_POLICY_REQUIRED' } }, 400);
-    try {
-      const roles = await fetchRoleCatalog(c.env);
-      if (!roles.some(role => role.id === c.env.NAKWOL_MEMBER_ROLE_ID)) throw new RoleCatalogError('필수 시즌3 역할이 서버에 없습니다.');
+    if (roleIds.includes(c.env.NAKWOL_GUILD_ID)) return c.json({ error: { code: 'UNKNOWN_ROLE' } }, 400);
+    let roles: readonly Role[] | null = null;
+    try { roles = await fetchRoleCatalog(c.env); }
+    catch (error) {
+      if (!(error instanceof RoleCatalogError)) throw error;
+      if (!('manual_role_ids' in body) || body.manual_role_ids !== true) return c.json({ error: { code: 'ROLE_CATALOG_UNAVAILABLE', message: error.message } }, 503);
+    }
+    if (roles) {
+      if (!roles.some(role => role.id === c.env.NAKWOL_MEMBER_ROLE_ID)) return c.json({ error: { code: 'ROLE_CATALOG_UNAVAILABLE', message: '필수 시즌3 역할이 서버에 없습니다.' } }, 503);
       if (roleIds.some(id => !roles.some(role => role.id === id))) return c.json({ error: { code: 'UNKNOWN_ROLE' } }, 400);
-    } catch (error) {
-      if (error instanceof RoleCatalogError) return c.json({ error: { code: 'ROLE_CATALOG_UNAVAILABLE', message: error.message } }, 503);
-      throw error;
     }
     const additional = roleIds.filter(id => id !== c.env.NAKWOL_MEMBER_ROLE_ID);
     await c.env.DB.prepare(`INSERT INTO application_role_requirements(client_id, role_ids, updated_at) VALUES (?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET role_ids = excluded.role_ids, updated_at = excluded.updated_at`).bind(body.client_id, JSON.stringify(additional), Date.now()).run();
-    await logAuthEvent(c.env, 'application.roles.updated', identity.userId, body.client_id, { role_ids: additional, season_role_id: c.env.NAKWOL_MEMBER_ROLE_ID });
+    await logAuthEvent(c.env, 'application.roles.updated', identity.userId, body.client_id, { role_ids: additional, season_role_id: c.env.NAKWOL_MEMBER_ROLE_ID, validation: roles ? 'discord_catalog' : 'manual_role_ids' });
     return c.json({ ok: true, required_role_ids: additional });
   };
   app.post('/admin/roles', save);
