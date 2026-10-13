@@ -1,7 +1,7 @@
 {
-  "enabled": false,
-  "component": "data",
-  "version": "0.8.0",
-  "target_sha": "5cfe6c7511be8c2e90d98dfe10d85d7b57f49d61",
-  "notes_file": "docs/releases/2026-08-27-nakwol-data-v0.8.md"
+  "enabled": true,
+  "component": "auth",
+  "version": "0.2.3",
+  "target_sha": "8d2bcf9b54eedbcfc1367ae73ac4bdcbcf46e98f",
+  "notes_file": "docs/releases/2026-10-14-auth-v0.2.3.md"
 }
