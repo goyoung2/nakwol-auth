@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "component": "auth",
-  "version": "0.2.3",
+  "component": "connect",
+  "version": "0.7.5",
   "target_sha": "8d2bcf9b54eedbcfc1367ae73ac4bdcbcf46e98f",
-  "notes_file": "docs/releases/2026-10-14-auth-v0.2.3.md"
+  "notes_file": "docs/releases/2026-10-14-connect-v0.7.5.md"
 }
