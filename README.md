@@ -15,8 +15,8 @@
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.2 |
-| Connect CLI·공통 게이트 | 0.7.4 |
+| AUTH | 0.2.3 |
+| Connect CLI·공통 게이트 | 0.7.5 |
 | Web SDK | 0.3.3 |
 | DATA | 0.9.0 |
 | DATA 스키마 | 4 |
