@@ -8,6 +8,8 @@ on:
       - stable
     paths:
       - 'src/**'
+      - 'adapters/vercel/**'
+      - 'deploy/vercel-auth-test/**'
       - 'tests/**'
       - 'packages/**'
       - 'migrations/**'
@@ -43,6 +45,13 @@ jobs:
         run: npm run test:managed
       - name: Typecheck
         run: npm run typecheck
+      - name: Verify Vercel AUTH and private D1 bridge
+        run: |
+          npm ci --prefix deploy/vercel-auth-test --ignore-scripts
+          npx tsc --noEmit -p adapters/vercel/tsconfig.json
+          node scripts/build-vercel-auth-test.mjs
+          node scripts/build-vercel-auth-production.mjs
+          node --test tests/vercel/*.test.mjs
       - name: Bundle check
         run: npx wrangler deploy --dry-run --outdir .dry-run
       - name: Verify NAKWOL Connect v0.7 assets
