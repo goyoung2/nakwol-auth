@@ -1,5 +1,6 @@
 import { NakwolAuthClient } from '/sdk/v0.1.0/nakwol-auth-web.js';
 
+let qualificationGeneration = 0;
 const CLIENT_ID = 'nakwol-connect-admin';
 const REDIRECT_URI = `${location.origin}/admin/apps`;
 const auth = new NakwolAuthClient({ clientId: CLIENT_ID, redirectUri: REDIRECT_URI, authOrigin: location.origin });
@@ -46,7 +47,7 @@ async function api(path, options = {}) {
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || payload?.error || `HTTP ${response.status}`);
+  if (!response.ok) throw new Error(payload?.error?.message || payload?.error?.code || payload?.error || `HTTP ${response.status}`);
   return payload;
 }
 
@@ -206,6 +207,7 @@ function selectApp(app) {
   state.selected = app;
   ui.heading.textContent = app.name;
   fillForm(app);
+  loadQualificationPolicy(app);
   renderAppList();
   renderGuide(app);
   renderDiagnostics(null);
@@ -220,6 +222,9 @@ function startCreate() {
   diagnosticGeneration++;
   clear($("#auth-diagnostic-reports"));
   clear($("#gate-reports"));
+  qualificationGeneration++;
+  clear($("#qualification-policy"));
+  $("#qualification-policy").textContent = "앱을 먼저 저장하세요.";
   state.creating = true;
   state.selected = null;
   ui.heading.textContent = '새 앱 등록';
@@ -536,3 +541,40 @@ async function loadAuthDiagnostics() {
 $('#refresh-auth-diagnostics').onclick=()=>{$('#auth-diagnostic-reference').value='';loadAuthDiagnostics();};
 $('#find-auth-diagnostic').onclick=loadAuthDiagnostics;
 $('#auth-diagnostic-reference').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();loadAuthDiagnostics();}});
+
+async function loadQualificationPolicy(app) {
+  const generation = ++qualificationGeneration;
+  const host = $('#qualification-policy');
+  clear(host);
+  host.textContent = '자격 조건 불러오는 중…';
+  if (app.access_policy !== 'member') { host.textContent = '멤버 자격은 멤버 접근 정책에서 사용합니다. 접근 정책을 변경한 뒤 앱 기본 설정을 먼저 저장하세요.'; return; }
+  try {
+    const [registry, current] = await Promise.all([api('/admin/api/qualifications'), api('/admin/api/apps/' + encodeURIComponent(app.client_id) + '/qualification-policy')]);
+    if (generation !== qualificationGeneration || state.selected?.client_id !== app.client_id || state.creating) return;
+    clear(host);
+    const summary = el('p', 'muted', current.policy.mode === 'legacy' ? '현재: 기존 시즌3 필수 역할 (' + current.season_role_id + ') 및 추가 역할 ' + (current.legacy_role_ids.join(', ') || '없음') : '현재: 선택한 자격의 ' + (current.policy.match_mode === 'any' ? '하나 이상 (ANY)' : '모두 (ALL)') + ' 필요');
+    const match = el('select'); match.setAttribute('aria-label','자격 충족 방식');
+    for (const [value, text] of [['any','하나 이상 충족 (ANY)'],['all','모두 충족 (ALL)']]) { const option = el('option','',text); option.value = value; match.append(option); }
+    match.value = current.policy.match_mode || 'any';
+    const selected = new Set(current.policy.qualification_ids || []);
+    host.append(summary, match);
+    for (const q of registry.qualifications) {
+      const label = el('label'); label.style.display='block'; label.style.padding='8px 0';
+      const check=el('input');check.type='checkbox';check.checked=selected.has(q.id);check.disabled=q.status!=='active' && !check.checked;
+      check.onchange=()=>check.checked?selected.add(q.id):selected.delete(q.id);
+      label.append(check,document.createTextNode(' '+q.name+' · '+q.role_id+(q.status!=='active'?' (사용 중지: 선택 해제 필요)':'')));host.append(label);
+    }
+    for (const id of selected) if (!registry.qualifications.some(q=>q.id===id)) {const label=el('label');const check=el('input');check.type='checkbox';check.checked=true;check.onchange=()=>check.checked?selected.add(id):selected.delete(id);label.append(check,document.createTextNode(' 찾을 수 없는 자격: '+id+' (선택 해제 필요)'));host.append(label);}
+    if (!registry.qualifications.length) host.append(el('p','muted','등록된 자격이 없습니다. 멤버 자격 관리에서 먼저 등록하세요.'));
+    const actions=el('div','actions'), save=el('button','primary','선택한 자격 저장'), legacy=el('button','ghost','기존 시즌3 조건으로 복원'); save.type=legacy.type='button';
+    async function persist(policy) {
+      if (generation !== qualificationGeneration || state.selected?.client_id !== app.client_id || state.creating) return;
+      if (ui.form.elements.namedItem('access_policy').value !== app.access_policy) { toast('앱 기본 설정을 먼저 저장하세요.',true); return; }
+      save.disabled=legacy.disabled=true;
+      try { await api('/admin/api/apps/'+encodeURIComponent(app.client_id)+'/qualification-policy',{method:'PUT',body:JSON.stringify(policy)});if(generation===qualificationGeneration){toast(app.name+' 자격 조건을 저장했습니다.');await loadQualificationPolicy(app);}}
+      catch(error){if(generation===qualificationGeneration){toast(error.message,true);save.disabled=legacy.disabled=false;}}
+    }
+    save.onclick=()=>persist({mode:'custom',match_mode:match.value,qualification_ids:[...selected]});
+    legacy.onclick=()=>persist({mode:'legacy'});actions.append(legacy,save);host.append(actions);
+  } catch(error) {if(generation===qualificationGeneration)host.textContent=error.message;}
+}
