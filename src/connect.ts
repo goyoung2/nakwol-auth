@@ -95,6 +95,7 @@ function adminPage(): string {
       </section>
       <section class="content-card"><h3>개발자 연동 방법</h3><div id="guide-area"></div></section>
       <section class="content-card"><div class="section-head"><h3>연동 진단</h3><button id="run-diagnostics" class="ghost" type="button">연동 상태 확인</button></div><div id="diagnostics-area"></div></section>
+      <section class="content-card"><div class="section-head"><h3>사용자 접속 진단</h3><button id="refresh-auth-diagnostics" class="ghost" type="button">최근 진단</button></div><label for="auth-diagnostic-reference">진단 번호</label><input id="auth-diagnostic-reference" maxlength="27" placeholder="dg_…"><button id="find-auth-diagnostic" class="ghost" type="button">조회</button><p class="muted">브라우저 보고는 사용자 관측이며 서버 단계는 AUTH 측정입니다. 네트워크 표본의 출처를 확인하세요. 최근 20건 · 7일 보관</p><div id="auth-diagnostic-reports" role="status" aria-live="polite"></div></section>
       <section class="content-card"><div class="section-head"><h3>서버 보호 배포 현황</h3><button id="refresh-gate-reports" class="ghost" type="button">새로고침</button></div><p class="muted">서비스 CI가 전송한 검사 결과입니다. 중앙 서버의 배포 증명이나 정상 사용자 로그인 검증을 대신하지 않습니다. 최근 100건을 표시합니다.</p><div id="gate-reports" role="status" aria-live="polite"></div></section>
       <section class="content-card"><h3>접근 문제 해결 · 수동 권한</h3>
         <p class="muted">이 서비스에만 수동 접근을 허가합니다. Discord 역할과 AUTH 운영 권한은 변경하지 않습니다. 재인증 요구는 해당 사용자의 모든 서비스 AUTH 로그인을 무효화합니다.</p>

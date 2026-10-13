@@ -45,12 +45,18 @@ function normalizeAccessPolicy(value) {
   return policy === 'public' ? 'guest' : policy;
 }
 
+function requireProtectedOrigin(config, options) {
+  const desired = options.authOrigin || config?.authOrigin || DEFAULT_AUTH_ORIGIN;
+  if (config?.protection && config.protection.authOrigin !== desired) throw new Error('보호 사이트의 AUTH 주소는 SDK와 서버 게이트를 함께 갱신해야 합니다. protect install --auth-origin 새주소 --provider 기존provider --assets 기존폴더 --url 기존주소를 실행한 뒤 빌드·배포하세요.');
+}
+
 function desiredIntegration(existingConfig, options = {}) {
+  requireProtectedOrigin(existingConfig, options);
   const dataOrigin = String(options.dataOrigin || existingConfig?.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/, '');
   const dataScopes = options.scopes !== undefined ? parseDataScopes(options.scopes) : parseDataScopes(existingConfig?.dataScopes || []);
   const authMode = options.authMode !== undefined ? normalizeAuthMode(options.authMode) : normalizeAuthMode(existingConfig?.authMode || 'required');
   if (existingConfig?.protection && authMode === 'optional') throw new Error('서버 보호가 설치된 사이트는 optional 전환 전에 배포 구조를 검토해야 합니다.');
-  return { dataOrigin, dataScopes, authMode, serverGate: Boolean(existingConfig?.protection), siteUrl:existingConfig?.protection?.siteUrl };
+  return { authOrigin: options.authOrigin || existingConfig?.authOrigin || DEFAULT_AUTH_ORIGIN, dataOrigin, dataScopes, authMode, serverGate: Boolean(existingConfig?.protection), siteUrl:existingConfig?.protection?.siteUrl };
 }
 
 async function resolveApp(root, project, existingConfig, api, options) {
@@ -87,11 +93,11 @@ async function resolveApp(root, project, existingConfig, api, options) {
 
 export async function initProject(options = {}) {
   const root = options.root || process.cwd();
-  const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
+  const existingConfig = await readProjectConfig(root);
+  const authOrigin = options.authOrigin || existingConfig?.authOrigin || DEFAULT_AUTH_ORIGIN;
   const output = options.output || console.log;
   const project = await detectProject(root);
   if (!project.targetFile || project.framework === 'unknown') throw new Error('지원되는 웹 프로젝트를 찾지 못했습니다.');
-  const existingConfig = await readProjectConfig(root);
   const desired = desiredIntegration(existingConfig, options);
   const { authApi, dataApi } = await authenticatedApis({ ...options, authOrigin, dataOrigin: desired.dataOrigin, output });
   const app = await resolveApp(root, project, existingConfig, authApi, options);
@@ -134,6 +140,7 @@ export async function doctorProject(options = {}) {
   ];
   if (config?.clientId && marker.present) {
     checks.push({ name:'marker_client_id', ok:marker.clientId === config.clientId, detail:marker.clientId || 'missing' });
+    checks.push({ name:'marker_auth_origin', ok:marker.authOrigin === config.authOrigin, detail:marker.authOrigin || 'missing' });
     checks.push({ name:'marker_auth_mode', ok:marker.authMode === config.authMode, detail:marker.authMode || 'required' });
     if (config.version === 2) {
       checks.push({ name:'marker_data_origin', ok:marker.dataOrigin === config.dataOrigin, detail:marker.dataOrigin || 'missing' });
@@ -144,7 +151,7 @@ export async function doctorProject(options = {}) {
     const session = await readSession(options.sessionPath || defaultSessionPath());
     if (!session?.accessToken) checks.push({ name:'central_app', ok:false, detail:'CLI session missing; run init' });
     else {
-      const authOrigin = options.authOrigin || DEFAULT_AUTH_ORIGIN;
+      const authOrigin = options.authOrigin || config.authOrigin || DEFAULT_AUTH_ORIGIN;
       const fetchImpl = options.fetchImpl || globalThis.fetch;
       try {
         const api = new ConnectApi({ authOrigin, accessToken:session.accessToken, fetchImpl });
@@ -191,7 +198,7 @@ export async function statusProject(options = {}) {
   if (!session?.accessToken) return { ok:true, local, central:null, data:null, note:'CLI session missing' };
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   try {
-    const api = new ConnectApi({ authOrigin:options.authOrigin || DEFAULT_AUTH_ORIGIN, accessToken:session.accessToken, fetchImpl });
+    const api = new ConnectApi({ authOrigin:options.authOrigin || config.authOrigin || DEFAULT_AUTH_ORIGIN, accessToken:session.accessToken, fetchImpl });
     const central = (await api.getApp(config.clientId)).data;
     let data = null;
     if (config.version === 2) data = (await new ConnectDataApi({ dataOrigin:config.dataOrigin, accessToken:session.accessToken, fetchImpl }).getScopes(config.clientId)).data;
@@ -205,7 +212,7 @@ export async function addUrlProject(url, options = {}) {
   if (!config?.clientId) throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');
   const project = await detectProject(root);
   const desired = desiredIntegration(config, options);
-  const { authApi } = await authenticatedApis({ ...options, dataOrigin:desired.dataOrigin });
+  const { authApi } = await authenticatedApis({ ...options, authOrigin:desired.authOrigin, dataOrigin:desired.dataOrigin });
   const app = (await authApi.addRedirect(config.clientId, url)).data;
   const install = await installIntegration(root, project, config.clientId, desired);
   const updated = await writeProjectConfig(root, { ...config, redirectUris:app.redirect_uris, integration:install.integration, ...desired });
@@ -218,7 +225,7 @@ export async function syncProject(options = {}) {
   if (!config?.clientId) return initProject(options);
   const project = await detectProject(root);
   const desired = desiredIntegration(config, options);
-  const { authApi, dataApi } = await authenticatedApis({ ...options, dataOrigin:desired.dataOrigin });
+  const { authApi, dataApi } = await authenticatedApis({ ...options, authOrigin:desired.authOrigin, dataOrigin:desired.dataOrigin });
   let app = (await authApi.getApp(config.clientId)).data;
   const accessPolicy = normalizeAccessPolicy(options.accessPolicy);
   if (accessPolicy && app.access_policy !== accessPolicy) {
@@ -231,12 +238,13 @@ export async function syncProject(options = {}) {
   return { ok:doctor.ok, clientId:config.clientId, config:updated, data:dataState, changedFiles:install.changedFiles, doctor };
 }
 
-async function requireDataProject(options = {}) {
+async function requireDataProject(options = {}, changesLocalIntegration = false) {
   const root = options.root || process.cwd();
   const config = await readProjectConfig(root);
   if (!config?.clientId) throw new Error('.nakwol-connect.json이 없습니다. 먼저 init을 실행하세요.');
   const project = await detectProject(root);
-  const { dataApi } = await authenticatedApis({ ...options, dataOrigin:options.dataOrigin || config.dataOrigin });
+  if (changesLocalIntegration) requireProtectedOrigin(config, options);
+  const { dataApi } = await authenticatedApis({ ...options, authOrigin:options.authOrigin || config.authOrigin, dataOrigin:options.dataOrigin || config.dataOrigin });
   return { root, config, project, dataApi };
 }
 export async function dataStatusProject(options = {}) {
@@ -244,11 +252,12 @@ export async function dataStatusProject(options = {}) {
   return { ok:true, clientId:config.clientId, localScopes:config.dataScopes, central:(await dataApi.getScopes(config.clientId)).data };
 }
 export async function dataSetProject(scopes, options = {}) {
-  const ctx = await requireDataProject(options);
+  const ctx = await requireDataProject(options, true);
   const desired = {
     authMode: normalizeAuthMode(ctx.config.authMode || 'required'),
     dataOrigin:String(options.dataOrigin || ctx.config.dataOrigin || DEFAULT_DATA_ORIGIN).replace(/\/$/,''),
     dataScopes:parseDataScopes(scopes),
+    authOrigin:options.authOrigin || ctx.config.authOrigin || DEFAULT_AUTH_ORIGIN,
     serverGate:Boolean(ctx.config.protection),
     siteUrl:ctx.config.protection?.siteUrl,
   };

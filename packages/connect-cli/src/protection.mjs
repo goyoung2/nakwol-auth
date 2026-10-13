@@ -44,9 +44,10 @@ export function generatedAssetPaths(protection) {
 }
 async function generatedFiles(settings, directory, provider, projectName) {
   const gate = await readFile(new URL('./server/gate.mjs', import.meta.url), 'utf8');
-  const login = await readFile(new URL('./server/login.mjs', import.meta.url), 'utf8');
+  const diagnostics = await readFile(new URL('./server/diagnostics.mjs', import.meta.url), 'utf8');
+  const login = diagnostics + '\n' + (await readFile(new URL('./server/login.mjs', import.meta.url), 'utf8')).replace(/^import .*diagnostics.mjs.*\r?\n/m, '').replace('export { diagnosticsPage };', '');
   if (provider === 'cloudflare-pages') return {
-    [`${directory}/_worker.js`]: `${login.replace(/^export /gm, '')}\n${gate.replace(/^export /gm, '').replace("import { loginPage } from './login.mjs';", '')}\nconst settings = ${JSON.stringify(settings)};\nexport default { fetch(request, env) { return serveProtected(request, env, settings); } };\n`,
+    [`${directory}/_worker.js`]: `${login.replace(/^export /gm, '')}\n${gate.replace(/^export /gm, '').replace("import { loginPage, diagnosticsPage } from './login.mjs';", '')}\nconst settings = ${JSON.stringify(settings)};\nexport default { fetch(request, env) { return serveProtected(request, env, settings); } };\n`,
     [`${directory}/_routes.json`]: JSON.stringify({ version:1, include:['/*'], exclude:[] }, null, 2) + '\n',
     [WRANGLER_FILE]: JSON.stringify({ name:projectName, pages_build_output_dir:directory, compatibility_date:'2026-09-01' }, null, 2) + '\n',
   };
@@ -88,8 +89,8 @@ export async function installProtection(options = {}) {
   const inventory = await assetInventory(root, options.assets || config.protection?.assetsDirectory, generatedAssetPaths(config.protection));
   const accessPolicy = config.accessPolicy || 'member';
   if (!['member', 'guest', 'admin'].includes(accessPolicy)) throw new Error('접근 정책을 확인하세요.');
-  const authOrigin = config.authOrigin || 'https://nakwol-auth.sepsd21.workers.dev';
-  if (new URL(authOrigin).protocol !== 'https:') throw new Error('서버 배포의 AUTH 주소는 HTTPS여야 합니다.');
+  const authOrigin = options.authOrigin || config.authOrigin || 'https://nakwol-auth.sepsd21.workers.dev';
+  if (new URL(authOrigin).protocol !== 'https:' || new URL(authOrigin).origin !== authOrigin) throw new Error('서버 배포의 AUTH 주소는 HTTPS여야 합니다.');
   const projectName = options.projectName || config.protection?.projectName || config.clientId;
   if (!/^[a-z0-9][a-z0-9-]*$/.test(projectName)) throw new Error('--project-name에 Cloudflare 프로젝트 이름을 지정하세요.');
   const files = await generatedFiles({ clientId: config.clientId, siteUrl: url, authOrigin, accessPolicy }, inventory.directory, options.provider, projectName);
@@ -98,7 +99,7 @@ export async function installProtection(options = {}) {
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   const buildPackage = await updateBuildHook(root, config.protection?.updateChannel === 'managed');
-  await installIntegration(root, project, config.clientId, { ...config, serverGate:true, siteUrl:url });
+  await installIntegration(root, project, config.clientId, { ...config, authOrigin, serverGate:true, siteUrl:url });
   await mkdir(join(root, GENERATED), { recursive: true });
   for (const [file, content] of Object.entries(files)) await writeFile(join(root, file), content);
   await writeFile(join(root, 'package.json'), JSON.stringify(buildPackage, null, 2) + String.fromCharCode(10));
