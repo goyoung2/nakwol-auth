@@ -15,7 +15,7 @@ test('operator support actions use real D1 and preserve service and identity bou
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0015_auth_diagnostics.sql']) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
   }
@@ -123,7 +123,7 @@ test('operator support actions use real D1 and preserve service and identity bou
       return Response.json({ roles });
     });
     const callback = async (requestId: string, cookie = '') => {
-      await DB.prepare(`INSERT INTO oauth_requests VALUES (?, 'site', 'https://site.test/', 'challenge', 'state', ?, ?)`)
+      await DB.prepare(`INSERT INTO oauth_requests(id,client_id,redirect_uri,code_challenge,client_state,expires_at,created_at) VALUES (?, 'site', 'https://site.test/', 'challenge', 'state', ?, ?)`)
         .bind(requestId, Date.now() + 60000, Date.now()).run();
       return auth.request('https://auth.test/auth/discord/callback?state=' + requestId + '&code=fixture', { headers: { Cookie: cookie } }, env);
     };

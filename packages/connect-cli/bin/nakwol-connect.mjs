@@ -11,6 +11,7 @@ import { manageReportToken, reportProtection } from '../src/gate-reporting.mjs';
 import { checkRelease } from '../src/release-check.mjs';
 import { rollbackProtection } from '../src/deployment-rollback.mjs';
 import { readFile } from 'node:fs/promises';
+import { readProjectConfig } from '../src/config.mjs';
 const {version:cliVersion}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
 import { verifyProtection } from '../src/protection-verify.mjs';
 
@@ -21,7 +22,7 @@ function parse(argv) {
 }
 function human(result){if(result?.checks){for(const check of result.checks)console.log(`${check.ok?'✓':'×'} ${check.name}: ${check.detail||''}`);if(result.protectionStatus)console.log(`서버 보호: ${result.protectionStatus}`);for(const note of result.limitations||[])console.log(note);return;}console.log(JSON.stringify(result,null,2));}
 async function main(){
-  const{command,options,positionals}=parse(process.argv.slice(2));options.authOrigin||=process.env.NAKWOL_AUTH_ORIGIN||DEFAULT_AUTH_ORIGIN;if(!options.dataOrigin&&process.env.NAKWOL_DATA_ORIGIN)options.dataOrigin=process.env.NAKWOL_DATA_ORIGIN;options.output=options.json?()=>{}:console.log;let result;
+  const{command,options,positionals}=parse(process.argv.slice(2));const storedConfig=await readProjectConfig(options.root||process.cwd());options.authOrigin||=process.env.NAKWOL_AUTH_ORIGIN||storedConfig?.authOrigin||DEFAULT_AUTH_ORIGIN;if(!options.dataOrigin&&process.env.NAKWOL_DATA_ORIGIN)options.dataOrigin=process.env.NAKWOL_DATA_ORIGIN;options.output=options.json?()=>{}:console.log;let result;
   if(command==='protect'){
     if(positionals[0]==='install')result=await installProtection(options);
     else if(positionals[0]==='update')result=await updateProtection(options);
