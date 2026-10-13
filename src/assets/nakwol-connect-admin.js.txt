@@ -130,9 +130,12 @@ function renderGate() {
   } else {
     box.append(
       el('h2', '', '관리 권한이 없습니다'),
-      el('p', '', 'NAKWOL Connect operator 또는 Discord admin 역할이 필요합니다.')
+      el('p', '', '이 화면은 AUTH 운영자 전용입니다. 등록한 서비스는 내 서비스 관리에서 설정하세요.')
     );
   }
+  const developerLink=el('a', '', '내 서비스 관리');
+  developerLink.href='/developer/apps';
+  box.appendChild(developerLink);
   ui.gate.appendChild(box);
 }
 

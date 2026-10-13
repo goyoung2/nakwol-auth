@@ -76,6 +76,7 @@ test('init installs Pages gate but exits incomplete until deployed; optional sta
     if (parsed.hostname === 'site.test') return new Response(null, { status:deployed ? 401 : 200, headers:{ 'X-Nakwol-Gate':'v1', 'Cache-Control':'no-store' } });
     if (parsed.pathname.endsWith('/me')) return Response.json({ ok:true, data:{ user:{ id:'test' } } });
     if (parsed.pathname.endsWith('/scopes')) return Response.json({ ok:true, data:{ registered:true, scopes:[], available_scopes:[] } });
+    if (parsed.pathname.endsWith('/qualification-policy')) return Response.json({ ok:true, policy:{ mode:'legacy' }, locked_qualification_ids:[] });
     if (parsed.pathname === '/openapi.json') return Response.json({ openapi:'3.1.0', 'x-nakwol-data-scopes':[], paths:{} });
     return Response.json({ ok:true, data:{ client_id:'test-site', status:'active', access_policy:'member', redirect_uris:['https://site.test/'] } });
   };
@@ -83,7 +84,7 @@ test('init installs Pages gate but exits incomplete until deployed; optional sta
   const opts = { ...options(root), provider:'cloudflare-pages', projectName:'existing-pages-site', authOrigin, dataOrigin:'https://data.test', sessionPath, fetchImpl, output:message => messages.push(message) };
   const pending = await initProject(opts);
   assert.equal(pending.ok, false);
-  assert.match(messages[0], /설치 미완료/);
+  assert.match(messages.find(message => message.startsWith('NAKWOL Connect ')), /설치 미완료/);
   const routes = JSON.parse(await readFile(join(root, 'dist/_routes.json'), 'utf8'));
   assert.deepEqual(routes, { version:1, include:['/*'], exclude:[] });
   assert.equal(JSON.parse(await readFile(join(root, 'wrangler.nakwol.json'), 'utf8')).name, 'existing-pages-site');

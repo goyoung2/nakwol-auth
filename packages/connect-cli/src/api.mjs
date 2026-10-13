@@ -57,6 +57,18 @@ export class ConnectApi {
     return (await this.request(`/connect/cli/apps/${encodeURIComponent(clientId)}`)).payload;
   }
 
+  async listQualifications() {
+    return (await this.request('/connect/cli/qualifications')).payload;
+  }
+
+  async getQualificationPolicy(clientId) {
+    return (await this.request(`/connect/cli/apps/${encodeURIComponent(clientId)}/qualification-policy`)).payload;
+  }
+
+  async setQualificationPolicy(clientId, input) {
+    return (await this.request(`/connect/cli/apps/${encodeURIComponent(clientId)}/qualification-policy`, { method: 'PUT', body: JSON.stringify(input) })).payload;
+  }
+
   async patchApp(clientId, input) {
     return (await this.request(`/connect/cli/apps/${encodeURIComponent(clientId)}`, { method: 'PATCH', body: JSON.stringify(input) })).payload;
   }

@@ -69,6 +69,7 @@ function adminPage(): string {
   <div class="brand"><div class="mark">落</div><div><b>NAKWOL Connect</b><small>앱 등록 · 설치 가이드 · 연동 진단</small></div></div>
   <div id="auth-area"></div>
   <a href="/admin/roles">멤버 자격 관리</a>
+  <a href="/developer/apps">내 서비스 관리</a>
 </header>
 <main>
   <section id="gate-area" hidden></section>

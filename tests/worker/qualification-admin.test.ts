@@ -13,19 +13,20 @@ const guild = '1493410906456064112';
 
 async function fixture(beforeRun?: (sql: string, db: DatabaseSync) => void) {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT);
+  db.exec(`CREATE TABLE applications(client_id TEXT PRIMARY KEY, name TEXT, redirect_uris TEXT DEFAULT '[]', updated_at INTEGER DEFAULT 0);
     CREATE TABLE users(id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE application_settings(client_id TEXT PRIMARY KEY, access_policy TEXT);
     CREATE TABLE auth_operators(user_id TEXT PRIMARY KEY, role TEXT);
     CREATE TABLE access_tokens(token_hash TEXT PRIMARY KEY,user_id TEXT,client_id TEXT,expires_at INTEGER,revoked_at INTEGER,created_at INTEGER);
     CREATE TABLE user_reauthentication(user_id TEXT PRIMARY KEY,requested_at INTEGER);
     CREATE TABLE auth_events(id TEXT,user_id TEXT,client_id TEXT,event_type TEXT,detail TEXT,created_at INTEGER);
-    INSERT INTO applications VALUES ('site','사이트');
+    INSERT INTO applications(client_id,name) VALUES ('site','사이트');
     INSERT INTO application_settings VALUES ('site','member');
     INSERT INTO auth_operators VALUES ('operator','operator');
     INSERT INTO users VALUES ('operator','active');`);
   db.exec(readFileSync(new URL('../../migrations/0011_season_roles.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../../migrations/0016_membership_qualifications.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../../migrations/0017_developer_qualifications.sql', import.meta.url), 'utf8'));
   for (const [token, user, client] of [['admin-token','operator','nakwol-connect-admin'], ['wrong-client','operator','site'], ['member-token','member','nakwol-connect-admin']]) {
     db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,0)').run(await sha256Base64Url(token), user, client, Date.now()+60000);
   }
@@ -64,7 +65,7 @@ test('qualification administration enforces scope, validates selections, isolate
     const list=await request(registry);assert.equal(list.headers.get('Cache-Control'),'no-store');assert.equal((await list.json()).qualifications[0].name,value.name);
     assert.equal((await request(policy)).status,200);
     for(const ids of [[],['unknown']]) assert.equal((await request(policy,'PUT',{mode:'custom',match_mode:'any',qualification_ids:ids})).status,400);
-    db.exec("INSERT INTO applications VALUES('other','Other'); INSERT INTO application_settings VALUES('other','member');");
+    db.exec("INSERT INTO applications(client_id,name) VALUES('other','Other'); INSERT INTO application_settings VALUES('other','member');");
     const custom={mode:'custom',match_mode:'any',qualification_ids:[id]};
     assert.equal((await request(policy,'PUT',custom)).status,200);
     assert.deepEqual((await (await request(policy)).json()).policy,custom);
@@ -93,11 +94,33 @@ test('qualification save returns actionable 409 when base policy changes after i
     }
   });
   try {
-    db.prepare('INSERT INTO membership_qualifications VALUES(?,?,?,?,0,0)').run('season4','시즌4',subdivision,'active');
+    db.prepare('INSERT INTO membership_qualifications(id,name,role_id,status,created_at,updated_at) VALUES(?,?,?,?,0,0)').run('season4','시즌4',subdivision,'active');
     const response = await app.request('https://auth.test/admin/api/apps/site/qualification-policy', {method:'PUT',headers:{Authorization:'Bearer admin-token',Origin:'https://auth.test','Content-Type':'application/json'},body:JSON.stringify({mode:'custom',match_mode:'any',qualification_ids:['season4']})},env);
     assert.equal(response.status,409);
     assert.equal((await response.json()).error.code,'MEMBER_POLICY_REQUIRED');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM application_qualification_requirements').get()?.n,0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM auth_events').get()?.n,0);
   } finally { db.close(); }
+});
+
+test('qualification publication is strict, defaults private and preserves omitted updates', async () => {
+  const {db,env,app}=await fixture();
+  const registry='/admin/api/qualifications';
+  const request=(path:string,method='GET',body?:unknown)=>app.request('https://auth.test'+path,{method,headers:{Authorization:'Bearer admin-token',Origin:'https://auth.test','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)},env);
+  const value={name:'공개할 시즌',role_id:subdivision,status:'active'};
+  try {
+    for(const invalid of ['true',1,null,[],{}]) assert.equal((await request(registry,'POST',{...value,developer_selectable:invalid})).status,400);
+    const created=await request(registry,'POST',value);
+    assert.equal(created.status,200);
+    const {id}=await created.json();
+    const read=async()=>((await (await request(registry)).json()).qualifications.find((q:{id:string})=>q.id===id));
+    assert.equal((await read()).developer_selectable,false);
+    assert.equal((await request(registry+'/'+id,'PUT',{...value,developer_selectable:true})).status,200);
+    assert.equal((await read()).developer_selectable,true);
+    assert.equal((await request(registry+'/'+id,'PUT',{...value,name:'이름 변경'})).status,200);
+    assert.equal((await read()).developer_selectable,true);
+    assert.equal((await request(registry+'/'+id,'PUT',{...value,developer_selectable:false})).status,200);
+    assert.equal((await read()).developer_selectable,false);
+    assert.equal((await request(registry+'/'+id,'PUT',{...value,developer_selectable:'false'})).status,400);
+  } finally {db.close();}
 });

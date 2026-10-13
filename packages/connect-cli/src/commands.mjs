@@ -8,6 +8,7 @@ import { validateDataOpenApi } from './discovery.mjs';
 import { DEFAULT_DATA_ORIGIN, parseDataScopes, sameScopes } from './scopes.mjs';
 import { inspectProtection, installProtection } from './protection.mjs';
 import { verifyProtection } from './protection-verify.mjs';
+import { qualificationInput, requireMemberQualifications, selectQualifications, qualificationManagerUrl } from './qualifications.mjs';
 
 export const DEFAULT_AUTH_ORIGIN = 'https://nakwol-auth.sepsd21.workers.dev';
 export { DEFAULT_DATA_ORIGIN };
@@ -62,11 +63,13 @@ function desiredIntegration(existingConfig, options = {}) {
 async function resolveApp(root, project, existingConfig, api, options) {
   let app;
   const accessPolicy = normalizeAccessPolicy(options.accessPolicy);
+  const qualification = qualificationInput(options);
   if (existingConfig?.clientId) {
     try { app = (await api.getApp(existingConfig.clientId)).data; }
     catch (error) { if (error?.status === 404) app = null; else throw error; }
   }
   if (!app) {
+    requireMemberQualifications(qualification, accessPolicy || 'member');
     const redirectUris = [...new Set([
       ...(existingConfig?.redirectUris || []),
       ...(options.url ? [options.url] : []),
@@ -81,6 +84,7 @@ async function resolveApp(root, project, existingConfig, api, options) {
       redirect_uris: redirectUris,
     })).data;
   } else {
+    requireMemberQualifications(qualification, accessPolicy || app.access_policy);
     if (options.url && !app.redirect_uris.includes(options.url)) {
       app = (await api.addRedirect(app.client_id, options.url)).data;
     }
@@ -92,6 +96,7 @@ async function resolveApp(root, project, existingConfig, api, options) {
 }
 
 export async function initProject(options = {}) {
+  qualificationInput(options);
   const root = options.root || process.cwd();
   const existingConfig = await readProjectConfig(root);
   const authOrigin = options.authOrigin || existingConfig?.authOrigin || DEFAULT_AUTH_ORIGIN;
@@ -101,6 +106,13 @@ export async function initProject(options = {}) {
   const desired = desiredIntegration(existingConfig, options);
   const { authApi, dataApi } = await authenticatedApis({ ...options, authOrigin, dataOrigin: desired.dataOrigin, output });
   const app = await resolveApp(root, project, existingConfig, authApi, options);
+  // Persist the resolved identity before any prompt, policy read/write, or DATA request can fail.
+  await writeProjectConfig(root, { ...desired, ...existingConfig, clientId:app.client_id, framework:project.framework, redirectUris:app.redirect_uris, accessPolicy:app.access_policy });
+  const selection = app.access_policy === 'member' ? await selectQualifications(authApi, options) : null;
+  if (selection) {
+    await authApi.setQualificationPolicy(app.client_id, selection);
+  }
+  const qualification = await effectiveQualifications(authApi, app, authOrigin, output);
   const dataState = (await dataApi.setScopes(app.client_id, desired.dataScopes)).data;
   const install = await installIntegration(root, project, app.client_id, desired);
   let config = await writeProjectConfig(root, {
@@ -125,7 +137,7 @@ export async function initProject(options = {}) {
   ];
   output(`NAKWOL Connect ${doctor.ok ? '설치 검증 통과' : '설치 미완료'}: ${app.client_id} (${config.authMode}). 서버 보호: ${doctor.protectionStatus}.`);
   for (const step of nextSteps) output(step);
-  return { ok:doctor.ok, clientId: app.client_id, project, config, app, data: dataState, doctor, nextSteps };
+  return { ok:doctor.ok, clientId: app.client_id, project, config, app, qualification, data: dataState, doctor, nextSteps };
 }
 
 export async function doctorProject(options = {}) {
@@ -220,6 +232,7 @@ export async function addUrlProject(url, options = {}) {
 }
 
 export async function syncProject(options = {}) {
+  const selection = qualificationInput(options);
   const root = options.root || process.cwd();
   const config = await readProjectConfig(root);
   if (!config?.clientId) return initProject(options);
@@ -228,14 +241,52 @@ export async function syncProject(options = {}) {
   const { authApi, dataApi } = await authenticatedApis({ ...options, authOrigin:desired.authOrigin, dataOrigin:desired.dataOrigin });
   let app = (await authApi.getApp(config.clientId)).data;
   const accessPolicy = normalizeAccessPolicy(options.accessPolicy);
+  requireMemberQualifications(selection, accessPolicy || app.access_policy);
   if (accessPolicy && app.access_policy !== accessPolicy) {
     app = (await authApi.patchApp(config.clientId, { access_policy: accessPolicy })).data;
   }
+  if (selection) await authApi.setQualificationPolicy(config.clientId, selection);
+  const qualification = await effectiveQualifications(authApi, app, desired.authOrigin, options.output || console.log);
   const dataState = (await dataApi.setScopes(config.clientId, desired.dataScopes)).data;
   const install = await installIntegration(root, project, config.clientId, desired);
   const updated = await writeProjectConfig(root, { ...config, accessPolicy:app.access_policy, framework:project.framework, redirectUris:app.redirect_uris, integration:install.integration, ...desired });
   const doctor = await doctorProject({ ...options, root, dataOrigin:desired.dataOrigin, offline:false });
-  return { ok:doctor.ok, clientId:config.clientId, config:updated, data:dataState, changedFiles:install.changedFiles, doctor };
+  return { ok:doctor.ok, clientId:config.clientId, config:updated, qualification, data:dataState, changedFiles:install.changedFiles, doctor };
+}
+
+async function effectiveQualifications(api, app, authOrigin, output) {
+  const managerUrl = qualificationManagerUrl(authOrigin, app.client_id);
+  if (app.access_policy !== 'member') return { applicable:false, managerUrl };
+  let policy;
+  try { policy = await api.getQualificationPolicy(app.client_id); }
+  catch (error) {
+    if (error?.status !== 404) throw error;
+    output(`가입 자격 조회를 지원하지 않는 서버입니다. 관리: ${managerUrl}`);
+    return { available:false, managerUrl };
+  }
+  const condition = policy.policy;
+  if (condition?.mode === 'legacy') output('현재 가입 자격: 기존 기본 조건 (시즌3 및 운영자 추가 조건)');
+  else if (condition?.mode === 'custom') output(`현재 가입 자격: ${condition.match_mode === 'all' ? '모두 충족' : '하나 이상 충족'} — ${condition.qualification_ids.join(', ')}`);
+  else throw new Error('가입 자격 응답 형식이 올바르지 않습니다.');
+  if (policy.locked_qualification_ids?.length) output(`재선택할 수 없는 자격: ${policy.locked_qualification_ids.join(', ')}. 허용 자격으로 교체하거나 기존 기본 조건으로 복원할 수 있습니다.`);
+  output(`관리: ${managerUrl}`);
+  return { ...policy, managerUrl };
+}
+
+export async function qualificationsProject(operation, options = {}) {
+  const selection = qualificationInput(options);
+  if (!['list','status','set','reset'].includes(operation)) throw new Error('사용법: qualifications <list|status|set|reset> [--qualifications ID,ID] [--qualification-match any|all]');
+  if (operation === 'set' && (!selection || selection.mode !== 'custom')) throw new Error('qualifications set에는 --qualifications ID,ID가 필요합니다.');
+  if (operation !== 'set' && selection) throw new Error('자격 선택 옵션은 qualifications set에서만 사용하세요. 초기화는 qualifications reset입니다.');
+  const config = await readProjectConfig(options.root || process.cwd());
+  if (operation !== 'list' && !config?.clientId) throw new Error('먼저 init을 실행하세요.');
+  const authOrigin = options.authOrigin || config?.authOrigin || DEFAULT_AUTH_ORIGIN;
+  const { authApi } = await authenticatedApis({ ...options, authOrigin });
+  if (operation === 'list') return authApi.listQualifications();
+  const app = (await authApi.getApp(config.clientId)).data;
+  requireMemberQualifications({ mode:'legacy' }, app.access_policy);
+  if (operation === 'set' || operation === 'reset') await authApi.setQualificationPolicy(app.client_id, operation === 'reset' ? { mode:'legacy' } : selection);
+  return effectiveQualifications(authApi, app, authOrigin, options.output || console.log);
 }
 
 async function requireDataProject(options = {}, changesLocalIntegration = false) {

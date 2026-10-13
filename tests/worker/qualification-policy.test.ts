@@ -35,7 +35,7 @@ test('named qualifications gate application access using the existing membership
   await DB.prepare("INSERT INTO auth_identities VALUES ('i','u','discord','1493410906456064113',0,0)").run();
   await DB.prepare("INSERT INTO applications VALUES ('site','Site','[\"https://site.test/\"]','active',0,0)").run();
   await DB.prepare("INSERT INTO application_settings(client_id,access_policy,created_at,updated_at) VALUES ('site','member',0,0)").run();
-  await DB.prepare("INSERT INTO membership_qualifications VALUES ('q1','First',?,'active',0,0),('q2','Second',?,'active',0,0)").bind(first, second).run();
+  await DB.prepare("INSERT INTO membership_qualifications(id,name,role_id,status,created_at,updated_at) VALUES ('q1','First',?,'active',0,0),('q2','Second',?,'active',0,0)").bind(first, second).run();
   await DB.prepare("INSERT INTO access_tokens VALUES (?, 'u','site',?,NULL,0)").bind(await sha256Base64Url('token'), Date.now() + 60000).run();
   const select = async (mode = 'any', ids = ['q1', 'q2']) => {
     await DB.prepare("INSERT OR REPLACE INTO application_qualification_requirements VALUES ('site',?,?,0)").bind(mode, JSON.stringify(ids)).run();

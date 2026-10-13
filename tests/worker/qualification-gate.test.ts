@@ -12,7 +12,7 @@ test('existing common gate accepts application qualifications and keeps asset re
   const role = '1553600098661957644';
   await upsertMembership(env, 'user', true, 'user', [role]);
   await DB.prepare("INSERT INTO application_settings(client_id,access_policy,created_at,updated_at) VALUES('site','member',0,0)").run();
-  await DB.prepare("INSERT INTO membership_qualifications VALUES('next-season','Next season',?,'active',0,0)").bind(role).run();
+  await DB.prepare("INSERT INTO membership_qualifications(id,name,role_id,status,created_at,updated_at) VALUES('next-season','Next season',?,'active',0,0)").bind(role).run();
   await DB.prepare("INSERT INTO application_qualification_requirements VALUES('site','any','[\"next-season\"]',0)").run();
   const token = 'qualification-gate-fixture';
   await DB.prepare("INSERT INTO access_tokens VALUES(?,'user','site',?,NULL,0)").bind(await sha256Base64Url(token),Date.now()+3600000).run();
