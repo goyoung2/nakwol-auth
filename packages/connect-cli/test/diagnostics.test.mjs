@@ -19,7 +19,7 @@ test('self-contained runtime survives offline AUTH, exports only sanitized obser
   const calls=[];const f=fixture(async(url)=>{calls.push(url);throw new TypeError('private bearer raw URL');});
   await f.runtime.run();
   assert.equal(calls.length,5);
-  assert.ok(calls.every(url=>url.startsWith('https://auth.test/diagnostics/')||url==='https://auth.test/sdk/v0.3.1/nakwol-auth-web.js'||url==='https://site.test/__nakwol/diagnostics/ping'));
+  assert.ok(calls.every(url=>url.startsWith('https://auth.test/diagnostics/')||url==='https://auth.test/sdk/v0.3.3/nakwol-auth-web.js'||url==='https://site.test/__nakwol/diagnostics/ping'));
   const report=f.runtime.localReport();
   assert.equal(report.upload_confirmed,false);assert.equal(report.server_reference,null);assert.equal(report.observations.length,4);
   assert.ok(report.observations.every(o=>o.outcome==='timeout_or_cors'&&o.http_status===null));
@@ -122,4 +122,21 @@ test('diagnosed response completion bounds stalled bodies, preserves caller canc
  assert.equal(f.runtime.localReport().observations.at(-1).outcome,'cancelled');
  mode='large';await assert.rejects(f.runtime.fetchImpl('https://auth.test/me?client_id=site'),/TOO_LARGE/);
  mode='ok';const complete=await f.runtime.fetchImpl('https://auth.test/me?client_id=site');assert.deepEqual(await complete.json(),{ok:true});
+});
+
+test('ordinary login without a diagnostic ticket bounds stalled token and me requests and bodies',async()=>{
+ let mode='headers',calls=0;
+ const f=fixture(async(_url,options)=>{
+  calls++;
+  assert.ok(options.signal instanceof AbortSignal);
+  assert.equal(new Headers(options.headers).has('X-Nakwol-Diagnostic-Capability'),false);
+  if(mode==='headers')return new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('Abort','AbortError'))));
+  if(mode==='body')return new Response(new ReadableStream({start(){}}));
+  return Response.json({ok:true});
+ });
+ f.context.setTimeout=(fn,ms)=>setTimeout(fn,Math.min(ms,5));
+ for(const stage of ['token','me'])await assert.rejects(f.runtime.fetchImpl('https://auth.test/'+stage+'?client_id=site'),/Abort|aborted/);
+ mode='body';await assert.rejects(f.runtime.fetchImpl('https://auth.test/me?client_id=site'),/aborted/);
+ mode='ok';assert.deepEqual(await (await f.runtime.fetchImpl('https://auth.test/me?client_id=site')).json(),{ok:true});
+ assert.equal(calls,4);assert.equal(f.runtime.localReport().observations.length,0);
 });

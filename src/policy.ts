@@ -39,27 +39,37 @@ export async function isApplicationAccessAllowed(env: Env, userId: string, clien
   return (await diagnoseApplicationAccess(env, userId, clientId, requireMember)).allowed;
 }
 
-export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
-  const policy = await getApplicationAccessPolicy(env, clientId);
-  const user = await getUserWithMembership(env, userId);
-  const requiredRoles = await getRequiredRoleIds(env, clientId);
-  const membership = await env.DB.prepare(`SELECT role_ids FROM memberships WHERE user_id = ? AND guild_id = ?`)
-    .bind(userId, env.NAKWOL_GUILD_ID).first<{ role_ids: string }>();
+type AccessReadContext = {
+  readonly user: Awaited<ReturnType<typeof getUserWithMembership>>;
+  readonly applicationStatus: string | null;
+};
+
+export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false, context?: AccessReadContext) {
+  // Reuse only this request's reads. Never cache an authorization decision across requests.
+  if (context?.user && context.user.id !== userId) throw new Error('ACCESS_CONTEXT_USER_MISMATCH');
+  const [policy, user, requiredRoles, membership, reauth, grant, application] = await Promise.all([
+    getApplicationAccessPolicy(env, clientId),
+    context ? Promise.resolve(context.user) : getUserWithMembership(env, userId),
+    getRequiredRoleIds(env, clientId),
+    env.DB.prepare(`SELECT role_ids FROM memberships WHERE user_id = ? AND guild_id = ?`)
+      .bind(userId, env.NAKWOL_GUILD_ID).first<{ role_ids: string }>(),
+    env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
+      .bind(userId).first<{ requested_at: number }>(),
+    env.DB.prepare(`SELECT g.status FROM application_access_grants g
+      JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
+      WHERE i.user_id = ? AND g.client_id = ?`).bind(userId, clientId).first<{ status: string }>(),
+    context ? Promise.resolve({ status: context.applicationStatus }) :
+      env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first<{ status: string }>(),
+  ]);
   let parsed: unknown = null;
   try { parsed = JSON.parse(membership?.role_ids ?? 'null'); } catch { parsed = null; }
   const roles: string[] = Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string') ? parsed : [];
   const seasonRole = env.NAKWOL_MEMBER_ROLE_ID?.trim() || '';
-  const reauth = await env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
-    .bind(userId).first<{ requested_at: number }>();
-  const grant = await env.DB.prepare(`SELECT g.status FROM application_access_grants g
-    JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
-    WHERE i.user_id = ? AND g.client_id = ?`).bind(userId, clientId).first<{ status: string }>();
   const result = (allowed: boolean, reason: string) => ({ allowed, reason, policy,
     season_role_id: seasonRole, role_ids: roles, missing_role_ids: [seasonRole, ...requiredRoles].filter(id => id && !roles.includes(id)),
     checked_at: user?.membership.checked_at ?? null, manual_grant: grant?.status === 'active',
     reauthentication_requested_at: reauth?.requested_at ?? null,
     reauthentication_status: reauth ? (Number(user?.membership.checked_at ?? 0) > reauth.requested_at ? 'completed' : 'pending') : null });
-  const application = await env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first<{ status: string }>();
   if (application?.status !== 'active') return result(false, 'APP_DISABLED');
   if (!user || user.status !== 'active') return result(false, 'USER_DISABLED');
   if (reauth && Number(user.membership.checked_at ?? 0) <= reauth.requested_at) return result(false, 'REAUTHENTICATION_REQUIRED');

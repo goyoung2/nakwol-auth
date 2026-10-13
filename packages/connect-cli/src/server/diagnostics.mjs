@@ -90,7 +90,7 @@ export function diagnosticRuntime(settings) {
     try {
       if(settings.sitePing) await probe('site_ping',location.origin+'/__nakwol/diagnostics/ping');
       await probe('auth_ping',settings.authOrigin+'/diagnostics/ping');
-      if(!cancelled) await probe('sdk',settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js');
+      if(!cancelled) await probe('sdk',settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js');
       if(!cancelled&&settings.clientId) await probe('application',settings.authOrigin+'/diagnostics/application'+clientQuery);
       if(!cancelled) {status('보고서 접수를 준비하는 중…');await issue();await upload();}
       if(cancelled) uploadStatus='진단이 중단되었습니다. 현재 결과는 로컬에 남아 있습니다.';
@@ -101,8 +101,10 @@ export function diagnosticRuntime(settings) {
   async function fetchImpl(url,options={}) {
     const target=new URL(typeof url==='string'?url:url.url,location.origin);
     let stage=target.origin===settings.authOrigin&&target.pathname==='/token'?'token':target.origin===settings.authOrigin&&target.pathname==='/me'?'me':target.origin===location.origin&&target.pathname==='/__nakwol/session'?'site_session':null;
-    if(!ticket || !stage || ticket.expires_at<=Date.now()) return nativeFetch(url,options);
-    const headers=new Headers(options.headers);headers.set('X-Nakwol-Diagnostic-Reference',ticket.reference);headers.set('X-Nakwol-Diagnostic-Capability',ticket.capability);
+    if(!stage) return nativeFetch(url,options);
+    const diagnosed=Boolean(ticket&&ticket.expires_at>Date.now());
+    const headers=new Headers(options.headers);
+    if(diagnosed){headers.set('X-Nakwol-Diagnostic-Reference',ticket.reference);headers.set('X-Nakwol-Diagnostic-Capability',ticket.capability);}
     const start=performance.now(),controller=new AbortController();
     const callerAbort=()=>controller.abort(options.signal?.reason);
     if(options.signal?.aborted)callerAbort();else options.signal?.addEventListener('abort',callerAbort,{once:true});
@@ -123,9 +125,9 @@ export function diagnosticRuntime(settings) {
       }
       const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
       const complete=new Response([204,205,304].includes(response.status)?null:bytes,{status:response.status,statusText:response.statusText,headers:response.headers});
-      observe(stage,response.ok?'ok':'http_error',start,response.status);return complete;
+      if(diagnosed)observe(stage,response.ok?'ok':'http_error',start,response.status);return complete;
     }
-    catch(error){if(reader)reader.cancel().catch(()=>{});observe(stage,options.signal?.aborted?'cancelled':'timeout_or_cors',start);throw error;}
+    catch(error){if(reader)reader.cancel().catch(()=>{});if(diagnosed)observe(stage,options.signal?.aborted?'cancelled':'timeout_or_cors',start);throw error;}
     finally{clearTimeout(timer);options.signal?.removeEventListener('abort',callerAbort);}
   }
   async function retryLogin(auth) {
@@ -176,5 +178,5 @@ export function diagnosticsPage(settings) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>NAKWOL 접속 진단</title><style>${diagnosticStyles}</style></head>
 <body><main><h1>NAKWOL 접속 진단</h1><p id="diagnostics-service-name"></p>${diagnosticMarkup(settings.central)}${serviceLink}<p class="muted">로그인 다시 시도는 서비스의 공통 진단 화면에서 진행합니다.</p></main>
 <script>window.nakwolDiagnostics=${diagnosticScript(settings)};document.getElementById("diagnostics-service-name").textContent=${JSON.stringify(settings.clientName ? settings.clientName+' 접속 상태를 확인합니다.' : settings.clientId ? settings.clientId+' 접속 상태를 확인합니다.' : '서비스의 로그인 화면에서 진단 링크를 열면 앱 설정도 함께 확인합니다.').replaceAll('<','\\u003c')};${serviceLink?'document.getElementById("diagnostics-service").href='+JSON.stringify(settings.siteOrigin+'/__nakwol/diagnostics').replaceAll('<','\\u003c')+';':''}</script><script type="module">const settings=${JSON.stringify(settings).replaceAll('<','\\u003c')};
-if(!settings.central) document.getElementById('diagnostics-login').onclick=async()=>{const button=document.getElementById('diagnostics-login');button.disabled=true;try{const sdk=await Promise.race([import(settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js'),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),7000))]);const auth=new sdk.NakwolAuthClient({...settings,autoSso:false,fetchImpl:window.nakwolDiagnostics.fetchImpl});await window.nakwolDiagnostics.retryLogin(auth);}catch{document.getElementById('diagnostics-status').textContent='로그인 모듈을 확인할 수 없습니다. 진단 보고서를 관리자에게 전달하세요.';button.disabled=false;}};</script></body></html>`;
+if(!settings.central) document.getElementById('diagnostics-login').onclick=async()=>{const button=document.getElementById('diagnostics-login');button.disabled=true;try{const sdk=await Promise.race([import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js'),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),7000))]);const auth=new sdk.NakwolAuthClient({...settings,autoSso:false,fetchImpl:window.nakwolDiagnostics.fetchImpl});await window.nakwolDiagnostics.retryLogin(auth);}catch{document.getElementById('diagnostics-status').textContent='로그인 모듈을 확인할 수 없습니다. 진단 보고서를 관리자에게 전달하세요.';button.disabled=false;}};</script></body></html>`;
 }
