@@ -7,9 +7,9 @@ test('interactive login re-reads Discord roles when a stored session is denied',
   const authorize = src.slice(src.indexOf("app.get('/authorize'"), src.indexOf("app.get('/auth/discord/callback'"));
 
   // 허용된 세션은 그대로 SSO 코드를 발급한다.
-  assert.match(authorize, /if \(await measured\(trace, 'policy', \(\) => isApplicationAccessAllowed\(c\.env, sessionUserId, clientId\)\)\) \{[\s\S]*createAuthorizationCode[\s\S]*return c\.redirect/);
+  assert.match(authorize, /const access = await measured[\s\S]*diagnoseApplicationAccess[\s\S]*if \(access.allowed\) \{[\s\S]*createAuthorizationCode[\s\S]*return c\.redirect/);
   // 조용한 자동 로그인은 Discord로 보내지 않고 거절한다.
-  assert.match(authorize, /if \(prompt === 'none'\) \{\s*await deleteSession[\s\S]*error: 'access_denied'[\s\S]*clearSessionCookie/);
+  assert.match(authorize, /if \(prompt === 'none'\)[\s\S]*await deleteSession[\s\S]*error: 'access_denied'[\s\S]*clearSessionCookie/);
   // 직접 로그인은 거절 대신 Discord 인증으로 이어져 역할을 새로 읽는다.
   assert.ok(authorize.indexOf("'authorize.access_denied'") < authorize.indexOf('buildDiscordAuthorizeUrl'));
 });

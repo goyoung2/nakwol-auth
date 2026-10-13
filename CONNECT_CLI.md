@@ -1,4 +1,4 @@
-# NAKWOL Connect CLI 0.7.3
+# NAKWOL Connect CLI 0.7.4
 
 NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 프로젝트에 연결하고, 현재 DATA API 계약까지 자동 발견하는 공식 도구입니다.
 
@@ -147,6 +147,6 @@ const custom = await data.request('/v1/game-accounts');
 
 현재 npm 패키지는 `nakwol-connect@0.7.2`입니다. npm 패키지는 Trusted Publishing OIDC로 배포하며 공개 패키지와 Worker fallback 배포는 항상 같은 버전을 유지합니다.
 
-## 접속 진단 (소스 0.7.3)
+## 접속 진단 (소스 0.7.4)
 
 공식 서버 게이트의 `/__nakwol/diagnostics`에서 사용자가 진단을 시작·중단하고 보고서를 복사·다운로드할 수 있습니다. AUTH 연결 실패 시에는 로컬 보고서 번호를 표시하며, 서버 접수 확인 후에만 진단 번호를 표시합니다. 설치된 게이트는 `protect update` 후 빌드·재배포해야 적용됩니다. 이번 소스 변경에서 npm 공개나 배포는 실행하지 않았습니다. 상세 API·보관·공개 경로 예외는 [AUTH_DIAGNOSTICS.md](docs/AUTH_DIAGNOSTICS.md)를 참고하세요.

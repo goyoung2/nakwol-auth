@@ -83,7 +83,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.1',
+  version: '0.2.2',
   now: new Date().toISOString(),
 }));
 
@@ -131,13 +131,17 @@ app.get('/authorize', async (c) => {
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
   const sessionUserId = await findSessionUser(c.env, sid);
   if (sessionUserId) {
-    if (await measured(trace, 'policy', () => isApplicationAccessAllowed(c.env, sessionUserId, clientId))) {
+    const access = await measured(trace, 'policy', () => diagnoseApplicationAccess(c.env, sessionUserId, clientId));
+    if (access.allowed) {
       const code = await measured(trace, 'code_creation', () => createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge));
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
       return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
     }
-    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis: await diagnoseApplicationAccess(c.env, sessionUserId, clientId) });
+    await logAuthEvent(c.env, 'authorize.access_denied', sessionUserId, clientId, { reverify: prompt !== 'none', diagnosis: access });
     if (prompt === 'none') {
+      if (access.reason === 'MEMBERSHIP_REFRESH_REQUIRED' || access.reason === 'REAUTHENTICATION_REQUIRED') {
+        return c.redirect(redirectWithParams(redirectUri, { error: 'login_required', state: clientState }), 302);
+      }
       await deleteSession(c.env, sid);
       const response = c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
       response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
@@ -278,7 +282,9 @@ app.post('/token', async (c) => {
 
 app.get('/me', async (c) => {
   const clientId = c.req.query('client_id') ?? '';
-  const origin = await corsOrigin(c, clientId);
+  const application = await getApplication(c.env, clientId);
+  const requestedOrigin = c.req.header('Origin');
+  const origin = requestedOrigin && application && isAllowedOrigin(application, requestedOrigin) ? requestedOrigin : null;
   if (c.req.header('Origin') && !origin) return jsonError(c, 403, 'CORS_DENIED', '허용되지 않은 Origin입니다.');
 
   const token = bearerToken(c);
@@ -288,20 +294,23 @@ app.get('/me', async (c) => {
   }
 
   const tokenInfo = await inspectAccessToken(c.env, token, clientId);
-  const application = await getApplication(c.env, clientId);
   if (!tokenInfo || application?.status !== 'active') {
     const response = c.json({ ok: false, error: { code: 'INVALID_TOKEN', message: '유효하지 않거나 만료된 token입니다.' } }, 401);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
   const userId = tokenInfo.userId;
-  const access = await diagnoseApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true');
+  const user = await getUserWithMembership(c.env, userId);
+  const access = await diagnoseApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true', { user, applicationStatus: application.status });
   if (!access.allowed) {
+    if (access.reason === 'MEMBERSHIP_REFRESH_REQUIRED' || access.reason === 'REAUTHENTICATION_REQUIRED') {
+      const response = c.json({ ok: false, error: { code: access.reason, message: 'Discord 인증으로 역할을 다시 확인해 주세요.' } }, 401);
+      return origin ? withCorsHeaders(response, origin) : response;
+    }
     const response = c.json({ ok: false, error: { code: 'ACCESS_DENIED', message: '이 앱을 사용할 권한이 없습니다.' } }, 403);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  const user = await getUserWithMembership(c.env, userId);
   if (!user) {
     const response = c.json({ ok: false, error: { code: 'USER_NOT_FOUND', message: '사용자를 찾을 수 없습니다.' } }, 404);
     return origin ? withCorsHeaders(response, origin) : response;
