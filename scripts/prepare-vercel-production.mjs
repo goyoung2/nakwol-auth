@@ -1,0 +1,41 @@
+import { spawnSync } from 'node:child_process';
+import { readFile,readdir,mkdir,writeFile } from 'node:fs/promises';
+import { resolve,relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { inspectProduction,bridgeConfiguration,PreparationError } from './vercel-production-plan.mjs';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const opts=new Map();const args=process.argv.slice(2);
+for(let i=0;i<args.length;i+=2){if(!['--account-id','--auth-origin','--wrangler'].includes(args[i])||!args[i+1]||opts.has(args[i]))throw new PreparationError('USAGE: --account-id ID --auth-origin HTTPS_ORIGIN [--wrangler ABSOLUTE_CLI_PATH]');opts.set(args[i],args[i+1]);}
+const accountId=opts.get('--account-id'),origin=opts.get('--auth-origin');
+if(!accountId||!origin||!/^[a-f0-9]{32}$/.test(accountId))throw new PreparationError('EXPLICIT_ACCOUNT_AND_ORIGIN_REQUIRED');
+const wrangler=opts.get('--wrangler')||resolve(root,'node_modules/wrangler/bin/wrangler.js');
+const run=argv=>{const p=spawnSync(process.execPath,[wrangler,...argv],{cwd:root,encoding:'utf8',env:{...process.env,CLOUDFLARE_ACCOUNT_ID:accountId},timeout:60000,maxBuffer:4194304});if(p.status!==0)throw new PreparationError('READ_ONLY_WRANGLER_FAILED:'+argv[0]);try{return JSON.parse(p.stdout);}catch{throw new PreparationError('INVALID_WRANGLER_JSON');}};
+const deployments=run(['deployments','list','--name','nakwol-auth','--json']);
+if(!Array.isArray(deployments)||!deployments.length)throw new PreparationError('AUTH_DEPLOYMENT_MISSING');
+const latest=deployments.toSorted((a,b)=>Date.parse(b.created_on)-Date.parse(a.created_on))[0];
+if(latest.versions?.length!==1||latest.versions[0].percentage!==100)throw new PreparationError('MIXED_WORKER_DEPLOYMENT');
+const worker=run(['versions','view',latest.versions[0].version_id,'--name','nakwol-auth','--json']);
+const databases=run(['d1','list','--json']);
+// Validate the authority/binding before asking D1 for even schema/aggregate data.
+const bindings=worker.resources?.bindings||[];
+const db=databases.find(d=>d.uuid===bindings.find(b=>b.name==='DB'&&b.type==='d1')?.id&&d.name==='nakwol-auth');
+if(!db)throw new PreparationError('WRONG_PRODUCTION_DATABASE');
+const out=resolve(root,'.wrangler/vercel-production');await mkdir(out,{recursive:true});
+const probePath=resolve(out,'readonly.wrangler.json');
+await writeFile(probePath,JSON.stringify({name:'nakwol-auth',account_id:accountId,d1_databases:[{binding:'DB',database_name:db.name,database_id:db.uuid}]}),{mode:0o600});
+const query=sql=>{const response=run(['d1','execute','DB','--config',probePath,'--remote','--json','--command',sql]);if(!Array.isArray(response)||!response[0]?.success||!Array.isArray(response[0].results))throw new PreparationError('READ_ONLY_D1_FAILED');return response[0].results;};
+const schema=query("SELECT name FROM sqlite_master WHERE type='table' UNION ALL SELECT 'oauth_requests.'||name FROM pragma_table_info('oauth_requests') WHERE name='diagnostic_ref'");
+const apps=query("SELECT client_id,status,redirect_uris FROM applications WHERE client_id IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-connect-cli','nakwol-account-center') ORDER BY client_id");
+const counts=query('SELECT (SELECT COUNT(*) FROM users) AS users,(SELECT COUNT(*) FROM auth_operators) AS operators,(SELECT COUNT(*) FROM applications) AS applications,(SELECT COUNT(*) FROM application_access_grants) AS grants')[0];
+const recordedMigrationNames=query('SELECT name FROM d1_migrations ORDER BY id').map(row=>row.name);
+const sourceMigrationNames=(await readdir(resolve(root,'migrations'))).filter(name=>name.endsWith('.sql')).sort();
+const pendingMigrations=sourceMigrationNames.filter(name=>!recordedMigrationNames.includes(name));
+const inspected=inspectProduction({accountId,origin,worker,databases,schema,apps,counts});
+const profile={...inspected,recordedMigrationNames,pendingMigrations,checkedAt:new Date().toISOString()};
+try { const linked=JSON.parse(await readFile(resolve(root,'deploy/vercel-auth-production/.vercel/project.json'),'utf8')); if(linked.projectName !== 'nakwol-auth-vercel') throw new PreparationError('WRONG_VERCEL_PROJECT'); profile.vercelProjectId=linked.projectId;profile.vercelTeamId=linked.orgId;profile.vercelProjectName=linked.projectName; } catch(error) { if(error?.code !== 'ENOENT') throw error; }
+await writeFile(resolve(out,'migrations.wrangler.jsonc'),JSON.stringify({name:'nakwol-auth',account_id:accountId,d1_databases:[{binding:'DB',database_name:db.name,database_id:db.uuid,migrations_dir:relative(out,resolve(root,'migrations')).split(String.fromCharCode(92)).join('/')}]}),{mode:0o600});
+await writeFile(resolve(out,'verified-profile.json'),JSON.stringify(profile,null,2),{mode:0o600});
+const main=relative(out,resolve(root,'deploy/vercel-auth-production/bridge-worker.mjs')).split(String.fromCharCode(92)).join('/');
+await writeFile(resolve(out,'bridge.wrangler.jsonc'),JSON.stringify(bridgeConfiguration(profile,main),null,2),{mode:0o600});
+await writeFile(resolve(out,'vercel-server-env.json'),JSON.stringify({NAKWOL_AUTH_MODE:'production',AUTH_ORIGIN:origin,D1_BRIDGE_DATABASE_ID:db.uuid,DISCORD_CLIENT_ID:profile.discordClientId,NAKWOL_GUILD_ID:profile.guildId,NAKWOL_MEMBER_ROLE_ID:profile.memberRoleId},null,2),{mode:0o600});
+console.log(JSON.stringify({ok:true,readOnly:true,counts,missingSchema:profile.missingSchema,pendingMigrations,callbackAdditions:profile.additions.length,profile:'verified-profile.json',readyForSecretRotation:false}));

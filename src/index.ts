@@ -1,3 +1,4 @@
+import { measured, resolveDiagnostic } from './diagnostic-trace';
 import { diagnoseApplicationAccess } from './policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -35,6 +36,14 @@ import type { Env, OAuthRequestRow } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
 const OAUTH_REQUEST_TTL_MS = 10 * 60 * 1000;
+
+for (const route of ['/token','/me'] as const) app.use(route, async (c,next) => {
+  const ref=c.req.header('X-Nakwol-Diagnostic-Reference'), cap=c.req.header('X-Nakwol-Diagnostic-Capability');
+  const trace=cap ? await resolveDiagnostic(c,ref,c.req.query('client_id') ?? '',c.req.header('Origin'),cap) : undefined;
+  if (!trace) { await next(); return; }
+  const start=performance.now();
+  try { await next(); } finally { trace.add(route === '/token' ? 'token' : 'me',start,c.res.status>=500?'error':c.res.status>=400?'denied':'ok');await trace.finish(); }
+});
 
 app.use('/me', async (c, next) => {
   c.header('Cache-Control', 'no-store');
@@ -74,21 +83,24 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.0',
+  version: '0.2.1',
   now: new Date().toISOString(),
 }));
 
 registerDemoRoutes(app);
 registerConnectOnboardingRoutes(app);
 
-app.options('*', async (c) => {
+app.options('*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
+  if (path.startsWith('/diagnostics/')) return next();
   if (!['/token', '/me', '/logout'].includes(path)) return c.body(null, 204);
   const clientId = c.req.query('client_id') ?? '';
   if (!clientId) return c.body(null, 204);
   const origin = await corsOrigin(c, clientId);
   if (!origin) return c.body(null, 403);
-  return withCorsHeaders(new Response(null, { status: 204 }), origin);
+  const response = withCorsHeaders(new Response(null, { status: 204 }), origin);
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Nakwol-Diagnostic-Reference, X-Nakwol-Diagnostic-Capability');
+  return response;
 });
 
 app.get('/authorize', async (c) => {
@@ -113,11 +125,14 @@ app.get('/authorize', async (c) => {
     return jsonError(c, 400, 'INVALID_REDIRECT_URI', '등록되지 않은 애플리케이션 또는 callback URL입니다.');
   }
 
+  const trace = await resolveDiagnostic(c, c.req.query('diagnostic_ref'), clientId, new URL(redirectUri).origin);
+  const traceStart = performance.now();
+  try {
   const sid = parseCookies(c.req.header('Cookie')).nakwol_sid;
   const sessionUserId = await findSessionUser(c.env, sid);
   if (sessionUserId) {
-    if (await isApplicationAccessAllowed(c.env, sessionUserId, clientId)) {
-      const code = await createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge);
+    if (await measured(trace, 'policy', () => isApplicationAccessAllowed(c.env, sessionUserId, clientId))) {
+      const code = await measured(trace, 'code_creation', () => createAuthorizationCode(c.env, sessionUserId, clientId, redirectUri, codeChallenge));
       await logAuthEvent(c.env, prompt === 'none' ? 'authorize.sso_auto' : 'authorize.sso', sessionUserId, clientId);
       return c.redirect(redirectWithParams(redirectUri, { code, state: clientState }), 302);
     }
@@ -143,8 +158,10 @@ app.get('/authorize', async (c) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(requestId, clientId, redirectUri, codeChallenge, clientState, now + OAUTH_REQUEST_TTL_MS, now).run();
 
+  if (trace) await c.env.DB.prepare('UPDATE oauth_requests SET diagnostic_ref=? WHERE id=?').bind(trace.reference,requestId).run().catch(() => undefined);
   if (Math.random() < 0.03) c.executionCtx.waitUntil(cleanupExpiredAuthData(c.env));
   return c.redirect(buildDiscordAuthorizeUrl(c.env, requestId), 302);
+  } finally { if (trace) { trace.add('authorize',traceStart,c.res.status >= 400 ? 'denied' : 'ok'); await trace.finish(); } }
 });
 
 app.get('/auth/discord/callback', async (c) => {
@@ -154,7 +171,7 @@ app.get('/auth/discord/callback', async (c) => {
   if (!requestId) return jsonError(c, 400, 'MISSING_STATE', 'Discord state가 없습니다.');
 
   const requestRow = await c.env.DB.prepare(
-    `SELECT id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at
+    `SELECT id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at, diagnostic_ref
        FROM oauth_requests WHERE id = ?`
   ).bind(requestId).first<OAuthRequestRow>();
 
@@ -167,6 +184,8 @@ app.get('/auth/discord/callback', async (c) => {
     return jsonError(c, 400, 'INVALID_APPLICATION', '애플리케이션 설정을 확인할 수 없습니다.');
   }
 
+  const trace = await resolveDiagnostic(c, requestRow.diagnostic_ref ?? undefined, requestRow.client_id);
+  try {
   if (discordError || !discordCode) {
     await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
     return c.redirect(redirectWithParams(requestRow.redirect_uri, {
@@ -176,9 +195,9 @@ app.get('/auth/discord/callback', async (c) => {
   }
 
   try {
-    const discordAccessToken = await exchangeDiscordCode(c.env, discordCode);
-    const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken);
-    const allowed = await isApplicationAccessAllowed(c.env, userId, requestRow.client_id);
+    const discordAccessToken = await measured(trace, 'discord_code_exchange', () => exchangeDiscordCode(c.env, discordCode));
+    const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken, trace);
+    const allowed = await measured(trace, 'policy', () => isApplicationAccessAllowed(c.env, userId, requestRow.client_id));
 
     await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
 
@@ -193,10 +212,10 @@ app.get('/auth/discord/callback', async (c) => {
       return response;
     }
 
-    const code = await createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge);
+    const code = await measured(trace, 'code_creation', () => createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge));
     await logAuthEvent(c.env, 'discord.login.success', userId, requestRow.client_id, { role });
 
-    const session = await createSession(c.env, userId);
+    const session = await measured(trace, 'session_creation', () => createSession(c.env, userId));
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
     response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;
@@ -209,6 +228,7 @@ app.get('/auth/discord/callback', async (c) => {
       state: requestRow.client_state,
     }), 302);
   }
+  } finally { if (trace) await trace.finish(); }
 });
 
 app.post('/token', async (c) => {

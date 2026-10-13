@@ -95,7 +95,10 @@
     recovery.textContent = '계정 확인·접속 문제 해결';
     recovery.hidden = true;
     Object.assign(recovery.style, { display: 'none', marginTop: '16px', color: '#c7d2fe', fontSize: '14px' });
-    card.append(title, copy, button, recovery);
+    const diagnostic=document.createElement('a');
+    const diagnosticUrl=new URL('/diagnostics',authOrigin);diagnosticUrl.searchParams.set('client_id',clientId);diagnostic.href=diagnosticUrl.href;diagnostic.textContent='접속 진단·보고서 보내기';
+    Object.assign(diagnostic.style,{display:'block',marginTop:'16px',color:'#c7d2fe',fontSize:'14px'});
+    card.append(title, copy, button, recovery,diagnostic);
     root.appendChild(card);
     document.documentElement.appendChild(root);
     authGuard = { root, title, copy, button, recovery };

@@ -9,6 +9,8 @@ export interface Env {
   NAKWOL_ADMIN_ROLE_ID?: string;
   AUTH_ORIGIN: string;
   COOKIE_SECURE?: string;
+  /** Private server-derived diagnostic rate key; never an authorization decision. */
+  DIAGNOSTIC_NETWORK_KEY?: string;
 }
 
 export interface ApplicationRow {
@@ -19,6 +21,7 @@ export interface ApplicationRow {
 }
 
 export interface OAuthRequestRow {
+  diagnostic_ref?: string | null;
   id: string;
   client_id: string;
   redirect_uri: string;

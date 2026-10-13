@@ -17,11 +17,11 @@ async function fixture(t) {
   return root;
 }
 test('current component versions align without treating source as deployment', async () => {
-  const v = await verifyVersions(); assert.equal(v.connect, '0.7.2'); assert.equal(v.schema, 4);
+  const v = await verifyVersions(); assert.equal(v.connect, '0.7.3'); assert.equal(v.schema, 4);
 });
 test('package bump without gate/distribution bump is blocked', async t => {
   const root = await fixture(t), path = join(root, 'packages/connect-cli/package.json');
-  const pkg = JSON.parse(await readFile(path)); pkg.version = '0.7.3'; await writeFile(path, JSON.stringify(pkg));
+  const pkg = JSON.parse(await readFile(path)); pkg.version = pkg.version.replace(/(\d+)$/, value => String(Number(value) + 1)); await writeFile(path, JSON.stringify(pkg));
   await assert.rejects(componentVersions(root), /VERSION_MISMATCH/);
 });
 test('stale machine version table fails, sync repairs it', async t => {

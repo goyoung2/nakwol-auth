@@ -1,3 +1,4 @@
+import { measured, type DiagnosticTrace } from './diagnostic-trace';
 import { randomToken, safeEqual, sha256Base64Url } from './crypto';
 import type { DiscordUser, Env, MembershipRow, SessionRow, UserRow } from './types';
 import { discordAvatarUrl, fetchDiscordIdentity, resolveNakwolRole } from './discord';
@@ -107,12 +108,12 @@ export async function upsertMembership(env: Env, userId: string, isGuildMember: 
 export async function refreshDiscordMembership(
   env: Env,
   discordAccessToken: string,
+  trace?: DiagnosticTrace,
 ): Promise<{ userId: string; role: 'user' | 'member' | 'admin' }> {
-  const { user: discordUser, member } = await fetchDiscordIdentity(env, discordAccessToken);
+  const { user: discordUser, member } = await fetchDiscordIdentity(env, discordAccessToken, trace);
   const role = resolveNakwolRole(env, member);
   const displayName = member?.nick ?? discordUser.global_name ?? discordUser.username;
-  const userId = await upsertDiscordUser(env, discordUser, displayName);
-  await upsertMembership(env, userId, Boolean(member), role, member?.roles ?? []);
+  const userId = await measured(trace, 'membership_db', async () => {const id = await upsertDiscordUser(env, discordUser, displayName);await upsertMembership(env,id,Boolean(member),role,member?.roles ?? []);return id;});
   return { userId, role };
 }
 

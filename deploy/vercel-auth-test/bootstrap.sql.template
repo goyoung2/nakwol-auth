@@ -1,0 +1,22 @@
+-- Apply only AFTER existing migrations to the new EMPTY test database.
+-- Parent replaces __AUTH_ORIGIN__ with the exact fixed Vercel test origin.
+-- No users, identities, sessions, tokens, operators or grants are created/copied.
+UPDATE applications SET redirect_uris='["__AUTH_ORIGIN__/demo/callback"]' WHERE client_id='nakwol-auth-selftest';
+UPDATE applications SET redirect_uris='["__AUTH_ORIGIN__/admin/apps","__AUTH_ORIGIN__/admin/developers"]' WHERE client_id='nakwol-connect-admin';
+UPDATE applications SET redirect_uris='["__AUTH_ORIGIN__/account"]' WHERE client_id='nakwol-account-center';
+UPDATE applications SET status='inactive',redirect_uris='[]' WHERE client_id IN ('nakwol-auth-lab','nakwol-my-data','nakwol-data-lab');
+UPDATE application_settings SET homepage_url='__AUTH_ORIGIN__/admin/apps',access_policy='admin' WHERE client_id='nakwol-connect-admin';
+UPDATE application_settings SET homepage_url='__AUTH_ORIGIN__/account',access_policy='guest' WHERE client_id='nakwol-account-center';
+UPDATE application_settings SET homepage_url=NULL WHERE client_id IN ('nakwol-auth-lab','nakwol-my-data','nakwol-data-lab');
+INSERT INTO applications(client_id,name,redirect_uris,status,created_at,updated_at)
+VALUES('nakwol-vercel-comparison','NAKWOL Vercel Comparison','["__AUTH_ORIGIN__/diagnostics"]','active',unixepoch()*1000,unixepoch()*1000)
+ON CONFLICT(client_id) DO UPDATE SET redirect_uris=excluded.redirect_uris,status=excluded.status,updated_at=excluded.updated_at;
+INSERT INTO application_settings(client_id,homepage_url,framework,access_policy,owner_user_id,created_at,updated_at)
+VALUES('nakwol-vercel-comparison','__AUTH_ORIGIN__/diagnostics','internal','member',NULL,unixepoch()*1000,unixepoch()*1000)
+ON CONFLICT(client_id) DO UPDATE SET homepage_url=excluded.homepage_url,access_policy=excluded.access_policy,updated_at=excluded.updated_at;
+
+UPDATE applications SET redirect_uris='["__AUTH_ORIGIN__/connect/cli/device/verify"]' WHERE client_id='nakwol-connect-cli';
+UPDATE application_settings SET homepage_url='__AUTH_ORIGIN__/connect/cli/device/verify' WHERE client_id='nakwol-connect-cli';
+-- Empty test migrations contain only these supported internal clients. Disable any other seeded app.
+UPDATE applications SET status='inactive',redirect_uris='[]' WHERE client_id NOT IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-account-center','nakwol-connect-cli','nakwol-vercel-comparison');
+UPDATE application_settings SET homepage_url=NULL WHERE client_id NOT IN ('nakwol-auth-selftest','nakwol-connect-admin','nakwol-account-center','nakwol-connect-cli','nakwol-vercel-comparison');

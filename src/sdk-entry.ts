@@ -1,3 +1,4 @@
+import { registerDiagnosticRoutes, cleanupDiagnostics } from './diagnostics';
 import { registerGateReportRoutes } from './gate-reports';
 import { registerAccessSupportRoutes } from './access-support';
 import app from './index';
@@ -11,6 +12,7 @@ import { registerAccountRoutes } from './account';
 import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 
+registerDiagnosticRoutes(app);
 registerGateReportRoutes(app);
 registerAccessSupportRoutes(app);
 registerSdkRoutes(app);
@@ -23,4 +25,4 @@ registerAccountRoutes(app);
 registerLabRoutes(app);
 registerRoleAdminRoutes(app);
 
-export default app;
+export default Object.assign(app, { scheduled(_controller: ScheduledController, env: import('./types').Env, ctx: ExecutionContext) { ctx.waitUntil(cleanupDiagnostics(env)); } });
