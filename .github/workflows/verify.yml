@@ -51,6 +51,8 @@ jobs:
           npx tsc --noEmit -p adapters/vercel/tsconfig.json
           node scripts/build-vercel-auth-test.mjs
           node scripts/build-vercel-auth-production.mjs
+          npm ci --prefix deploy/vercel-auth-production --ignore-scripts
+          npm run build --prefix deploy/vercel-auth-production
           node --test tests/vercel/*.test.mjs
       - name: Bundle check
         run: npx wrangler deploy --dry-run --outdir .dry-run
