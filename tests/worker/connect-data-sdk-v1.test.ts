@@ -10,8 +10,8 @@ type CapturedRequest = {
 async function bootConnectRuntime() {
   const raw = await readFile(new URL('../../src/assets/nakwol-connect-v1.js.txt', import.meta.url), 'utf8');
   const source = raw.replace(
-    'const sdk = await import(`${authOrigin}/sdk/v0.3.2/nakwol-auth-web.js`);',
-    'const sdk = __sdk;',
+    'import(`${authOrigin}/sdk/v0.3.3/nakwol-auth-web.js`)',
+    'Promise.resolve(__sdk)',
   );
   assert.notEqual(source, raw, 'test harness must replace the runtime SDK import');
 

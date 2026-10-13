@@ -10,14 +10,14 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const path of ['package.json', 'packages/connect-cli/package.json', 'services/data/package.json', 'src/index.ts',
     'src/connect-cli-distribution.ts', 'packages/connect-cli/src/server/gate.mjs', 'src/sdk.ts',
-    'services/data/src/domain.ts', 'src/assets/nakwol-auth-web-v0.3.2.js.txt', 'README.md']) {
+    'services/data/src/domain.ts', 'src/assets/nakwol-auth-web-v0.3.3.js.txt', 'README.md']) {
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), await readFile(resolve(path)));
   }
   return root;
 }
 test('current component versions align without treating source as deployment', async () => {
-  const v = await verifyVersions(); assert.equal(v.connect, '0.7.3'); assert.equal(v.schema, 4);
+  const v = await verifyVersions(); assert.equal(v.connect, '0.7.4'); assert.equal(v.schema, 4);
 });
 test('package bump without gate/distribution bump is blocked', async t => {
   const root = await fixture(t), path = join(root, 'packages/connect-cli/package.json');
