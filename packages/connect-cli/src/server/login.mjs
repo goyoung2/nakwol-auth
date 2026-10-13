@@ -28,7 +28,7 @@ const loadAuth=(automatic=false)=>{
  loading=(async()=>{
   let timer;
   try {
-   const {NakwolAuthClient}=await Promise.race([import(settings.authOrigin+'/sdk/v0.3.1/nakwol-auth-web.js'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('SDK_UNAVAILABLE')),7000);})]);
+   const {NakwolAuthClient}=await Promise.race([import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('SDK_UNAVAILABLE')),7000);})]);
    auth=new NakwolAuthClient({...settings,fetchImpl:diagnostic.fetchImpl,autoSso:automatic&&settings.status===401&&!diagnostic.hasTicket()});
    return auth;
   } catch {throw Object.assign(new Error('SDK_UNAVAILABLE'),{code:'SDK_UNAVAILABLE'});}
