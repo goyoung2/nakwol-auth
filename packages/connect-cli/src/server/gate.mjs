@@ -2,7 +2,7 @@ import { loginPage, diagnosticsPage } from './login.mjs';
 
 export const RUNTIME_VERSION = '0.7.4';
 export const COOKIE = '__Host-nakwol_connect';
-export const AUTHORIZATION_LEASE_MS = 5 * 60 * 1000;
+export const AUTHORIZATION_LEASE_MS = 60 * 60 * 1000;
 const encoder = new TextEncoder();
 const keys = new Map();
 const clearCookie = `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;

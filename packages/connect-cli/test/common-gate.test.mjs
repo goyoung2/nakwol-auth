@@ -54,7 +54,7 @@ test('public common gate API protects an arbitrary Request/Response host', async
   assert.equal(session.status,204);
   const headers={Cookie:session.headers.get('Set-Cookie').split(';')[0]};
   assert.equal(await (await gate(new Request('https://site.test/data.json',{headers}),host)).text(),'private');
-  revoked=true; now+=300001;
+  revoked=true; now+=3600001;
   assert.equal((await gate(new Request('https://site.test/data.json',{headers}),host)).status,401);
   assert.equal(served,1);
 });
