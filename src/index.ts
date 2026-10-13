@@ -1,5 +1,5 @@
 import { measured, resolveDiagnostic } from './diagnostic-trace';
-import { diagnoseApplicationAccess } from './policy';
+import { diagnoseApplicationAccess, inspectApplicationAccess } from './policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { randomToken } from './crypto';
@@ -25,13 +25,11 @@ import {
   deleteSession,
   exchangeAuthorizationCode,
   findSessionUser,
-  getUserWithMembership,
   logAuthEvent,
   refreshDiscordMembership,
   revokeAccessToken,
   revokeAccessTokensForUser,
 } from './store';
-import { isApplicationAccessAllowed } from './policy';
 import type { Env, OAuthRequestRow } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -53,6 +51,17 @@ app.use('/token', async (c, next) => {
   c.header('Cache-Control', 'no-store');
   await next();
 });
+
+async function recordLoginEvent(c: Context<{ Bindings: Env }>, eventType: string, userId: string | null, clientId: string, detail: unknown): Promise<void> {
+  const task = logAuthEvent(c.env, eventType, userId, clientId, detail).catch((error: unknown) => {
+    console.error('AUTH_EVENT_WRITE_FAILED', { eventType, errorType: error instanceof Error ? error.name : 'unknown' });
+  });
+  try { c.executionCtx.waitUntil(task); }
+  catch (error) {
+    if (!(error instanceof Error)) throw error;
+    await task;
+  }
+}
 
 function secureCookie(env: Env): boolean {
   return env.COOKIE_SECURE !== 'false';
@@ -83,7 +92,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.2',
+  version: '0.2.3',
   now: new Date().toISOString(),
 }));
 
@@ -201,12 +210,12 @@ app.get('/auth/discord/callback', async (c) => {
   try {
     const discordAccessToken = await measured(trace, 'discord_code_exchange', () => exchangeDiscordCode(c.env, discordCode));
     const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken, trace);
-    const allowed = await measured(trace, 'policy', () => isApplicationAccessAllowed(c.env, userId, requestRow.client_id));
+    const access = await measured(trace, 'policy', () => diagnoseApplicationAccess(c.env, userId, requestRow.client_id));
 
     await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
 
-    if (!allowed) {
-      await logAuthEvent(c.env, 'discord.login.access_denied', userId, requestRow.client_id, { role, diagnosis: await diagnoseApplicationAccess(c.env, userId, requestRow.client_id) });
+    if (!access.allowed) {
+      await recordLoginEvent(c, 'discord.login.access_denied', userId, requestRow.client_id, { role, diagnosis: access });
       const response = c.redirect(redirectWithParams(requestRow.redirect_uri, {
         error: 'access_denied',
         state: requestRow.client_state,
@@ -217,14 +226,14 @@ app.get('/auth/discord/callback', async (c) => {
     }
 
     const code = await measured(trace, 'code_creation', () => createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge));
-    await logAuthEvent(c.env, 'discord.login.success', userId, requestRow.client_id, { role });
+    await recordLoginEvent(c, 'discord.login.success', userId, requestRow.client_id, { role });
 
     const session = await measured(trace, 'session_creation', () => createSession(c.env, userId));
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
     response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;
   } catch (error) {
-    await logAuthEvent(c.env, 'discord.login.error', null, requestRow.client_id, {
+    await recordLoginEvent(c, 'discord.login.error', null, requestRow.client_id, {
       message: error instanceof Error ? error.message : String(error),
     });
     return c.redirect(redirectWithParams(requestRow.redirect_uri, {
@@ -237,7 +246,9 @@ app.get('/auth/discord/callback', async (c) => {
 
 app.post('/token', async (c) => {
   const clientIdFromQuery = c.req.query('client_id') ?? '';
-  const origin = await corsOrigin(c, clientIdFromQuery);
+  const application = await getApplication(c.env, clientIdFromQuery);
+  const requestedOrigin = c.req.header('Origin');
+  const origin = requestedOrigin && application && isAllowedOrigin(application, requestedOrigin) ? requestedOrigin : null;
   if (c.req.header('Origin') && !origin) return jsonError(c, 403, 'CORS_DENIED', '허용되지 않은 Origin입니다.');
 
   const contentType = c.req.header('Content-Type') ?? '';
@@ -258,7 +269,6 @@ app.post('/token', async (c) => {
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  const application = await getApplication(c.env, clientId);
   if (!application || !isAllowedRedirect(application, redirectUri)) {
     const response = c.json({ ok: false, error: { code: 'INVALID_CLIENT', message: '등록되지 않은 앱 또는 redirect URI입니다.' } }, 400);
     return origin ? withCorsHeaders(response, origin) : response;
@@ -280,28 +290,29 @@ app.post('/token', async (c) => {
   }
 });
 
-app.get('/me', async (c) => {
+async function currentUserResponse(c: Context<{ Bindings: Env }>): Promise<Response> {
   const clientId = c.req.query('client_id') ?? '';
-  const application = await getApplication(c.env, clientId);
+  const token = bearerToken(c);
+  const [application, tokenInfo] = await Promise.all([
+    getApplication(c.env, clientId),
+    token && clientId ? inspectAccessToken(c.env, token, clientId) : Promise.resolve(null),
+  ]);
   const requestedOrigin = c.req.header('Origin');
   const origin = requestedOrigin && application && isAllowedOrigin(application, requestedOrigin) ? requestedOrigin : null;
   if (c.req.header('Origin') && !origin) return jsonError(c, 403, 'CORS_DENIED', '허용되지 않은 Origin입니다.');
 
-  const token = bearerToken(c);
   if (!token || !clientId) {
     const response = c.json({ ok: false, error: { code: 'UNAUTHORIZED', message: '로그인이 필요합니다.' } }, 401);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  const tokenInfo = await inspectAccessToken(c.env, token, clientId);
   if (!tokenInfo || application?.status !== 'active') {
     const response = c.json({ ok: false, error: { code: 'INVALID_TOKEN', message: '유효하지 않거나 만료된 token입니다.' } }, 401);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
   const userId = tokenInfo.userId;
-  const user = await getUserWithMembership(c.env, userId);
-  const access = await diagnoseApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true', { user, applicationStatus: application.status });
+  const { user, access } = await inspectApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true');
   if (!access.allowed) {
     if (access.reason === 'MEMBERSHIP_REFRESH_REQUIRED' || access.reason === 'REAUTHENTICATION_REQUIRED') {
       const response = c.json({ ok: false, error: { code: access.reason, message: 'Discord 인증으로 역할을 다시 확인해 주세요.' } }, 401);
@@ -319,6 +330,18 @@ app.get('/me', async (c) => {
   const response = c.json({ ok: true, data: user, expires_at: tokenInfo.expiresAt,
     application_access: { client_id: clientId, allowed: true, source: access.reason === 'MANUAL_GRANT' ? 'manual_grant' : 'policy' } });
   return origin ? withCorsHeaders(response, origin) : response;
+}
+
+app.get('/me', async (c) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      currentUserResponse(c),
+      new Promise<Response>(resolve => {
+        timer = setTimeout(() => resolve(jsonError(c, 503, 'AUTH_CHECK_TIMEOUT', '인증 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.')), 5500);
+      }),
+    ]);
+  } finally { if (timer !== undefined) clearTimeout(timer); }
 });
 
 app.post('/logout', async (c) => {

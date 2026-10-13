@@ -2,87 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isApplicationAccessAllowed } from '../../src/policy';
 import type { Env } from '../../src/types';
+import { readFile, readdir } from 'node:fs/promises';
+import * as miniflare from 'miniflare';
 
 type Role = 'user' | 'member' | 'admin';
 
-type MembershipState = {
-  user_id: string;
-  guild_id: string;
-  is_guild_member: number;
-  role: Role;
-  status: 'active' | 'inactive';
-  checked_at: number;
-  role_ids: string;
-};
-
-function createV8Env() {
-  let membership: MembershipState | null = null;
-
-  const env = {
-    NAKWOL_GUILD_ID: '1493410906456064112',
-    NAKWOL_MEMBER_ROLE_ID: '1553600098661957643',
-    NAKWOL_ADMIN_ROLE_ID: 'role-admin',
-    DISCORD_CLIENT_ID: 'discord-client',
-    DISCORD_CLIENT_SECRET: 'discord-secret',
-    AUTH_ORIGIN: 'https://auth.example.test',
-    DB: {
-      prepare(sql: string) {
-        return {
-          bind(...args: unknown[]) {
-            return {
-              async first() {
-                if (sql.includes("SELECT provider_user_id FROM auth_identities")) {
-                  return { provider_user_id: '1493410906456064113' };
-                }
-                if (sql.includes("FROM auth_identities WHERE provider = 'discord'")) {
-                  return { user_id: 'usr_v8' };
-                }
-                if (sql.includes('FROM applications')) return { status: 'active' };
-                if (sql.includes('SELECT access_policy FROM application_settings')) {
-                  return { access_policy: 'member' };
-                }
-                if (sql.includes('SELECT id, display_name, avatar_url, status FROM users')) {
-                  return {
-                    id: 'usr_v8',
-                    display_name: 'V8 Tester',
-                    avatar_url: null,
-                    status: 'active',
-                  };
-                }
-                if (sql.includes('SELECT role_ids FROM memberships')) return membership;
-                if (sql.includes('SELECT user_id, guild_id, is_guild_member, role, status, checked_at FROM memberships')) {
-                  return membership;
-                }
-                return null;
-              },
-              async run() {
-                if (sql.includes('INSERT INTO memberships')) {
-                  membership = {
-                    user_id: String(args[0]),
-                    guild_id: String(args[1]),
-                    is_guild_member: Number(args[2]),
-                    role: args[3] as Role,
-                    status: args[4] as 'active' | 'inactive',
-                    checked_at: Number(args[5]),
-                    role_ids: String(args[6]),
-                  };
-                }
-                return { success: true };
-              },
-            };
-          },
-        };
-      },
-    },
-  } as unknown as Env;
-
-  return {
-    env,
-    membership: () => membership,
-  };
+async function createV8Env() {
+  const options = { modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] };
+  const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
+  const DB = await mf.getD1Database('DB');
+  const migrations = new URL('../../migrations/', import.meta.url);
+  for (const file of (await readdir(migrations)).filter(f=>f.endsWith('.sql')).sort()) {
+    const sql = await readFile(new URL(file,migrations),'utf8');
+    for (const statement of sql.replace(/^--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean)) await DB.prepare(statement).run();
+  }
+  const env: Env = { DB, NAKWOL_GUILD_ID:'1493410906456064112', NAKWOL_MEMBER_ROLE_ID:'1553600098661957643',
+    DISCORD_CLIENT_ID:'discord-client', DISCORD_CLIENT_SECRET:'discord-secret', AUTH_ORIGIN:'https://auth.example.test' };
+  await DB.prepare("INSERT INTO users VALUES('usr_v8','V8 Tester',NULL,'active',0,0)").run();
+  await DB.prepare("INSERT INTO auth_identities VALUES('identity','usr_v8','discord','1493410906456064113',0,0)").run();
+  await DB.prepare("INSERT INTO applications VALUES('siege-calculator','Fixture','[]','active',0,0)").run();
+  return {env,dispose:()=>mf.dispose(),membership:()=>DB.prepare("SELECT role,status,is_guild_member FROM memberships WHERE user_id='usr_v8'").first<{role:string;status:string;is_guild_member:number}>()};
 }
 
-test('V8 refreshes Discord member -> user -> member and access policy follows the refreshed membership', async () => {
+test('V8 refreshes Discord member -> user -> member and access policy follows the refreshed membership', async t => {
   const store = await import('../../src/store');
   const refreshDiscordMembership = (store as typeof store & {
     refreshDiscordMembership?: (
@@ -98,7 +40,8 @@ test('V8 refreshes Discord member -> user -> member and access policy follows th
   );
   if (!refreshDiscordMembership) return;
 
-  const { env, membership } = createV8Env();
+  const { env, membership, dispose } = await createV8Env();
+  t.after(dispose);
   const originalFetch = globalThis.fetch;
   let roles = ['1553600098661957643'];
 
@@ -125,23 +68,23 @@ test('V8 refreshes Discord member -> user -> member and access policy follows th
     const asMember = await refreshDiscordMembership(env, 'discord-token-v8');
     assert.equal(asMember.userId, 'usr_v8');
     assert.equal(asMember.role, 'member');
-    assert.equal(membership()?.role, 'member');
-    assert.equal(membership()?.status, 'active');
+    assert.equal((await membership())?.role, 'member');
+    assert.equal((await membership())?.status, 'active');
     assert.equal(await isApplicationAccessAllowed(env, 'usr_v8', 'siege-calculator'), true);
 
     roles = [];
     const asUser = await refreshDiscordMembership(env, 'discord-token-v8');
     assert.equal(asUser.role, 'user');
-    assert.equal(membership()?.is_guild_member, 1, 'role removal does not mean the Discord user left the guild');
-    assert.equal(membership()?.role, 'user');
-    assert.equal(membership()?.status, 'inactive');
+    assert.equal((await membership())?.is_guild_member, 1, 'role removal does not mean the Discord user left the guild');
+    assert.equal((await membership())?.role, 'user');
+    assert.equal((await membership())?.status, 'inactive');
     assert.equal(await isApplicationAccessAllowed(env, 'usr_v8', 'siege-calculator'), false);
 
     roles = ['1553600098661957643'];
     const restored = await refreshDiscordMembership(env, 'discord-token-v8');
     assert.equal(restored.role, 'member');
-    assert.equal(membership()?.role, 'member');
-    assert.equal(membership()?.status, 'active');
+    assert.equal((await membership())?.role, 'member');
+    assert.equal((await membership())?.status, 'active');
     assert.equal(await isApplicationAccessAllowed(env, 'usr_v8', 'siege-calculator'), true);
   } finally {
     globalThis.fetch = originalFetch;

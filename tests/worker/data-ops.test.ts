@@ -19,7 +19,7 @@ test('DATA Ops uses a dedicated internal AUTH application with exact admin polic
 test('AUTH admin policy uses explicit platform operators, never Discord membership admin or Lab developer privilege', async () => {
   const policy = await root('src/policy.ts');
   assert.match(policy, /ApplicationAccessPolicy\s*=.*'admin'/s);
-  assert.match(policy, /SELECT role_ids FROM memberships/);
+  assert.ok(policy.includes('m.role_ids') && policy.includes('LEFT JOIN memberships m'));
   assert.doesNotMatch(policy, /fetchCurrentGuildMember/);
   assert.doesNotMatch(policy, /return Boolean\(user\.membership\?\.is_member\)/);
   assert.match(policy, /FROM auth_operators/);

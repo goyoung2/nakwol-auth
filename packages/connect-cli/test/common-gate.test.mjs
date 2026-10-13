@@ -29,7 +29,7 @@ for (const provider of ['cloudflare-workers','cloudflare-pages']) test(`${provid
   }
   const cli=fileURLToPath(new URL('../bin/nakwol-connect.mjs',import.meta.url));
   const result=JSON.parse(execFileSync(process.execPath,[cli,'protect','update','--root',root,'--json'],{encoding:'utf8'}));
-  assert.equal(result.protection.runtimeVersion,'0.7.4');
+  assert.equal(result.protection.runtimeVersion,'0.7.5');
   assert.equal(result.protection.provider,provider);
   assert.equal(result.protection.siteUrl,'https://site.test/');
   assert.equal((await inspectProtection(root,await readProjectConfig(root))).ok,true);
@@ -54,7 +54,7 @@ test('public common gate API protects an arbitrary Request/Response host', async
   assert.equal(session.status,204);
   const headers={Cookie:session.headers.get('Set-Cookie').split(';')[0]};
   assert.equal(await (await gate(new Request('https://site.test/data.json',{headers}),host)).text(),'private');
-  revoked=true; now+=300001;
+  revoked=true; now+=3600001;
   assert.equal((await gate(new Request('https://site.test/data.json',{headers}),host)).status,401);
   assert.equal(served,1);
 });

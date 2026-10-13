@@ -114,3 +114,58 @@ test('role admin enforces operator token audience, origin, member scope and live
     assert.ok(!(await unavailable.text()).includes('secret transport detail'));
   } finally { db.close(); }
 });
+
+test('botless role administration preserves existing requirements and permits explicit audited manual IDs', async () => {
+  const { db, env, app, request } = await fixture();
+  delete env.DISCORD_BOT_TOKEN;
+  db.prepare('INSERT INTO application_role_requirements VALUES(?,?,0)').run('site', JSON.stringify([subdivision]));
+  const manual = JSON.stringify({ client_id:'site', role_ids:[season, subdivision], manual_role_ids:true });
+  try {
+    const loaded = await app.request('/admin/api/roles', { headers:{ Authorization:'Bearer admin-token' } }, env);
+    assert.equal(loaded.status,200);
+    const payload = await loaded.json();
+    assert.equal(payload.catalog_available,false);
+    assert.equal(typeof payload.catalog_warning,'string');
+    assert.equal(payload.season_role.id,season);
+    assert.deepEqual(payload.roles,[]);
+    assert.deepEqual(payload.applications[0].required_role_ids,[subdivision]);
+    assert.equal((await request(JSON.stringify({ client_id:'site',role_ids:[subdivision] }))).status,503);
+    assert.equal((await request(manual,'wrong-client')).status,401);
+    assert.equal((await request(manual,'member-token')).status,403);
+    assert.equal((await request(manual,'admin-token','https://evil.test')).status,403);
+    for (const role_ids of [['bad'],[guild],Array(26).fill(subdivision)]) {
+      assert.equal((await request(JSON.stringify({client_id:'site',role_ids,manual_role_ids:true}))).status,400);
+    }
+    db.prepare('UPDATE application_settings SET access_policy=?').run('guest');
+    assert.equal((await request(manual)).status,400);
+    db.prepare('UPDATE application_settings SET access_policy=?').run('member');
+    assert.equal((await request(manual)).status,200);
+    assert.deepEqual(await getRequiredRoleIds(env,'site'),[subdivision]);
+    const event=db.prepare('SELECT detail FROM auth_events').get();
+    assert.equal(typeof event?.detail,'string');
+    assert.ok(String(event?.detail).includes('manual_role_ids'));
+    const html=await (await app.request('/admin/roles',{},env)).text();
+    assert.ok(html.includes('역할 ID 직접 입력'));
+    assert.ok(html.includes('manual_role_ids:confirm.checked'));
+    assert.ok(!html.includes('checked.delete(id);}const save'));
+  } finally { db.close(); }
+});
+
+test('manual mode cannot override a successful Discord catalog or missing base season role', async (t) => {
+  const { db, request, app, env } = await fixture();
+  const catalog=[{id:season,name:'시즌3'},{id:subdivision,name:'세부 역할'}];
+  t.mock.method(globalThis,'fetch',async()=>Response.json(catalog));
+  const manual=(id: string)=>JSON.stringify({client_id:'site',role_ids:[id],manual_role_ids:true});
+  try {
+    assert.equal((await request(manual('1553600098661957699'))).status,400);
+    assert.deepEqual(await getRequiredRoleIds(env,'site'),[]);
+    catalog.splice(0,1);
+    assert.equal((await request(manual(subdivision))).status,503);
+    t.mock.method(globalThis,'fetch',async()=>{throw new Error('private transport error');});
+    const fallback=await app.request('/admin/api/roles',{headers:{Authorization:'Bearer admin-token'}},env);
+    assert.equal(fallback.status,200);
+    assert.ok(!(await fallback.text()).includes('private transport error'));
+    assert.equal((await request(manual(subdivision))).status,200);
+    assert.deepEqual(await getRequiredRoleIds(env,'site'),[subdivision]);
+  } finally { db.close(); }
+});
