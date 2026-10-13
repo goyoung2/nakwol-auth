@@ -59,8 +59,8 @@ test('using a session slides its expiry forward but never past 30 days', async (
   const userId = await store.findSessionUser(env as never, 'raw-session-token');
   assert.equal(userId, 'usr_sliding');
 
-  const select = calls.find((c) => /SELECT user_id, expires_at, created_at FROM auth_sessions/.test(c.sql))!;
-  assert.match(select.sql, /expires_at > \? AND created_at > \?/);
+  const select = calls.find((c) => /FROM auth_sessions/.test(c.sql))!;
+  assert.ok(select.sql.includes('s.expires_at > ? AND s.created_at > ?'));
   const absoluteFloor = select.args[2] as number;
   assert.ok(Math.abs(absoluteFloor - (now - 30 * DAY)) < 5000);
 

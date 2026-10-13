@@ -1,51 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getApplicationAccessPolicy, isApplicationAccessAllowed } from '../../src/policy';
-import type { Env } from '../../src/types';
+import { createAuthFixture } from './auth-fixture';
 
-function envWithPolicy(accessPolicy: string | null, status = 'active', role = 'user'): Env {
-  return {
-    DB: {
-      prepare(query: string) {
-        return {
-          bind() {
-            return {
-              async first() {
-                if (query.includes('FROM applications')) return { status: 'active' };
-                if (query.includes('FROM application_settings')) return accessPolicy == null ? null : { access_policy: accessPolicy };
-                if (query.includes('FROM users')) return { id: 'user-1', display_name: 'User', avatar_url: null, status };
-                if (query.includes('FROM memberships')) return { user_id: 'user-1', guild_id: 'guild-1', is_guild_member: role === 'user' ? 0 : 1, role, status: 'active', checked_at: 0 };
-                return null;
-              },
-            };
-          },
-        };
-      },
-    } as unknown as D1Database,
-  } as Env;
-}
-
-test('application access policy is member when settings are missing', async () => {
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy(null), 'missing-app'), 'member');
-});
-
-test('application access policy fails closed to member when stored value is malformed', async () => {
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('unexpected'), 'broken-app'), 'member');
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy(''), 'empty-policy-app'), 'member');
-});
-
-test('guest policy and stored public alias resolve to guest', async () => {
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('guest'), 'guest-app'), 'guest');
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('public'), 'legacy-app'), 'guest');
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('member'), 'member-app'), 'member');
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('admin'), 'admin-app'), 'admin');
-  assert.equal(await getApplicationAccessPolicy(envWithPolicy('lab'), 'lab-app'), 'lab');
-});
-
-test('guest requires an active login and cached membership alone cannot authorize member access', async () => {
-  assert.equal(await isApplicationAccessAllowed(envWithPolicy('guest'), 'user-1', 'guest-app'), true);
-  assert.equal(await isApplicationAccessAllowed(envWithPolicy('public'), 'user-1', 'legacy-app'), true);
-  assert.equal(await isApplicationAccessAllowed(envWithPolicy('guest', 'disabled'), 'user-1', 'guest-app'), false);
-  assert.equal(await isApplicationAccessAllowed(envWithPolicy('member'), 'user-1', 'member-app'), false);
-  assert.equal(await isApplicationAccessAllowed(envWithPolicy('member', 'active', 'member'), 'user-1', 'member-app'), false);
+test('policy defaults and authorization stay fail-closed with real database rows', async t => {
+  const {env,DB,dispose}=await createAuthFixture();t.after(dispose);
+  const policy=async(value:string)=>DB.prepare("INSERT OR REPLACE INTO application_settings(client_id,access_policy,created_at,updated_at) VALUES('site',?,0,0)").bind(value).run();
+  await t.test('missing and malformed settings require member',async()=>{
+    assert.equal(await getApplicationAccessPolicy(env,'site'),'member');
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+    await DB.prepare('PRAGMA ignore_check_constraints=ON').run();
+    for(const value of ['unexpected','']) {
+      await policy(value);
+      assert.equal(await getApplicationAccessPolicy(env,'site'),'member');
+      assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+    }
+  });
+  await t.test('guest and public alias require an active existing user and application',async()=>{
+    for(const value of ['guest','public']) {
+      await policy(value);
+      assert.equal(await getApplicationAccessPolicy(env,'site'),'guest');
+      assert.equal(await isApplicationAccessAllowed(env,'user','site'),true);
+      assert.equal(await isApplicationAccessAllowed(env,'missing','site'),false);
+      assert.equal(await isApplicationAccessAllowed(env,'user','missing'),false);
+      await DB.prepare("UPDATE users SET status='disabled' WHERE id='user'").run();
+      assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+      await DB.prepare("UPDATE users SET status='active' WHERE id='user'").run();
+    }
+  });
+  await t.test('stale membership cannot authorize member access',async()=>{
+    await policy('member');
+    await DB.prepare("INSERT INTO memberships(user_id,guild_id,is_guild_member,role,status,checked_at,role_ids) VALUES('user',?,1,'member','active',0,?)")
+      .bind(env.NAKWOL_GUILD_ID,JSON.stringify([env.NAKWOL_MEMBER_ROLE_ID])).run();
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+    await DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='user'").bind(Date.now()).run();
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),true);
+  });
+  await t.test('admin requires AUTH operator; lab developer does not grant admin',async()=>{
+    await policy('admin');
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+    await DB.prepare("INSERT INTO connect_developers(user_id,role,status,created_at,updated_at) VALUES('user','developer','active',0,0)").run();
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),false);
+    await policy('lab');
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),true);
+    await policy('admin');
+    await DB.prepare("INSERT INTO auth_operators(user_id,created_at) VALUES('user',0)").run();
+    assert.equal(await isApplicationAccessAllowed(env,'user','site'),true);
+  });
 });

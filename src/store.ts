@@ -11,20 +11,17 @@ export const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const AUTH_CODE_TTL_MS = 2 * 60 * 1000;
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
 
-async function credentialsInvalidated(env: Env, userId: string, issuedAt: number): Promise<boolean> {
-  const row = await env.DB.prepare(`SELECT requested_at FROM user_reauthentication WHERE user_id = ?`)
-    .bind(userId).first<{ requested_at: number }>();
-  return Boolean(row && issuedAt <= row.requested_at);
-}
-
 export async function findSessionUser(env: Env, rawToken: string | undefined): Promise<string | null> {
   if (!rawToken) return null;
   const hash = await sha256Base64Url(rawToken);
   const now = Date.now();
   const row = await env.DB.prepare(
-    `SELECT user_id, expires_at, created_at FROM auth_sessions WHERE token_hash = ? AND expires_at > ? AND created_at > ?`
+    `SELECT s.user_id, s.expires_at, s.created_at FROM auth_sessions s
+      LEFT JOIN user_reauthentication r ON r.user_id = s.user_id
+      WHERE s.token_hash = ? AND s.expires_at > ? AND s.created_at > ?
+      AND (r.requested_at IS NULL OR s.created_at > r.requested_at)`
   ).bind(hash, now, now - SESSION_ABSOLUTE_TTL_MS).first<SessionRow & { created_at: number }>();
-  if (!row || await credentialsInvalidated(env, row.user_id, Number(row.created_at))) return null;
+  if (!row) return null;
   const expiresAt = sessionExpiry(Number(row.created_at), now);
   await env.DB.prepare(`UPDATE auth_sessions SET last_used_at = ?, expires_at = ? WHERE token_hash = ?`).bind(now, expiresAt, hash).run();
   return row.user_id;
@@ -60,12 +57,12 @@ export async function upsertDiscordUser(env: Env, discordUser: DiscordUser, disp
   ).bind(discordUser.id).first<{ user_id: string }>();
 
   if (existing) {
-    await env.DB.prepare(
-      `UPDATE users SET display_name = ?, avatar_url = ?, updated_at = ? WHERE id = ?`
-    ).bind(displayName, discordAvatarUrl(discordUser), now, existing.user_id).run();
-    await env.DB.prepare(
-      `UPDATE auth_identities SET updated_at = ? WHERE provider = 'discord' AND provider_user_id = ?`
-    ).bind(now, discordUser.id).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE users SET display_name = ?, avatar_url = ?, updated_at = ? WHERE id = ?')
+        .bind(displayName, discordAvatarUrl(discordUser), now, existing.user_id),
+      env.DB.prepare("UPDATE auth_identities SET updated_at = ? WHERE provider = 'discord' AND provider_user_id = ?")
+        .bind(now, discordUser.id),
+    ]);
     return existing.user_id;
   }
 
@@ -147,35 +144,38 @@ export async function exchangeAuthorizationCode(env: Env, args: { code: string; 
 
   const accessToken = randomToken(32);
   const tokenHash = await sha256Base64Url(accessToken);
-  const expiresAt = now + ACCESS_TOKEN_TTL_MS;
-  await env.DB.batch([
-    env.DB.prepare(`UPDATE auth_codes SET used_at = ? WHERE code_hash = ?`).bind(now, codeHash),
+  const issuedAt = Date.now();
+  const expiresAt = issuedAt + ACCESS_TOKEN_TTL_MS;
+  const [issued] = await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)`
-    ).bind(tokenHash, row.user_id, args.clientId, expiresAt, now),
+      `INSERT INTO access_tokens(token_hash, user_id, client_id, expires_at, revoked_at, created_at)
+       SELECT ?, c.user_id, c.client_id, ?, NULL, ? FROM auth_codes c
+       WHERE c.code_hash = ? AND c.used_at IS NULL AND c.expires_at > ?
+         AND c.client_id = ? AND c.redirect_uri = ? AND c.code_challenge = ?
+         AND NOT EXISTS (SELECT 1 FROM user_reauthentication r WHERE r.user_id = c.user_id AND c.created_at <= r.requested_at)`
+    ).bind(tokenHash, expiresAt, issuedAt, codeHash, issuedAt, args.clientId, args.redirectUri, expected),
+    env.DB.prepare(
+      `UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL
+         AND EXISTS (SELECT 1 FROM access_tokens WHERE token_hash = ?)`
+    ).bind(issuedAt, codeHash, tokenHash),
   ]);
+  if (issued?.meta.changes !== 1) throw new Error('INVALID_OR_EXPIRED_CODE');
   return { accessToken, expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000) };
 }
 
 export async function authenticateAccessToken(env: Env, rawToken: string, clientId: string): Promise<string | null> {
-  const hash = await sha256Base64Url(rawToken);
-  const now = Date.now();
-  const row = await env.DB.prepare(
-    `SELECT user_id, client_id, expires_at, revoked_at, created_at FROM access_tokens WHERE token_hash = ?`
-  ).bind(hash).first<{ user_id: string; client_id: string; expires_at: number; revoked_at: number | null; created_at: number }>();
-  if (!row || row.revoked_at || row.expires_at <= now || row.client_id !== clientId) return null;
-  if (await credentialsInvalidated(env, row.user_id, Number(row.created_at))) return null;
-  return row.user_id;
+  return (await inspectAccessToken(env, rawToken, clientId))?.userId ?? null;
 }
 
 export async function inspectAccessToken(env: Env, rawToken: string, clientId: string): Promise<{ userId: string; clientId: string; expiresAt: number } | null> {
   const hash = await sha256Base64Url(rawToken);
   const now = Date.now();
   const row = await env.DB.prepare(
-    `SELECT user_id, client_id, expires_at, revoked_at, created_at FROM access_tokens WHERE token_hash = ?`
+    `SELECT t.user_id, t.client_id, t.expires_at, t.revoked_at, t.created_at FROM access_tokens t
+      LEFT JOIN user_reauthentication r ON r.user_id = t.user_id
+      WHERE t.token_hash = ? AND (r.requested_at IS NULL OR t.created_at > r.requested_at)`
   ).bind(hash).first<{ user_id: string; client_id: string; expires_at: number; revoked_at: number | null; created_at: number }>();
   if (!row || row.revoked_at || row.expires_at <= now || row.client_id !== clientId) return null;
-  if (await credentialsInvalidated(env, row.user_id, Number(row.created_at))) return null;
   return { userId: row.user_id, clientId: row.client_id, expiresAt: Number(row.expires_at) };
 }
 

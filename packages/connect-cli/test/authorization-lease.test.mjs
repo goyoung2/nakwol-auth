@@ -51,12 +51,18 @@ function fixture(t) {
     advance(ms) { now += ms; }, fail(status) { authStatus = status; }, delay(ms) { delay = ms; },
     authElapsed(ms) { elapsedDuringAuth = ms; },
     request(path = '/', cookie, options = {}) { return gate(new Request(new URL(path, settings.siteUrl), { ...options, headers: { ...(cookie ? { Cookie: cookie } : {}), ...options.headers } }), host); },
-    async login() {
+    async login(lease = LEASE) {
       const response = await gate(new Request(new URL('/__nakwol/session', settings.siteUrl), { method: 'POST', headers: { Origin: new URL(settings.siteUrl).origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ access_token: `token-${id}` }) }), host);
       assert.equal(response.status, 204);
       const setCookie = response.headers.get('Set-Cookie');
       for (const flag of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/']) assert.ok(setCookie.includes(flag));
-      return setCookie.split(';')[0];
+      const cookie = setCookie.split(';')[0];
+      if (lease === 3600000) return cookie;
+      // Preserve previously issued five-minute cookies for renewal regression coverage.
+      const value = await unpack(cookie, settings);
+      value.token = `previously-issued-${id}`;
+      value.authorization.leaseUntil = Math.min(value.authorization.verifiedAt + lease, value.expires);
+      return pack(value, settings);
     },
   };
 }
@@ -113,7 +119,10 @@ test('lease: expiry coalesces 300 requests and subsequent old-cookie waves witho
   assert.equal(f.calls, 2);
   f.advance(2);
   assert.equal((await f.request('/next.webp', cookie)).status, 200);
-  assert.equal(f.calls, 3, 'cache hit must not extend fixed verified time');
+  assert.equal(f.calls, 2);
+  f.advance(3600000);
+  assert.equal((await f.request('/expired.webp', cookie)).status, 401);
+  assert.equal(f.calls, 2, 'cache hit must not extend session expiration');
 });
 
 for (const status of [401, 403, 500]) test(`lease: expired proof and AUTH ${status} never serve assets`, async t => {
@@ -131,7 +140,7 @@ test('lease: invalid authenticated authorization claims cannot grant access', as
   assert.equal(value.authorization.userId.startsWith('user-'), true);
   assert.equal(value.authorization.allowed, true);
   assert.ok(value.authorization.leaseUntil - value.authorization.verifiedAt <= LEASE);
-  for (const change of [{ allowed: false }, { userId: '' }, { verifiedAt: f.now + 1000 }, { leaseUntil: f.now + LEASE + 1 }]) {
+  for (const change of [{ allowed: false }, { userId: '' }, { verifiedAt: f.now + 1000 }, { leaseUntil: f.now + 3600001 }]) {
     const invalid = await pack({ ...value, authorization: { ...value.authorization, ...change } }, f.settings);
     assert.ok([401, 403].includes((await f.request('/data.json', invalid)).status));
   }
@@ -212,4 +221,22 @@ test('lease: failed initial member authorization never issues a usable session',
   assert.equal(response.status, 403);
   assert.ok(!response.headers.has('Set-Cookie') || response.headers.get('Set-Cookie').includes('Max-Age=0'));
   assert.equal(f.served, 0);
+});
+
+
+test('lease: new session stays local for one hour and expires without serving protected data', async t => {
+  const f = fixture(t), started = f.now, cookie = await f.login(3600000);
+  const value = await unpack(cookie, f.settings);
+  assert.equal(value.authorization.leaseUntil, started + 3600000);
+  assert.equal(value.expires, started + 3600000);
+  f.fail(500);
+  f.advance(3599999);
+  const responses = await Promise.all(Array.from({ length: 300 }, (_, i) => f.request(`/images/${i}.webp`, cookie)));
+  assert.ok(responses.every(response => response.status === 200));
+  assert.equal(f.calls, 1);
+  f.advance(1);
+  for (const options of [{}, { method: 'HEAD' }, { headers: { Range: 'bytes=0-3' } }]) {
+    assert.equal((await f.request('/image.webp', cookie, options)).status, 401);
+  }
+  assert.equal(f.served, 300);
 });

@@ -18,6 +18,6 @@ test('Discord callback still re-checks access with the refreshed roles', async (
   const src = await readFile(new URL('../../src/index.ts', import.meta.url), 'utf8');
   const callback = src.slice(src.indexOf("app.get('/auth/discord/callback'"), src.indexOf("app.post('/token'"));
 
-  assert.match(callback, /refreshDiscordMembership[\s\S]*isApplicationAccessAllowed\(c\.env, userId, requestRow\.client_id\)/);
-  assert.match(callback, /if \(!allowed\) \{[\s\S]*error: 'access_denied'/);
+  assert.match(callback, /refreshDiscordMembership[\s\S]*diagnoseApplicationAccess\(c\.env, userId, requestRow\.client_id\)/);
+  assert.match(callback, /if \(!access.allowed\) \{[\s\S]*error: 'access_denied'/);
 });
