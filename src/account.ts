@@ -83,7 +83,7 @@ export function accountPageHtml(): string {
   </main>
 
   <script type="module">
-    import { NakwolAuthClient } from '/sdk/v0.3.3/nakwol-auth-web.js';
+    import { NakwolAuthClient } from '/sdk/v0.3.4/nakwol-auth-web.js';
 
     const ACCOUNT_CLIENT_ID = 'nakwol-account-center';
     const auth = new NakwolAuthClient({

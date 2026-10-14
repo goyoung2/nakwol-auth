@@ -19,7 +19,7 @@ test('self-contained runtime survives offline AUTH, exports only sanitized obser
   const calls=[];const f=fixture(async(url)=>{calls.push(url);throw new TypeError('private bearer raw URL');});
   await f.runtime.run();
   assert.equal(calls.length,5);
-  assert.ok(calls.every(url=>url.startsWith('https://auth.test/diagnostics/')||url==='https://auth.test/sdk/v0.3.3/nakwol-auth-web.js'||url==='https://site.test/__nakwol/diagnostics/ping'));
+  assert.ok(calls.every(url=>url.startsWith('https://auth.test/diagnostics/')||url==='https://auth.test/sdk/v0.3.4/nakwol-auth-web.js'||url==='https://site.test/__nakwol/diagnostics/ping'));
   const report=f.runtime.localReport();
   assert.equal(report.upload_confirmed,false);assert.equal(report.server_reference,null);assert.equal(report.observations.length,4);
   assert.ok(report.observations.every(o=>o.outcome==='timeout_or_cors'&&o.http_status===null));

@@ -6,10 +6,10 @@ for (const path of ['/?deck=123#detail', '/build/100?user=1#unit']) {
   test(`login preserves original URL ${path} across OAuth callback`, async () => {
     const storage = new Map();
     const sessionStorage = { getItem: k => storage.get(k) || null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) };
-    const elements = Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(k => [k, {}]));
+    const elements = Object.fromEntries(['login-progress','status','login','retry','recovery','diagnostics-login'].map(k => [k, {}]));
     let authenticated = false, target;
     const sdk = { NakwolAuthClient: class { async bootstrap() { return authenticated ? {} : null; } getAccessToken() { return 'test'; } } };
-    const source = loginPage({ clientId: 'site', authOrigin: 'https://auth.test', siteUrl: 'https://site.test/' }, 401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')", 'sdk');
+    const source = loginPage({ clientId: 'site', authOrigin: 'https://auth.test', siteUrl: 'https://site.test/' }, 401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')", 'sdk');
     const run = new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
     async function visit(path) {
       const url = new URL(path, 'https://site.test');
@@ -23,10 +23,10 @@ for (const path of ['/?deck=123#detail', '/build/100?user=1#unit']) {
 }
 
 for (const status of [401,403]) test(`server session denial ${status} clears credentials and allows manual retry`, async () => {
-  const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')",'sdk');
+  const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')",'sdk');
   const run=new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
   let cleared=0,denied=0,retried=0;
-  const elements=Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(k=>[k,{}]));
+  const elements=Object.fromEntries(['login-progress','status','login','retry','recovery','diagnostics-login'].map(k=>[k,{}]));
   const sdk={NakwolAuthClient:class{
     async bootstrap(){return {};}
     getAccessToken(){return 'fixture';}
@@ -44,8 +44,8 @@ for (const status of [401,403]) test(`server session denial ${status} clears cre
 
 for (const outcome of ['authenticated', 'anonymous', 'error']) test(`login controls wait for automatic SSO: ${outcome}`, async () => {
   const html = loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401);
-  const elements = Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(id => [id, {hidden: new RegExp(`<[^>]+id="${id}"[^>]* hidden`).test(html)}]));
-  const source = html.split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')",'sdk');
+  const elements = Object.fromEntries(['login-progress','status','login','retry','recovery','diagnostics-login'].map(id => [id, {hidden: new RegExp(`<[^>]+id="${id}"[^>]* hidden`).test(html)}]));
+  const source = html.split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')",'sdk');
   let resolveUser, rejectUser;
   const pending = new Promise((resolve,reject) => {resolveUser=resolve;rejectUser=reject;});
   const sdk = {NakwolAuthClient:class {bootstrap(){return pending;} getAccessToken(){return 'fixture';}}};
@@ -65,11 +65,11 @@ for (const outcome of ['authenticated', 'anonymous', 'error']) test(`login contr
 for(const failure of ['rejected','pending'])test(`SDK ${failure} leaves both retry controls actionable without automatic OAuth`,async()=>{
   const ticket={reference:'dg_'+'a'.repeat(24),capability:'b'.repeat(43),expires_at:Date.now()+60000};
   const values=new Map([['nakwol:diagnostics:site',JSON.stringify({ticket,report:{observations:[]},at:Date.now(),acknowledgement:false})]]);
-  const elements=Object.fromEntries(['status','login','retry','recovery','diagnostics-login','diagnostics-status'].map(id=>[id,{}]));
+  const elements=Object.fromEntries(['login-progress','status','login','retry','recovery','diagnostics-login','diagnostics-status'].map(id=>[id,{}]));
   let imports=0,navigations=0;
   const loadSdk=()=>{imports++;return failure==='pending'?new Promise(()=>{}):Promise.reject(new Error('private credential error'));};
-  const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')",'loadSdk()');
-  assert.match(source,/7000/);
+  const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')",'loadSdk()');
+  assert.match(source,/45000/);
   const run=new (Object.getPrototypeOf(async function(){}).constructor)('loadSdk','location','document','sessionStorage','fetch','setTimeout',"const navigator={userAgent:'fixture'};const window={fetch,navigator};\n"+source);
   await run(loadSdk,{origin:'https://site.test',pathname:'/',search:'',hash:'',assign(){navigations++;},replace(){navigations++;}},{getElementById:id=>elements[id]},
     {getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},async()=>Response.json({ok:true,reference:ticket.reference}), (fn,ms)=>setTimeout(fn,Math.min(ms,5)));
@@ -85,7 +85,7 @@ for(const failure of ['anonymous',401,403,503,'cookie-loop'])test(`diagnostic te
  const ticket={reference:'dg_'+'a'.repeat(24),capability:'b'.repeat(43),expires_at:Date.now()+60000};
  const values=new Map([['nakwol:diagnostics:site',JSON.stringify({ticket,report:{observations:[{probe:'auth_ping',outcome:'ok',duration_ms:1,http_status:200}]},at:Date.now(),acknowledgement:true})]]);
  if(failure==='cookie-loop')values.set('nakwol:server:return:site:attempts',JSON.stringify([Date.now(),Date.now()]));
- const elements=Object.fromEntries(['status','login','retry','recovery','diagnostics-login'].map(id=>[id,{}]));
+ const elements=Object.fromEntries(['login-progress','status','login','retry','recovery','diagnostics-login'].map(id=>[id,{}]));
  const uploads=[];
  const fetch=async(url,options)=>{
   if(String(url).includes('/reports/')){uploads.push(JSON.parse(options.body));return Response.json({ok:true,reference:ticket.reference});}
@@ -97,7 +97,7 @@ for(const failure of ['anonymous',401,403,503,'cookie-loop'])test(`diagnostic te
   async bootstrap(){await this.fetch('https://auth.test/me?client_id=site');return failure==='anonymous'?null:{};}
   getAccessToken(){return 'private access token';}clearDeniedLogin(){}
  }};
- const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')",'sdk');
+ const source=loginPage({clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'},401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')",'sdk');
  const run=new (Object.getPrototypeOf(async function(){}).constructor)('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'};const window={fetch,navigator};\n"+source);
  await run(sdk,{origin:'https://site.test',pathname:'/',search:'',hash:'',replace(){throw new Error('terminal failure must stay on page');}},{getElementById:id=>elements[id]},
  {getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},fetch);

@@ -7,7 +7,9 @@ import sdkV031Source from './assets/nakwol-auth-web-v0.3.1.js.txt';
 import sdkV032Source from './assets/nakwol-auth-web-v0.3.2.js.txt';
 import sdkV033Source from './assets/nakwol-auth-web-v0.3.3.js.txt';
 
-export const NAKWOL_AUTH_WEB_SDK_VERSION = '0.3.3';
+import sdkV034Source from './assets/nakwol-auth-web-v0.3.4.js.txt';
+
+export const NAKWOL_AUTH_WEB_SDK_VERSION = '0.3.4';
 
 function javascriptResponse(source: string, cacheControl: string): Response {
   return new Response(source, {
@@ -44,11 +46,15 @@ export function registerSdkRoutes(app: Hono<any>) {
   );
 
   app.get('/sdk/nakwol-auth-web.js', () =>
-    javascriptResponse(sdkV033Source.replaceAll('../v0.3.2/nakwol-auth-web.js', './v0.3.2/nakwol-auth-web.js'), 'public, max-age=300')
+    javascriptResponse(sdkV034Source.replaceAll('../v0.3.2/nakwol-auth-web.js', './v0.3.2/nakwol-auth-web.js'), 'public, max-age=300')
   );
 
   app.get('/sdk/v0.3.3/nakwol-auth-web.js', () =>
     javascriptResponse(sdkV033Source, 'public, max-age=31536000, immutable')
+  );
+
+  app.get('/sdk/v0.3.4/nakwol-auth-web.js', () =>
+    javascriptResponse(sdkV034Source, 'public, max-age=31536000, immutable')
   );
 
   app.get('/sdk/manifest.json', (c) => {
@@ -56,7 +62,7 @@ export function registerSdkRoutes(app: Hono<any>) {
       ok: true,
       name: 'nakwol-auth-web',
       stable: NAKWOL_AUTH_WEB_SDK_VERSION,
-      module: '/sdk/v0.3.3/nakwol-auth-web.js',
+      module: '/sdk/v0.3.4/nakwol-auth-web.js',
       alias: '/sdk/nakwol-auth-web.js',
       format: 'browser-esm',
     });

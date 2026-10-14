@@ -24,6 +24,7 @@
   let activeClient = null;
   let authGuard = null;
   let bodyLock = null;
+  let waitTimer;
 
   const lockBody = () => {
     if (!authRequired || bodyLock || !document.body) return;
@@ -98,10 +99,14 @@
     const diagnostic=document.createElement('a');
     const diagnosticUrl=new URL('/diagnostics',authOrigin);diagnosticUrl.searchParams.set('client_id',clientId);diagnostic.href=diagnosticUrl.href;diagnostic.textContent='접속 진단·보고서 보내기';
     Object.assign(diagnostic.style,{display:'block',marginTop:'16px',color:'#c7d2fe',fontSize:'14px'});
-    card.append(title, copy, button, recovery,diagnostic);
+    const progress=document.createElement('progress');
+    progress.setAttribute('aria-label','접속 확인 중');
+    Object.assign(progress.style,{width:'100%',marginTop:'16px',accentColor:'#5865f2'});
+    waitTimer=setTimeout(()=>{copy.hidden=false;copy.textContent='연결이 평소보다 오래 걸리고 있습니다. 확인을 계속 진행하고 있으니 잠시 기다려 주세요.';},3000);
+    card.append(title, copy, progress, button, recovery,diagnostic);
     root.appendChild(card);
     document.documentElement.appendChild(root);
-    authGuard = { root, title, copy, button, recovery };
+    authGuard = { root, title, copy, button, recovery, progress };
     lockBody();
     return authGuard;
   };
@@ -109,6 +114,8 @@
   const setAuthGuardState = (state, error = null) => {
     const guard = ensureAuthGuard();
     if (!guard) return;
+    clearTimeout(waitTimer);
+    guard.progress.hidden = state !== 'login';
     guard.recovery.hidden = state !== 'error';
     guard.recovery.style.display = state === 'error' ? 'block' : 'none';
     guard.copy.hidden = false;
@@ -139,6 +146,7 @@
 
   const releaseAuthGuard = () => {
     if (!authRequired) return;
+    clearTimeout(waitTimer);
     authGuard?.root.remove();
     authGuard = null;
     if (bodyLock && document.body) {
@@ -186,7 +194,7 @@
     try {
       if (authRequired && !restoredUser) ensureAuthGuard();
       let sdkTimer;
-      const sdk = await Promise.race([import(`${authOrigin}/sdk/v0.3.3/nakwol-auth-web.js`), new Promise((_, reject) => { sdkTimer = setTimeout(() => reject(Object.assign(new Error('로그인 모듈 연결이 지연되고 있습니다.'), { code: 'SDK_UNAVAILABLE' })), 7000); })]).finally(() => clearTimeout(sdkTimer));
+      const sdk = await Promise.race([import(`${authOrigin}/sdk/v0.3.4/nakwol-auth-web.js`), new Promise((_, reject) => { sdkTimer = setTimeout(() => reject(Object.assign(new Error('로그인 모듈 연결이 지연되고 있습니다.'), { code: 'SDK_UNAVAILABLE' })), 45000); })]).finally(() => clearTimeout(sdkTimer));
       const client = new sdk.NakwolAuthClient({ clientId, redirectUri, authOrigin, autoSso });
       if (script.dataset.serverGate === 'true') {
         const rememberReturnPage = () => {

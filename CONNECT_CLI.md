@@ -1,4 +1,4 @@
-# NAKWOL Connect CLI 0.7.6
+# NAKWOL Connect CLI 0.7.7
 
 NAKWOL Connect CLI는 코딩 에이전트가 NAKWOL AUTH와 NAKWOL DATA를 프로젝트에 연결하고, 현재 DATA API 계약까지 자동 발견하는 공식 도구입니다.
 

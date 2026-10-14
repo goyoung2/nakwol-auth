@@ -20,7 +20,7 @@ function environment(): Env {
 const user = { id: '1493410906456064113', username: 'fixture' };
 const member = { roles: ['1553600098661957643'] };
 
-test('ordinary token exchange aborts stalled headers after five seconds without retry', async (t) => {
+test('ordinary token exchange aborts stalled headers after twenty seconds without retry', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let signal: AbortSignal | null | undefined;
   let calls = 0;
@@ -29,7 +29,7 @@ test('ordinary token exchange aborts stalled headers after five seconds without 
     return new Promise<Response>(() => {});
   });
   const result = assert.rejects(exchangeDiscordCode(environment(), 'one-time-code'), { code: 'timeout', operation: 'token' });
-  t.mock.timers.tick(5000);
+  t.mock.timers.tick(20000);
   await result;
   assert.equal(signal?.aborted, true);
   assert.equal(calls, 1);
@@ -46,7 +46,7 @@ test('successful headers cannot leave token body pending past its deadline', asy
   })));
   const result = assert.rejects(exchangeDiscordCode(environment(), 'code'), { code: 'timeout' });
   await reading;
-  t.mock.timers.tick(5000);
+  t.mock.timers.tick(20000);
   await result;
   assert.equal(cancelled, true);
 });
@@ -81,7 +81,7 @@ test('ordinary membership body stalls fail closed even after identity succeeds',
   });
   const result = assert.rejects(fetchDiscordIdentity(environment(), 'access-token'), { code: 'timeout', operation: 'member' });
   await Promise.all([reading, identity]);
-  t.mock.timers.tick(5000);
+  t.mock.timers.tick(20000);
   await result;
 });
 
@@ -121,4 +121,21 @@ test('malformed token JSON and empty access tokens cannot establish identity', a
     await assert.rejects(exchangeDiscordCode(environment(), 'code'), { code: 'invalid_response' });
     t.mock.restoreAll();
   }
+});
+
+test('a slow token response succeeds after the old five-second cutoff without retry', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release: (response: Response) => void = () => {};
+  let signal: AbortSignal | null | undefined;
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', (_input: unknown, init: RequestInit) => {
+    calls++; signal = init.signal;
+    return new Promise<Response>(resolve => { release = resolve; });
+  });
+  const result = exchangeDiscordCode(environment(), 'one-time-code');
+  t.mock.timers.tick(12000);
+  assert.equal(signal?.aborted, false);
+  release(Response.json({ access_token: 'slow-success' }));
+  assert.equal(await result, 'slow-success');
+  assert.equal(calls, 1);
 });
