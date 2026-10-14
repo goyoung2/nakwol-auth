@@ -15,8 +15,8 @@
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.3 |
-| Connect CLI·공통 게이트 | 0.7.5 |
+| AUTH | 0.2.4 |
+| Connect CLI·공통 게이트 | 0.7.6 |
 | Web SDK | 0.3.3 |
 | DATA | 0.9.0 |
 | DATA 스키마 | 4 |
@@ -43,6 +43,12 @@
 
 **Embed는 로그인 UI이며 HTML·파일 직접 접근을 차단하지 않습니다.** 보호 사이트는 공식 서버 게이트를 설치하고 사이트를 배포해야 합니다. 자동 설치는 Workers Static Assets / Pages 정적 빌드에 제공하며, 다른 서버는 공통 `createGate`를 연결합니다. GitHub Pages 자체에서는 서버 게이트를 실행할 수 없습니다.
 
+## AUTH 0.2.4 / Connect 0.7.6: 개발자별 가입 자격 관리
+
+운영자는 `/admin/roles`에서 자격 이름·Discord 역할 ID를 등록하고 **개발자 선택 허용**을 켭니다. 승인된 외부 개발자는 `/developer/apps`에서 **본인 사이트**의 허용 자격과 ANY/ALL 조건을 바꿀 수 있습니다. 기존 사이트는 별도 저장 전까지 기존 조건을 유지합니다.
+
+CLI에는 설치 시 번호 선택, `init --qualifications ID --qualification-match any`, 설치 후 `qualifications list/status/set/reset`이 추가되었습니다. ID는 Discord 역할 ID가 아닌 AUTH 자격 ID입니다. [설치·관리·배포 순서](docs/MEMBERSHIP_QUALIFICATIONS.md)를 참고하세요. 이 기능은 AUTH 0.2.4 및 Connect CLI 0.7.6부터 제공됩니다. 실제 배포·게시 버전은 위 확인 경로에서 확인하세요.
+
 ## 기본 정책: 낙월 맹원 전용
 
 NAKWOL Connect의 **기본 인증 정책은 required + member**입니다. 서버 보호 여부와는 별도로 확인합니다.
@@ -54,7 +60,7 @@ auth = required
 access_policy = member
 ```
 
-서버 게이트까지 배포한 서비스는 **중앙의 시즌3 member 정책을 통과한 사용자만 보호 콘텐츠를 받을 수 있습니다.** init만 실행한 상태는 보호 설치 완료가 아닙니다.
+서버 게이트까지 배포한 서비스는 **중앙의 member 정책을 통과한 사용자만 보호 콘텐츠를 받을 수 있습니다. 기본값은 시즌3이며, 운영자가 [멤버 자격과 사이트별 조건](docs/MEMBERSHIP_QUALIFICATIONS.md)을 관리할 수 있습니다.** init만 실행한 상태는 보호 설치 완료가 아닙니다.
 
 - 중앙 SSO 세션이 있으면 로그인 버튼을 다시 누르지 않고 자동 인증합니다.
 - 중앙 세션이 없으면 페이지를 잠근 상태에서 로그인 흐름을 시작합니다.
@@ -77,7 +83,7 @@ npx --yes nakwol-connect init
 npx --yes nakwol-connect doctor --json
 ```
 
-이 기본 명령은 **로그인 필수 + 시즌3 정책의 Embed**를 설치합니다. 서버 보호는 [호스팅별 설치·배포 절차](docs/CONNECT_SERVER_PROTECTION.md)를 이어서 진행합니다. required의 init은 보호 배포 전 ok:false/exit 1일 수 있습니다. JSON의 실패 항목을 확인하고 이미 만들어진 앱과 설정을 보존하세요.
+이 기본 명령은 **로그인 필수 + member 정책의 Embed**를 설치합니다. 자격 선택을 지원하는 CLI에서는 설치 시 조건을 선택하며, 선택하지 않은 새 앱은 기본 시즌3 조건을 사용합니다. 서버 보호는 [호스팅별 설치·배포 절차](docs/CONNECT_SERVER_PROTECTION.md)를 이어서 진행합니다. required의 init은 보호 배포 전 ok:false/exit 1일 수 있습니다. JSON의 실패 항목을 확인하고 이미 만들어진 앱과 설정을 보존하세요.
 
 DATA도 함께 쓰는 경우 필요한 scope만 선언합니다.
 

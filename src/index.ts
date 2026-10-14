@@ -92,7 +92,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.3',
+  version: '0.2.4',
   now: new Date().toISOString(),
 }));
 

@@ -29,7 +29,7 @@ export function connectOnboardingPageHtml(): string {
 
   <section class="panel">
     <h2>기본 원칙</h2>
-    <div class="callout"><strong>member = 중앙에서 정한 시즌3 역할 보유자입니다.</strong><br>개발자는 역할 ID를 입력하지 않고 <code>member</code>만 선택합니다. 현재 시즌3 역할은 <code>1553600098661957643</code>이며 시즌1·시즌2·Discord 관리자 역할은 대체 조건이 아닙니다. 개발자는 본인 앱의 member/guest 정책을 선택하고, admin 정책과 추가 역할 설정은 AUTH 운영자가 관리합니다.</div>
+    <div class="callout"><strong>member는 해당 사이트의 가입 자격 조건을 통과한 사용자입니다.</strong><br>개발자는 운영자가 공개한 자격 이름을 선택하고 하나 이상(ANY) 또는 모두(ALL) 충족 조건을 정합니다. 새 앱에서 자격을 선택하지 않으면 기존 시즌3 및 운영자 추가 조건을 사용합니다. 선택한 자격은 기존 시즌3 필수 조건을 대체합니다. Discord 역할 ID는 AUTH 운영자가 자격을 등록할 때만 입력합니다.</div>
     <p><strong>Embed 설치와 서버 보호는 다릅니다.</strong> 기본값 <code>auth=required</code> + <code>access-policy=member</code>는 로그인 및 권한 조건입니다. 브라우저에서 화면만 잠그면 이미 전달된 HTML·파일은 보호되지 않습니다. 아래 서버 게이트를 설치·배포하고 직접 주소 차단을 검증해야 합니다.</p>
   </section>
 
@@ -43,6 +43,17 @@ npx --yes nakwol-connect data describe --json
 npx --yes nakwol-connect doctor --json</pre></div></div>
     <div class="step"><div class="num">4</div><div><strong>공개 서비스일 때만 명시적으로 완화합니다.</strong><pre>npx --yes nakwol-connect init --auth optional --access-policy guest</pre><div class="muted"><code>optional</code>/<code>guest</code>는 기본값이 아닙니다. 제품 요구사항이 공개 서비스일 때만 사용합니다.</div></div></div>
     <div class="callout">최초 Discord 로그인 후 같은 브라우저의 다른 서비스는 중앙 SSO를 재사용합니다. 단, 각 사이트의 정책을 통과해야 해당 사이트용 토큰을 받습니다.</div>
+  </section>
+
+  <section class="panel">
+    <h2>가입 자격 선택과 설치 후 변경</h2>
+    <p>일반 터미널의 init은 자격 목록을 보여 주고 선택 번호와 ANY/ALL을 묻습니다. Enter는 현재 조건을 유지합니다. --json 또는 터미널이 아닌 실행은 질문 없이 기존 조건을 유지하므로 자동 설치에서는 자격을 명시하세요.</p>
+    <pre>npx --yes nakwol-connect qualifications list
+npx --yes nakwol-connect init --access-policy member --qualifications QUALIFICATION_ID_1,QUALIFICATION_ID_2 --qualification-match any
+npx --yes nakwol-connect qualifications status
+npx --yes nakwol-connect qualifications set --qualifications QUALIFICATION_ID_1 --qualification-match all
+npx --yes nakwol-connect qualifications reset</pre>
+    <p>QUALIFICATION_ID는 목록에 표시된 AUTH 자격 ID입니다. 기존 앱은 자격 옵션을 생략한 init·sync로 조건이 바뀌지 않습니다. 설치 후에는 <a href="/developer/apps">내 앱 가입 자격 관리</a>에서 본인 앱의 조건을 변경할 수 있습니다. 운영자 전용·비활성 자격이 포함되어도 제거 후 허용된 자격으로 교체하거나 기본 조건으로 복원할 수 있습니다. 비공개·비활성 자격을 다시 선택할 수는 없습니다. 개발자 선택 허용 해제는 새 선택만 제한하고, 자격 사용 중지는 기존 선택도 차단합니다.</p>
   </section>
 
   <section class="panel" id="server-protection">
@@ -65,12 +76,12 @@ npx --yes nakwol-connect doctor --url https://YOUR-SITE/ --json</pre>
       <li>configured: 설치만 완료. configured-not-verified: 실제 배포 차단 미검증.</li>
       <li>anonymous-blocking-verified: 현재 빌드 경로의 비로그인 GET·HEAD·Range·잘못된 쿠키 차단 검증 통과.</li>
       <li>401/403 + 공식 게이트 응답 + no-store만 통과합니다. 200·리다이렉트·404·503·시간 초과는 실패입니다.</li>
-      <li>시즌3 일반 계정의 정상 로그인, 비멤버 거부, 로그아웃 후 차단은 실제 브라우저로 추가 확인하세요.</li>
+      <li>선택한 가입 자격을 충족한 계정의 정상 로그인, 비멤버 거부, 로그아웃 후 차단은 실제 브라우저로 추가 확인하세요.</li>
     </ul>
     <pre>npx --yes nakwol-connect protect verify --url https://YOUR-SITE/ --alternate-origins https://OLD-SITE/ --paths /private-route --json</pre>
     <p>알고 있는 이전 배포 주소도 검사하세요. 명시하지 않은 도메인이나 공개 스토리지는 자동 검사하지 않습니다. 과거 공개 배포·원본 파일 주소도 비공개화하거나 제거해야 합니다. 삭제된 주소의 404/DNS 오류는 별도 삭제 증거로 확인합니다.</p>
     <h3>로그인·권한 문제가 생겼다면</h3>
-    <p>401은 로그인 필요, 403은 접근 권한 부족, 503은 설정/인증 서버 오류입니다. 로그인 반복 시 정확한 콜백 URL·사이트 쿠키 허용·Secret·실제 배포 명령을 확인하세요. 권한 부족 시 시즌3와 추가 역할 조건을 확인한 뒤 다시 Discord 로그인하세요.</p>
+    <p>401은 로그인 필요, 403은 접근 권한 부족, 503은 설정/인증 서버 오류입니다. 로그인 반복 시 정확한 콜백 URL·사이트 쿠키 허용·Secret·실제 배포 명령을 확인하세요. 권한 부족 시 해당 사이트의 가입 자격 조건을 확인한 뒤 다시 Discord 로그인하세요.</p>
     <p>봇 없이 OAuth로 역할을 읽습니다. 기존 SSO는 저장된 역할을 재사용하므로 Discord 역할 제거가 즉시 반영되는 것은 아닙니다. 중앙 세션은 비활동 10일/최대 30일, 앱 토큰은 1시간입니다. 긴급 권한 회수는 AUTH 운영자가 중앙에서 처리해야 합니다.</p>
   </section>
 
@@ -91,7 +102,7 @@ Discord OAuth나 PKCE를 직접 구현하지 말고 반드시 공식 CLI와 Univ
 - 로그인했지만 낙월 맹원이 아니면 페이지를 공개하지 말고 access denied 처리
 
 일반적인 설치는 npx --yes nakwol-connect init 을 사용한다.
-member는 중앙의 시즌3 기준이며 역할 ID를 하드코딩하지 마.
+member는 중앙의 사이트별 가입 자격 판정을 사용해. qualifications list에서 AUTH 자격 ID를 확인하고 init --qualifications로 선택해. Discord 역할 ID를 하드코딩하지 마.
 Embed만으로 비공개 완료라고 보고하지 마. 지원되는 정적 Worker는 protect install로 서버 게이트를 구성하고,
 재빌드 및 wrangler.nakwol.json 배포 후 protect verify --url 실제주소 --json으로 직접 접근 차단까지 검사해.
 미지원 서버/호스팅 환경은 명확히 보고하고, HTML/JSON/다운로드 파일과 이전 배포 주소를 함께 확인해.

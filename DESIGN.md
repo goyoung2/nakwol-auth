@@ -35,3 +35,19 @@
 - Technical privacy/retention copy is collapsed in details. The selected registered service name uses textContent. Central has a registered-service link; diagnostic login runs on the service's registered callback origin.
 - Operator reports reuse content-card, section-head, event-row, muted/error-text and el(). App switch invalidates pending results. Trusted server timings and untrusted browser observations have separate headings; every network sample states its observation source.
 - DNS/TCP/TLS/first-response timing is optional for owned public ping endpoints only. Reused or inaccessible setup metrics are null and display as unobserved.
+
+
+## Named membership qualifications
+
+- `/admin/roles` manages named qualifications mapped to manually entered Discord role IDs; bot access is optional. Renaming, remapping or disabling applies to every app referencing the qualification.
+- `/admin/apps` selects qualifications and ANY/ALL directly below app settings. This panel saves separately and shows the current legacy/custom mode. App switching invalidates pending responses; names and IDs render as text.
+- Custom qualification selection is available only for member policy. Empty, unknown and disabled selections are rejected. Admin policy remains separate.
+- Explicit restore returns to the existing season3 plus supplementary-role requirements. Existing supplementary-role APIs reject writes while custom selection is active.
+
+## Developer service qualification settings
+
+- `/developer/apps` reuses the account page's 720px shell, dark palette, 16px cards, 44px controls, system typography and 520px mobile breakpoint. App selection, current policy, eligible qualification checklist and save form follow the user's decision order.
+- Operators explicitly publish each qualification with “개발자 선택 허용”; new and existing records default to unpublished. Disabling publication does not silently rewrite app selections.
+- Native labelled select, radio/checkbox controls and fieldsets remain keyboard accessible. Loading, empty, non-member, unavailable-selection, error and saved states are explicit; status is a polite live region. No motion is required.
+- Developer forms operate on owned apps only, offer ANY/ALL and legacy restore, and preserve the selected client ID across authentication. Missing published IDs appear as unavailable and cannot be silently dropped on save. Switching apps or refreshing invalidates stale responses.
+- QA uses the real developer page as the primitive/state harness. Browser verification covers narrow mobile width and the app-selection/save flow; no additional framework or global redesign is introduced.

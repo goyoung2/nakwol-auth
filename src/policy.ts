@@ -2,6 +2,7 @@ import type { Env } from './types';
 import type { MembershipRow } from './types';
 import { getAuthLabPrivilege } from './platform-access';
 import { parseRequiredRoleIds, RoleSettingsError } from './role-settings';
+import { evaluateQualificationSnapshot } from './qualifications';
 
 export const MEMBERSHIP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -58,6 +59,10 @@ type AccessSnapshot = {
   readonly checked_at: number | null;
   readonly role_ids: string | null;
   readonly required_role_ids: string | null;
+  readonly qualification_client_id: string | null;
+  readonly qualification_match_mode: string | null;
+  readonly qualification_ids: string | null;
+  readonly qualifications: string | null;
   readonly requested_at: number | null;
   readonly grant_status: string | null;
 };
@@ -70,6 +75,10 @@ export async function inspectApplicationAccess(env: Env, userId: string, clientI
        COALESCE(u.display_name, '') AS display_name, u.avatar_url, COALESCE(u.status, '') AS user_status,
        m.is_guild_member, m.role AS membership_role, m.status AS membership_status, m.checked_at, m.role_ids,
        rr.role_ids AS required_role_ids, r.requested_at,
+       qr.client_id AS qualification_client_id, qr.match_mode AS qualification_match_mode, qr.qualification_ids,
+       (SELECT json_group_array(json_object('id', q.id, 'role_id', q.role_id, 'status', q.status))
+          FROM membership_qualifications q WHERE q.id IN
+            (SELECT value FROM json_each(CASE WHEN json_valid(qr.qualification_ids) THEN qr.qualification_ids ELSE '[]' END))) AS qualifications,
        (SELECT g.status FROM application_access_grants g
           JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
           WHERE i.user_id = input.user_id AND g.client_id = input.client_id) AS grant_status
@@ -79,6 +88,7 @@ export async function inspectApplicationAccess(env: Env, userId: string, clientI
      LEFT JOIN application_settings s ON s.client_id = input.client_id
      LEFT JOIN memberships m ON m.user_id = input.user_id AND m.guild_id = ?
      LEFT JOIN application_role_requirements rr ON rr.client_id = input.client_id
+     LEFT JOIN application_qualification_requirements qr ON qr.client_id = input.client_id
      LEFT JOIN user_reauthentication r ON r.user_id = input.user_id`
   ).bind(userId, clientId, env.NAKWOL_GUILD_ID).first<AccessSnapshot>();
   if (!row) throw new AccessSnapshotError('AUTHORIZATION_SNAPSHOT_UNAVAILABLE');
@@ -90,7 +100,11 @@ export async function inspectApplicationAccess(env: Env, userId: string, clientI
       role: row.membership_role ?? 'user', checked_at: row.checked_at,
     },
   } : null;
-  return { user, access: await diagnoseSnapshot(env, userId, row, user, requireMember) };
+  const access = await diagnoseSnapshot(env, userId, row, user, requireMember);
+  const effectiveUser = user && access.allowed && access.qualification_mode === 'custom' && access.reason === 'POLICY_ALLOWED'
+    ? { ...user, membership: { ...user.membership, is_member: true, global_is_member: user.membership.is_member, scope: 'application' as const } }
+    : user;
+  return { user: effectiveUser, access };
 }
 
 export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
@@ -102,7 +116,8 @@ async function diagnoseSnapshot(env: Env, userId: string, row: AccessSnapshot,
   const policy: ApplicationAccessPolicy = row.access_policy === 'public' ? 'guest'
     : row.access_policy === 'guest' || row.access_policy === 'admin' || row.access_policy === 'lab' ? row.access_policy : 'member';
   let requiredValue: unknown = [];
-  if (row.required_role_ids !== null) {
+  const customQualifications = row.qualification_client_id != null;
+  if (!customQualifications && row.required_role_ids !== null) {
     try { requiredValue = JSON.parse(row.required_role_ids); }
     catch (error) {
       if (error instanceof SyntaxError) throw new RoleSettingsError('Invalid stored role requirements');
@@ -118,23 +133,34 @@ async function diagnoseSnapshot(env: Env, userId: string, row: AccessSnapshot,
   try { parsed = JSON.parse(membership?.role_ids ?? 'null'); } catch { parsed = null; }
   const roles: string[] = Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string') ? parsed : [];
   const seasonRole = env.NAKWOL_MEMBER_ROLE_ID?.trim() || '';
+  const qualification = customQualifications ? evaluateQualificationSnapshot({ match_mode: row.qualification_match_mode,
+    qualification_ids: row.qualification_ids, qualifications: row.qualifications }, roles) : null;
   const result = (allowed: boolean, reason: string) => ({ allowed, reason, policy,
-    season_role_id: seasonRole, role_ids: roles, missing_role_ids: [seasonRole, ...requiredRoles].filter(id => id && !roles.includes(id)),
+    qualification_mode: customQualifications ? 'custom' : 'legacy', qualification_match_mode: qualification?.match_mode ?? null,
+    qualification_ids: qualification?.qualification_ids ?? [],
+    season_role_id: seasonRole, role_ids: roles, missing_role_ids: qualification?.missing_role_ids ?? [seasonRole, ...requiredRoles].filter(id => id && !roles.includes(id)),
     checked_at: user?.membership.checked_at ?? null, manual_grant: grant?.status === 'active',
     reauthentication_requested_at: reauth?.requested_at ?? null,
     reauthentication_status: reauth ? (Number(user?.membership.checked_at ?? 0) > reauth.requested_at ? 'completed' : 'pending') : null });
   if (application?.status !== 'active') return result(false, 'APP_DISABLED');
   if (!user || user.status !== 'active') return result(false, 'USER_DISABLED');
   if (reauth && Number(user.membership.checked_at ?? 0) <= reauth.requested_at) return result(false, 'REAUTHENTICATION_REQUIRED');
+  if (customQualifications && policy !== 'member') return result(false, 'QUALIFICATION_CONFIGURATION_INVALID');
   // Explicit service grants replace member role requirements, never AUTH operator/lab privileges.
   if ((policy === 'member' || policy === 'guest') && grant?.status === 'active') return result(true, 'MANUAL_GRANT');
-  if (policy === 'member' || requireMember || requiredRoles.length > 0) {
+  if (policy === 'member' || requireMember || requiredRoles.length > 0 || customQualifications) {
     const checkedAt = Number(user.membership.checked_at);
     if (!Number.isFinite(checkedAt) || checkedAt <= 0 || checkedAt > Date.now() || Date.now() - checkedAt >= MEMBERSHIP_MAX_AGE_MS) return result(false, 'MEMBERSHIP_REFRESH_REQUIRED');
-    if (!seasonRole) return result(false, 'SEASON_ROLE_NOT_CONFIGURED');
-    if (!roles.includes(seasonRole)) return result(false, 'SEASON_ROLE_MISSING');
-    if (!user.membership.is_member) return result(false, 'MEMBERSHIP_INACTIVE');
-    if (!requiredRoles.every(id => roles.includes(id))) return result(false, 'ADDITIONAL_ROLE_MISSING');
+    if (qualification) {
+      if (!qualification.valid) return result(false, 'QUALIFICATION_CONFIGURATION_INVALID');
+      if (!user.membership.is_guild_member) return result(false, 'MEMBERSHIP_INACTIVE');
+      if (!qualification.matched) return result(false, 'QUALIFICATION_MISSING');
+    } else {
+      if (!seasonRole) return result(false, 'SEASON_ROLE_NOT_CONFIGURED');
+      if (!roles.includes(seasonRole)) return result(false, 'SEASON_ROLE_MISSING');
+      if (!user.membership.is_member) return result(false, 'MEMBERSHIP_INACTIVE');
+      if (!requiredRoles.every(id => roles.includes(id))) return result(false, 'ADDITIONAL_ROLE_MISSING');
+    }
   }
   switch (policy) {
     case 'guest':

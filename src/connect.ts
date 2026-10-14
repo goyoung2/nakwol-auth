@@ -3,6 +3,7 @@ import connectEmbedSource from './assets/nakwol-connect-v1.js.txt';
 import connectAdminSource from './assets/nakwol-connect-admin.js.txt';
 import { authenticateAccessToken, getUserWithMembership, logAuthEvent } from './store';
 import type { Env } from './types';
+import { getApplicationQualificationRequirement } from './qualifications';
 
 const ADMIN_CLIENT_ID = 'nakwol-connect-admin';
 const FRAMEWORKS = new Set(['html', 'vite', 'react', 'vue', 'cra', 'sveltekit', 'next_app', 'next_pages', 'other', 'internal']);
@@ -67,7 +68,8 @@ function adminPage(): string {
 <header>
   <div class="brand"><div class="mark">落</div><div><b>NAKWOL Connect</b><small>앱 등록 · 설치 가이드 · 연동 진단</small></div></div>
   <div id="auth-area"></div>
-  <a href="/admin/roles">역할 관리</a>
+  <a href="/admin/roles">멤버 자격 관리</a>
+  <a href="/developer/apps">내 서비스 관리</a>
 </header>
 <main>
   <section id="gate-area" hidden></section>
@@ -87,12 +89,13 @@ function adminPage(): string {
             <div class="field full"><label>서비스 주소</label><input name="homepage_url" required type="url" placeholder="https://example.pages.dev/"></div>
             <div class="field full"><label>Redirect URI</label><textarea name="redirect_uris" required placeholder="https://example.pages.dev/\nhttps://preview.example.dev/"></textarea><small>한 줄에 하나. 로그인 후 돌아올 정확한 URL입니다.</small></div>
             <div class="field"><label>개발 환경</label><select name="framework"><option value="vite">Vite</option><option value="react">React</option><option value="vue">Vue</option><option value="cra">Create React App</option><option value="next_app">Next.js App Router</option><option value="next_pages">Next.js Pages Router</option><option value="sveltekit">SvelteKit</option><option value="html">일반 HTML</option><option value="other">기타</option></select></div>
-            <div class="field"><label>접근 정책</label><select name="access_policy"><option value="member">시즌3 맹원만</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
+            <div class="field"><label>접근 정책</label><select name="access_policy"><option value="member">멤버 자격 필요</option><option value="admin">AUTH 관리자만</option><option value="guest">Discord 로그인 사용자</option></select></div>
             <div class="field"><label>상태</label><select name="status"><option value="active">active</option><option value="disabled">disabled</option></select></div>
           </div>
           <div class="actions"><button id="reset-app" class="ghost" type="button">되돌리기</button><button id="save-app" class="primary" type="submit">저장</button></div>
         </form>
       </section>
+      <section class="content-card"><h3>허용할 멤버 자격</h3><p class="muted">앱 기본 설정과 별도로 저장합니다. <a href="/admin/roles">멤버 자격 등록·관리</a></p><div id="qualification-policy" role="status"></div></section>
       <section class="content-card"><h3>개발자 연동 방법</h3><div id="guide-area"></div></section>
       <section class="content-card"><div class="section-head"><h3>연동 진단</h3><button id="run-diagnostics" class="ghost" type="button">연동 상태 확인</button></div><div id="diagnostics-area"></div></section>
       <section class="content-card"><div class="section-head"><h3>사용자 접속 진단</h3><button id="refresh-auth-diagnostics" class="ghost" type="button">최근 진단</button></div><label for="auth-diagnostic-reference">진단 번호</label><input id="auth-diagnostic-reference" maxlength="27" placeholder="dg_…"><button id="find-auth-diagnostic" class="ghost" type="button">조회</button><p class="muted">브라우저 보고는 사용자 관측이며 서버 단계는 AUTH 측정입니다. 네트워크 표본의 출처를 확인하세요. 최근 20건 · 7일 보관</p><div id="auth-diagnostic-reports" role="status" aria-live="polite"></div></section>
@@ -296,20 +299,26 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     const normalized = normalizeAppInput(raw, clientId);
     if (!normalized.value) return c.json({ ok: false, error: { code: 'INVALID_APP', message: normalized.error } }, 400);
     const v = normalized.value;
+    if (v.accessPolicy !== 'member' && await getApplicationQualificationRequirement(c.env, clientId)) return c.json({ ok: false, error: { code: 'CUSTOM_QUALIFICATIONS_ACTIVE', message: '멤버 자격을 기존 시즌3 조건으로 복원한 뒤 접근 정책을 변경하세요.' } }, 409);
     const now = Date.now();
-    await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, status = ?, updated_at = ? WHERE client_id = ?`)
-        .bind(v.name, JSON.stringify(v.redirectUris), v.status, now, clientId),
-      c.env.DB.prepare(
-        `INSERT INTO application_settings(client_id, homepage_url, framework, access_policy, owner_user_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(client_id) DO UPDATE SET
-           homepage_url = excluded.homepage_url,
-           framework = excluded.framework,
-           access_policy = excluded.access_policy,
-           updated_at = excluded.updated_at`
-      ).bind(clientId, v.homepageUrl, v.framework, v.accessPolicy, existing.owner_user_id || identity.userId, existing.created_at || now, now),
-    ]);
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare(`UPDATE applications SET name = ?, redirect_uris = ?, status = ?, updated_at = ? WHERE client_id = ?`)
+          .bind(v.name, JSON.stringify(v.redirectUris), v.status, now, clientId),
+        c.env.DB.prepare(
+          `INSERT INTO application_settings(client_id, homepage_url, framework, access_policy, owner_user_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(client_id) DO UPDATE SET
+             homepage_url = excluded.homepage_url,
+             framework = excluded.framework,
+             access_policy = excluded.access_policy,
+             updated_at = excluded.updated_at`
+        ).bind(clientId, v.homepageUrl, v.framework, v.accessPolicy, existing.owner_user_id || identity.userId, existing.created_at || now, now),
+      ]);
+    } catch (error) {
+      if (error instanceof Error && /\bCUSTOM_QUALIFICATIONS_ACTIVE\b/.test(error.message)) return c.json({ ok: false, error: { code: 'CUSTOM_QUALIFICATIONS_ACTIVE', message: '다른 요청에서 멤버 자격을 변경했습니다. 새로고침 후 기존 시즌3 조건으로 복원한 뒤 접근 정책을 변경하세요.' } }, 409);
+      throw error;
+    }
     await logAuthEvent(c.env, 'connect.app.updated', identity.userId, clientId, { framework: v.framework, access_policy: v.accessPolicy, status: v.status });
     return c.json({ ok: true, data: await readApp(c.env, clientId) });
   });
