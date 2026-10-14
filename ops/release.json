@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.6",
-  "target_sha": "4c1ebcae0f1c0b4e60b9c9fb828d69a6985f8087",
-  "notes_file": "docs/releases/2026-10-14-login-wait-feedback.md"
+  "version": "0.2.7",
+  "target_sha": "bda5667420e73ee05c0ef5631a68b8c023cd1b10",
+  "notes_file": "docs/releases/2026-10-14-auth-rpc-optimization.md"
 }
