@@ -2,7 +2,7 @@ import { measured, type DiagnosticTrace } from './diagnostic-trace';
 import type { DiscordGuildMember, DiscordUser, Env } from './types';
 
 const DISCORD_API = 'https://discord.com/api/v10';
-const DISCORD_REQUEST_TIMEOUT_MS = 5000;
+const DISCORD_REQUEST_TIMEOUT_MS = 20000;
 const DISCORD_RESPONSE_MAX_BYTES = 64 * 1024;
 
 type DiscordOperation = 'token' | 'identity' | 'member';

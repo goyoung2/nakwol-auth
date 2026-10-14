@@ -60,7 +60,7 @@ test('Account Center UI uses pinned SDK v0.3.2 and explicit account states/actio
   const html = accountPageHtml();
 
   for (const text of [
-    '/sdk/v0.3.3/nakwol-auth-web.js',
+    '/sdk/v0.3.4/nakwol-auth-web.js',
     'nakwol-account-center',
     'Discord로 낙월 로그인',
     'NAKWOL ID',

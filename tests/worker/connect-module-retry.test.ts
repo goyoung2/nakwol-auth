@@ -31,7 +31,7 @@ test('Embed SDK module timeout keeps protection and exposes a working reload con
     setTimeout: (callback: () => void) => { fireTimeout = callback; return 1; }, clearTimeout() {},
   });
   const raw = await readFile(new URL('../../src/assets/nakwol-connect-v1.js.txt', import.meta.url), 'utf8');
-  const source = raw.replace('import(`${authOrigin}/sdk/v0.3.3/nakwol-auth-web.js`)', 'new Promise(() => {})');
+  const source = raw.replace('import(`${authOrigin}/sdk/v0.3.4/nakwol-auth-web.js`)', 'new Promise(() => {})');
   assert.notEqual(source, raw);
   runInContext(source, context); fireTimeout(); await failed;
   const retry = elements.find(element => element.tag === 'button');

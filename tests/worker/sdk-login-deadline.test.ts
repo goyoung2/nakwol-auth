@@ -7,13 +7,14 @@ async function fixture(fetchImpl: typeof fetch) {
   const root = new URL('../../src/assets/', import.meta.url);
   const base = await readFile(new URL('nakwol-auth-web-v0.2.0.js.txt', root), 'utf8');
   const sso = await readFile(new URL('nakwol-auth-web-v0.3.1.js.txt', root), 'utf8');
-  const deadline = await readFile(new URL('nakwol-auth-web-v0.3.3.js.txt', root), 'utf8');
+  const deadline = await readFile(new URL('nakwol-auth-web-v0.3.4.js.txt', root), 'utf8');
   const values = new Map<string, string>();
   let fireTimeout = () => {};
+  const deadlines: number[] = [];
   const context = createContext({
     window: { fetch: fetchImpl }, document: {}, location: { origin: 'https://site.test', pathname: '/', search: '', href: 'https://site.test/' },
     URL, URLSearchParams, Headers, Response, DOMException, AbortController, EventTarget, CustomEvent, TextEncoder, crypto, btoa,
-    setTimeout: (callback: () => void) => { fireTimeout = callback; return 1; }, clearTimeout: () => {},
+    setTimeout: (callback: () => void, ms: number) => { deadlines.push(ms); fireTimeout = callback; return 1; }, clearTimeout: () => {},
     opts: { clientId: 'site', redirectUri: 'https://site.test/', fetchImpl, storage: {
       getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k),
     } },
@@ -26,13 +27,14 @@ async function fixture(fetchImpl: typeof fetch) {
     .replace(/^export \{.*;$/m, '').replace(/\bexport /g, '');
   runInContext(strippedDeadline + ';globalThis.client=new NakwolAuthClient(opts);', context);
   values.set('nakwol.auth.site.token', JSON.stringify({ accessToken: 'token', expiresAt: Date.now() + 60000 }));
-  return { context, values, fire: () => fireTimeout() };
+  return { context, values, deadlines, fire: () => fireTimeout() };
 }
 
 test('SDK deadline ends stalled headers without deleting a valid credential or adding retry traffic', async () => {
   let calls = 0;
   const f = await fixture(async () => { calls++; return new Promise<Response>(() => {}); });
   const pending = runInContext('client.getMe()', f.context);
+  assert.deepEqual(f.deadlines, [45000]);
   f.fire();
   await assert.rejects(pending, { code: 'AUTH_REQUEST_TIMEOUT' });
   assert.equal(calls, 1);
