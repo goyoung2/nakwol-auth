@@ -1,3 +1,4 @@
+import { migrationStatements } from '../tests/worker/migration-statements.ts';
 import fs from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as miniflare from 'miniflare';
@@ -54,7 +55,7 @@ const measure = async (name, fn) => {
 };
 try {
   for (const file of (await fs.readdir('migrations')).filter(f=>f.endsWith('.sql')).sort()) {
-    for (const sql of (await fs.readFile('migrations/'+file,'utf8')).replace(/^--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean)) await native.prepare(sql).run();
+    for (const sql of migrationStatements(await fs.readFile('migrations/'+file,'utf8'))) await native.prepare(sql).run();
   }
   await native.prepare("INSERT INTO applications VALUES('site','Fixture',?,'active',0,0)").bind(JSON.stringify(['https://site.test/'])).run();
   await native.prepare("INSERT INTO application_settings(client_id,access_policy,created_at,updated_at) VALUES('site','member',0,0)").run();

@@ -96,18 +96,18 @@ function adminPage(): string {
         </form>
       </section>
       <section class="content-card"><h3>허용할 멤버 자격</h3><p class="muted">앱 기본 설정과 별도로 저장합니다. <a href="/admin/roles">멤버 자격 등록·관리</a></p><div id="qualification-policy" role="status"></div></section>
-      <section class="content-card"><h3>개발자 연동 방법</h3><div id="guide-area"></div></section>
-      <section class="content-card"><div class="section-head"><h3>연동 진단</h3><button id="run-diagnostics" class="ghost" type="button">연동 상태 확인</button></div><div id="diagnostics-area"></div></section>
-      <section class="content-card"><div class="section-head"><h3>사용자 접속 진단</h3><button id="refresh-auth-diagnostics" class="ghost" type="button">최근 진단</button></div><label for="auth-diagnostic-reference">진단 번호</label><input id="auth-diagnostic-reference" maxlength="27" placeholder="dg_…"><button id="find-auth-diagnostic" class="ghost" type="button">조회</button><p class="muted">브라우저 보고는 사용자 관측이며 서버 단계는 AUTH 측정입니다. 네트워크 표본의 출처를 확인하세요. 최근 20건 · 7일 보관</p><div id="auth-diagnostic-reports" role="status" aria-live="polite"></div></section>
-      <section class="content-card"><div class="section-head"><h3>서버 보호 배포 현황</h3><button id="refresh-gate-reports" class="ghost" type="button">새로고침</button></div><p class="muted">서비스 CI가 전송한 검사 결과입니다. 중앙 서버의 배포 증명이나 정상 사용자 로그인 검증을 대신하지 않습니다. 최근 100건을 표시합니다.</p><div id="gate-reports" role="status" aria-live="polite"></div></section>
-      <section class="content-card"><h3>접근 문제 해결 · 수동 권한</h3>
+      <section class="content-card"><h3>접근 문제 해결 · 수동 권한</h3><h4>접근 거부 사용자</h4><p class="muted">최근 접속 순위와 별도로, 기록된 접근 거부 사용자의 현재 권한을 확인합니다. 해결된 계정도 표시하며 기록을 삭제하지 않습니다. 본인 확인 전 네트워크 실패는 사용자 접속 진단에서 확인하세요.</p><button id="issues-refresh" class="ghost" type="button">문제 사용자 새로고침</button><div id="support-issues" role="status" aria-live="polite"></div><button id="issues-more" class="ghost" type="button" hidden>다음 사용자 보기</button>
         <p class="muted">이 서비스에만 수동 접근을 허가합니다. Discord 역할과 AUTH 운영 권한은 변경하지 않습니다. 재인증 요구는 해당 사용자의 모든 서비스 AUTH 로그인을 무효화합니다.</p>
         <div class="form-grid"><div class="field"><label for="support-discord">Discord 사용자 ID</label><input id="support-discord" inputmode="numeric" placeholder="숫자로 된 Discord ID" maxlength="22"></div>
-        <div class="field"><label for="support-reason">조치 사유</label><input id="support-reason" maxlength="500" placeholder="허가·회수·재인증 사유"></div></div>
+        <div class="field"><label for="support-reason">메모 (선택)</label><input id="support-reason" maxlength="500" placeholder="입력하지 않아도 조치할 수 있습니다"></div></div>
         <div class="actions"><button id="support-search" class="ghost" type="button">계정 진단</button><button id="support-grant" class="primary" type="button">수동 허가</button><button id="support-revoke" class="ghost" type="button">허가 회수</button><button id="support-reauth" class="ghost" type="button">재인증 요구</button></div>
         <p id="support-status" role="status" aria-live="polite"></p><div id="support-diagnosis"></div>
         <h4>수동 허가 목록</h4><p class="muted">최근 변경 200건까지 표시합니다. 회수는 수동 예외만 제거하며, 원래 역할 조건을 충족하면 접근할 수 있습니다.</p><div id="support-grants"></div>
       </section>
+      <section class="content-card"><h3>개발자 연동 방법</h3><div id="guide-area"></div></section>
+      <section class="content-card"><div class="section-head"><h3>연동 진단</h3><button id="run-diagnostics" class="ghost" type="button">연동 상태 확인</button></div><div id="diagnostics-area"></div></section>
+      <section class="content-card"><div class="section-head"><h3>사용자 접속 진단</h3><button id="refresh-auth-diagnostics" class="ghost" type="button">최근 진단</button></div><label for="auth-diagnostic-reference">진단 번호</label><input id="auth-diagnostic-reference" maxlength="27" placeholder="dg_…"><button id="find-auth-diagnostic" class="ghost" type="button">조회</button><p class="muted">브라우저 보고는 사용자 관측이며 서버 단계는 AUTH 측정입니다. 네트워크 표본의 출처를 확인하세요. 최근 20건 · 7일 보관</p><div id="auth-diagnostic-reports" role="status" aria-live="polite"></div></section>
+      <section class="content-card"><div class="section-head"><h3>서버 보호 배포 현황</h3><button id="refresh-gate-reports" class="ghost" type="button">새로고침</button></div><p class="muted">서비스 CI가 전송한 검사 결과입니다. 중앙 서버의 배포 증명이나 정상 사용자 로그인 검증을 대신하지 않습니다. 최근 100건을 표시합니다.</p><div id="gate-reports" role="status" aria-live="polite"></div></section>
       <section class="content-card"><div class="section-head"><h3>인증·관리자 조치 기록</h3><button id="refresh-events" class="ghost" type="button">새로고침</button></div><p class="muted">Discord ID를 입력하고 계정 진단을 누르면 해당 계정으로 필터링합니다. 서비스 자체의 오류는 포함되지 않습니다.</p><div id="events-area"></div><button id="events-more" class="ghost" type="button" hidden>이전 기록 더 보기</button></section>
     </div>
   </section>

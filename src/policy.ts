@@ -1,3 +1,4 @@
+import { sha256Base64Url } from './crypto';
 import type { Env } from './types';
 import type { MembershipRow } from './types';
 import { getAuthLabPrivilege } from './platform-access';
@@ -47,6 +48,9 @@ type AccessUser = {
 };
 
 type AccessSnapshot = {
+  readonly application_name: string;
+  readonly redirect_uris: string;
+  readonly token_expires_at: number | null;
   readonly application_status: string | null;
   readonly access_policy: string | null;
   readonly user_id: string | null;
@@ -70,8 +74,17 @@ type AccessSnapshot = {
 class AccessSnapshotError extends Error {}
 
 export async function inspectApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
+  return inspectAccessSnapshot(env, userId, clientId, requireMember, null);
+}
+
+export async function inspectApplicationTokenAccess(env: Env, token: string, clientId: string, requireMember = false) {
+  return inspectAccessSnapshot(env, '', clientId, requireMember, await sha256Base64Url(token));
+}
+
+async function inspectAccessSnapshot(env: Env, userId: string, clientId: string, requireMember: boolean, tokenHash: string | null) {
+  const now = Date.now();
   const row = await env.DB.prepare(
-    `SELECT a.status AS application_status, s.access_policy, u.id AS user_id,
+    `SELECT a.name AS application_name, a.redirect_uris, t.expires_at AS token_expires_at, a.status AS application_status, s.access_policy, u.id AS user_id,
        COALESCE(u.display_name, '') AS display_name, u.avatar_url, COALESCE(u.status, '') AS user_status,
        m.is_guild_member, m.role AS membership_role, m.status AS membership_status, m.checked_at, m.role_ids,
        rr.role_ids AS required_role_ids, r.requested_at,
@@ -81,16 +94,19 @@ export async function inspectApplicationAccess(env: Env, userId: string, clientI
             (SELECT value FROM json_each(CASE WHEN json_valid(qr.qualification_ids) THEN qr.qualification_ids ELSE '[]' END))) AS qualifications,
        (SELECT g.status FROM application_access_grants g
           JOIN auth_identities i ON i.provider = 'discord' AND i.provider_user_id = g.discord_user_id
-          WHERE i.user_id = input.user_id AND g.client_id = input.client_id) AS grant_status
+          WHERE i.user_id = u.id AND g.client_id = input.client_id) AS grant_status
      FROM (SELECT ? AS user_id, ? AS client_id) input
-     LEFT JOIN users u ON u.id = input.user_id
+     LEFT JOIN access_tokens t ON t.token_hash = ? AND t.client_id = input.client_id
+       AND t.revoked_at IS NULL AND t.expires_at > ?
+       AND NOT EXISTS (SELECT 1 FROM user_reauthentication tr WHERE tr.user_id = t.user_id AND t.created_at <= tr.requested_at)
+     LEFT JOIN users u ON u.id = CASE WHEN ? IS NULL THEN input.user_id ELSE t.user_id END
      LEFT JOIN applications a ON a.client_id = input.client_id
      LEFT JOIN application_settings s ON s.client_id = input.client_id
-     LEFT JOIN memberships m ON m.user_id = input.user_id AND m.guild_id = ?
+     LEFT JOIN memberships m ON m.user_id = u.id AND m.guild_id = ?
      LEFT JOIN application_role_requirements rr ON rr.client_id = input.client_id
      LEFT JOIN application_qualification_requirements qr ON qr.client_id = input.client_id
-     LEFT JOIN user_reauthentication r ON r.user_id = input.user_id`
-  ).bind(userId, clientId, env.NAKWOL_GUILD_ID).first<AccessSnapshot>();
+     LEFT JOIN user_reauthentication r ON r.user_id = u.id`
+  ).bind(userId, clientId, tokenHash, now, tokenHash, env.NAKWOL_GUILD_ID).first<AccessSnapshot>();
   if (!row) throw new AccessSnapshotError('AUTHORIZATION_SNAPSHOT_UNAVAILABLE');
   const user = row.user_id ? {
     id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url, status: row.user_status,
@@ -100,11 +116,13 @@ export async function inspectApplicationAccess(env: Env, userId: string, clientI
       role: row.membership_role ?? 'user', checked_at: row.checked_at,
     },
   } : null;
-  const access = await diagnoseSnapshot(env, userId, row, user, requireMember);
+  const access = await diagnoseSnapshot(env, user?.id ?? '', row, user, requireMember);
   const effectiveUser = user && access.allowed && access.qualification_mode === 'custom' && access.reason === 'POLICY_ALLOWED'
     ? { ...user, membership: { ...user.membership, is_member: true, global_is_member: user.membership.is_member, scope: 'application' as const } }
     : user;
-  return { user: effectiveUser, access };
+  return { user: effectiveUser, access, tokenExpiresAt: row.token_expires_at,
+    application: row.application_status === null ? null : { client_id: clientId, name: row.application_name,
+      redirect_uris: row.redirect_uris, status: row.application_status } };
 }
 
 export async function diagnoseApplicationAccess(env: Env, userId: string, clientId: string, requireMember = false) {
