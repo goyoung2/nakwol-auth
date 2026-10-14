@@ -17,7 +17,7 @@ async function fixture(t) {
   return root;
 }
 test('current component versions align without treating source as deployment', async () => {
-  const v = await verifyVersions(); assert.equal(v.connect, '0.7.7'); assert.equal(v.schema, 4);
+  const v = await verifyVersions(); assert.equal(v.connect, '0.7.8'); assert.equal(v.schema, 4);
 });
 test('package bump without gate/distribution bump is blocked', async t => {
   const root = await fixture(t), path = join(root, 'packages/connect-cli/package.json');

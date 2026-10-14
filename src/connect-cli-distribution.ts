@@ -3,9 +3,11 @@ import type { Hono } from 'hono';
 import cliPackageBase64 from './assets/nakwol-connect-cli.tgz.b64.js.txt';
 import type { Env } from './types';
 
-export const CONNECT_CLI_VERSION = '0.7.7';
+export const CONNECT_CLI_VERSION = '0.7.8';
+
+const INSTALLATION_STUDIO_GUIDANCE = `\n## Installation wizard and primary AUTH\n\nUse npx --yes nakwol-connect@0.7.8 wizard for detailed human installation guidance. Coding agents may use wizard --plan --url https://SITE/ --provider cloudflare-pages --assets dist --project-name NAME --json for a read-only plan. --json/--plan/--offline never apply installation, even with --apply. Use normal-output wizard --apply or the listed commands for actual installation.\n\nWeb installation studio: https://nakwol-auth.sepsd21.workers.dev/developer/install\nDefault new-install AUTH is https://nakwol-auth.sepsd21.workers.dev (Cloudflare). Vercel AUTH is an operator-managed standby. Opening the wizard on Vercel still generates Cloudflare-primary instructions. Existing authOrigin overrides are preserved by CLI; never silently move an existing SDK or gate. No automatic failover or independent database disaster recovery is provided.\n`;
 export const CONNECT_CLI_PACKAGE_NAME = 'nakwol-connect';
-const SERVER_PROTECTION_GUIDANCE = `Full normative gate specification: /connect/gate-spec.md (also GATE_SPEC.md in the npm package). Role-based access requires Discord verification within 24 hours.
+const SERVER_PROTECTION_GUIDANCE = INSTALLATION_STUDIO_GUIDANCE + `Full normative gate specification: /connect/gate-spec.md (also GATE_SPEC.md in the npm package). Role-based access requires Discord verification within 24 hours.
 
 ## Managed updates
 
@@ -70,6 +72,10 @@ export function registerConnectCliDistributionRoutes(app: Hono<{ Bindings: Env }
       server_protection_verify:'nakwol-connect protect verify --url https://SITE/ --json',
       embed_is_server_protection:false,
       npm_command:'npx --yes nakwol-connect init',
+      npm_wizard_command:'npx --yes nakwol-connect@0.7.8 wizard',
+      web_wizard_url:'https://nakwol-auth.sepsd21.workers.dev/developer/install',
+      primary_auth_origin:'https://nakwol-auth.sepsd21.workers.dev',
+      standby_auth_origin:'https://nakwol-auth-vercel.vercel.app',
       npm_optional_command:'npx --yes nakwol-connect init --auth optional',
       npm_public_command:'npx --yes nakwol-connect init --auth optional --access-policy guest',
       npm_data_command:'npx --yes nakwol-connect init --scopes roster:read,decks:read',

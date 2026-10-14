@@ -1,5 +1,14 @@
 # Account page
 
+## Installation studio
+
+- `/developer/install` serves developers and coding agents. Reuse AUTH palette, native controls and system typography; 1120px shell, 260px step rail and remaining content, single column below 760px.
+- Background #0b1020, layered surfaces #111a2b / #18243a, line #29364b, text #f1f5f9, muted #a6b3c7, action #5865f2. Panel lighting is a restrained radial tint, not animated decoration. Typography 12/14/16/20/36px, spacing 8/12/16/24/32/48px, radius 10/16px.
+- Primitives: step button (current/pending), labelled field (valid/error), command panel (copy/copied/error), notice (information/warning), status (preparing/ready/error). Minimum controls 44px, visible keyboard focus, polite live feedback. No invented installation percentage.
+- Five steps: service and hosting, app and qualifications, server protection, deployment, verification. Detailed commands derive from the same pure plan as CLI. Browsers prepare instructions; local files, package install and Secrets remain CLI operations.
+- Draft contains only non-secret settings. No credential input, code execution, arbitrary URL fetch, automatic app creation or false installed badge. Completion reports remain observations supplied by the developer.
+- Human users see concise explanations and copy controls; LLM users can copy the complete installation brief. Keyboard navigation, 390px mobile and long service URLs must stay usable.
+
 `/account` is an ordinary user's profile, membership check, and login recovery page.
 
 - One column, maximum 720px; 20px side gutters (16px on mobile).
