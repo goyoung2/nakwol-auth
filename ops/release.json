@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.7",
-  "target_sha": "bda5667420e73ee05c0ef5631a68b8c023cd1b10",
-  "notes_file": "docs/releases/2026-10-14-auth-rpc-optimization.md"
+  "version": "0.2.8",
+  "target_sha": "333d4c5c687407a76870e9ada6d22092caf834fb",
+  "notes_file": "docs/releases/2026-10-14-installation-studio.md"
 }
