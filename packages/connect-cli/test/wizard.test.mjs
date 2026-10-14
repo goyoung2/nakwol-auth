@@ -110,7 +110,7 @@ test('human plan is explanatory without raw config', () => {
 test('managed update pins the runtime before build and Pages asks for actual branch', () => {
   const plan=buildInstallationPlan({url:'https://example.com/',existing:{clientId:'saved',protection:{provider:'cloudflare-pages',projectName:'my-site',updateChannel:'managed'}}});
   assert.ok(plan.steps.findIndex(step=>step.id==='runtime') < plan.steps.findIndex(step=>step.id==='build'));
-  assert.match(plan.steps.find(step=>step.id==='runtime').commands[0],/--save-dev --save-exact nakwol-connect@0\.7\.7/);
+  assert.match(plan.steps.find(step=>step.id==='runtime').commands[0],/--save-dev --save-exact nakwol-connect@0\.7\.8/);
   assert.match(plan.steps.find(step=>step.id==='deploy').commands[0],/--branch YOUR_PRODUCTION_BRANCH/);
-  assert.match(plan.steps.find(step=>step.id==='verify').commands[0],/^npx --yes nakwol-connect@0\.7\.7/);
+  assert.match(plan.steps.find(step=>step.id==='verify').commands[0],/^npx --yes nakwol-connect@0\.7\.8/);
 });

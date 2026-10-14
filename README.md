@@ -1,6 +1,6 @@
 # NAKWOL Platform Core
 
-개발 브랜치의 새 CLI·웹 설치 마법사는 [설치 스튜디오 안내](docs/INSTALLATION_STUDIO.md)를 참고하세요. 운영 배포와 새 npm 게시 전에는 기존 게시 버전에 `wizard` 명령이 없습니다.
+CLI·웹 설치 마법사는 [설치 스튜디오 안내](docs/INSTALLATION_STUDIO.md)를 참고하세요. `npx --yes nakwol-connect@0.7.8 wizard` 또는 [웹 설치 스튜디오](https://nakwol-auth.sepsd21.workers.dev/developer/install)에서 시작합니다. 신규 기본 인증 서버는 Cloudflare이며 Vercel은 운영자 관리 백업입니다.
 
 낙월(落月) 서비스들이 **로그인과 공통 게임 데이터를 같은 방식으로 재사용**하도록 만든 중앙 플랫폼입니다.
 
@@ -17,8 +17,8 @@
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.7 |
-| Connect CLI·공통 게이트 | 0.7.7 |
+| AUTH | 0.2.8 |
+| Connect CLI·공통 게이트 | 0.7.8 |
 | Web SDK | 0.3.4 |
 | DATA | 0.9.0 |
 | DATA 스키마 | 4 |
@@ -81,8 +81,8 @@ access_policy = member
 Node.js 20 이상이 필요합니다. 외부 개발자는 운영자의 Connect 개발자 허가를 받은 뒤 프로젝트 루트에서 실행합니다. [최초 설치 마법사 안내](docs/LLM_INSTALLATION.md#외부-개발자의-최초-설치-마법사)의 브라우저 승인과 자격 선택을 따르세요. 최초 인증에는 승인 주소가 보이는 일반 출력을 사용합니다:
 
 ```bash
-npx --yes nakwol-connect@0.7.7 init
-npx --yes nakwol-connect@0.7.7 doctor --json
+npx --yes nakwol-connect@0.7.8 init
+npx --yes nakwol-connect@0.7.8 doctor --json
 ```
 
 이 기본 명령은 **로그인 필수 + member 정책의 Embed**를 설치합니다. 자격 선택을 지원하는 CLI에서는 설치 시 조건을 선택하며, 선택하지 않은 새 앱은 기본 시즌3 조건을 사용합니다. 서버 보호는 [호스팅별 설치·배포 절차](docs/CONNECT_SERVER_PROTECTION.md)를 이어서 진행합니다. required의 init은 보호 배포 전 ok:false/exit 1일 수 있습니다. JSON의 실패 항목을 확인하고 이미 만들어진 앱과 설정을 보존하세요.
@@ -90,15 +90,15 @@ npx --yes nakwol-connect@0.7.7 doctor --json
 DATA도 함께 쓰는 경우 필요한 scope만 선언합니다.
 
 ```bash
-npx --yes nakwol-connect@0.7.7 init --scopes roster:read,decks:read
-npx --yes nakwol-connect@0.7.7 data describe --json
-npx --yes nakwol-connect@0.7.7 doctor --json
+npx --yes nakwol-connect@0.7.8 init --scopes roster:read,decks:read
+npx --yes nakwol-connect@0.7.8 data describe --json
+npx --yes nakwol-connect@0.7.8 doctor --json
 ```
 
 정말 공개 페이지가 필요한 경우에만 명시적으로 완화합니다.
 
 ```bash
-npx --yes nakwol-connect@0.7.7 init --auth optional --access-policy guest
+npx --yes nakwol-connect@0.7.8 init --auth optional --access-policy guest
 ```
 
 `--auth optional`은 **페이지를 로그인 없이 보여줄 수 있는가**, `--access-policy guest`는 **Discord에 로그인한 비맹원도 앱 토큰을 받을 수 있는가**를 뜻합니다. 서로 다른 설정입니다. 접근 정책은 `guest`(Discord 로그인 사용자), `member`(낙월 맹원, 기본값), `admin`(AUTH 운영자) 중 선택합니다. 기존 `public` 설정값은 `guest`로 해석됩니다.
@@ -143,7 +143,7 @@ Web SDK stable은 **0.3.4**이며 Universal Embed는 같은 브라우저의 중�
 
 중앙 Embed 변경은 중앙 스크립트를 사용하는 사이트에 반영되지만, 서버 게이트는 **패키지 업데이트 → 사이트 빌드 → 배포**가 필요합니다. AUTH 배포만으로 소비자 서버 코드는 교체되지 않습니다.
 
-0.7.7 공통 게이트는 유효한 최대 1시간 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. lease는 앱 토큰·사이트 세션 만료를 넘지 않습니다. 중앙 권한 회수에는 최대 1시간의 추가 지연이 있으며, Discord 역할 정보의 최대 24시간 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
+0.7.8 공통 게이트는 유효한 최대 1시간 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. lease는 앱 토큰·사이트 세션 만료를 넘지 않습니다. 중앙 권한 회수에는 최대 1시간의 추가 지연이 있으며, Discord 역할 정보의 최대 24시간 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 
@@ -163,7 +163,7 @@ NAKWOL 운영자는 `https://nakwol-auth.sepsd21.workers.dev/admin/developers`�
 
 ### NAKWOL AUTH
 
-- 운영 확인 기준: **AUTH 0.2.7** (`/api/health`로 재확인)
+- 운영 확인 기준: **AUTH 0.2.8** (`/api/health`로 재확인)
 - Web SDK stable: **0.3.4** (`/sdk/manifest.json`으로 재확인)
 - origin: `https://nakwol-auth.sepsd21.workers.dev`
 - Discord OAuth, NAKWOL ID, membership, Authorization Code + PKCE(S256), 앱별 access token, `/me`, 중앙 SSO를 담당합니다.

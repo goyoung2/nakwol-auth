@@ -20,17 +20,29 @@ test('web planner requires same origin and accepts only public configuration', a
   assert.equal((await request({ ...configuration, url: 'x'.repeat(5000) })).status, 413);
 });
 
-test('web plans preserve required policy, pin current AUTH host and remain incomplete', async () => {
+test('web plans preserve required policy, pin Cloudflare primary and remain incomplete', async () => {
   const response = await request(configuration);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   const plan = await response.json();
   assert.equal(plan.completed, false);
   assert.equal(plan.authMode, 'required');
-  assert.equal(plan.authOrigin, 'https://auth.example');
+  assert.equal(plan.authOrigin, 'https://nakwol-auth.sepsd21.workers.dev');
   assert.equal(plan.accessPolicy, 'member');
   assert.ok(plan.steps.some((step: { id: string }) => step.id === 'gate'));
   assert.ok(plan.steps.some((step: { id: string }) => step.id === 'verify'));
+});
+
+test('opening the wizard on Vercel still installs the Cloudflare primary', async () => {
+  const origin = 'https://nakwol-auth-vercel.vercel.app';
+  const response = await app.request(origin + '/developer/install/plan', {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(configuration),
+  });
+  const plan = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(plan.authOrigin, 'https://nakwol-auth.sepsd21.workers.dev');
+  assert.ok(plan.steps[0].commands[0].includes("--auth-origin 'https://nakwol-auth.sepsd21.workers.dev'"));
+  assert.equal((await request({ ...configuration, authOrigin: origin })).status, 400);
 });
 
 test('static-only hosting never offers a pretend server gate install', async () => {

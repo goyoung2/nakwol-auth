@@ -43,9 +43,7 @@ export function registerInstallationWizardRoutes(app: Hono<{ Bindings: Env }>): 
       const fields = Object.entries(body);
       const allowed = new Set(['url', 'provider', 'assets', 'projectName', 'accessPolicy']);
       if (fields.some(([key, value]) => !allowed.has(key) || typeof value !== 'string' || value.length > 512)) return c.json({ error: '설정 값이 올바르지 않습니다.' }, 400);
-      const location = new URL(c.req.url);
-      const authOrigin = location.protocol === 'https:' ? location.origin : 'https://nakwol-auth.sepsd21.workers.dev';
-      return c.json(buildInstallationPlan({ ...Object.fromEntries(fields), authOrigin, authMode: 'required' }));
+      return c.json(buildInstallationPlan({ ...Object.fromEntries(fields), authMode: 'required' }));
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : '설치 안내를 준비하지 못했습니다.' }, 400);
     }

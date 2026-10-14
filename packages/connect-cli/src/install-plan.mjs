@@ -1,5 +1,5 @@
 const PROVIDERS = ['cloudflare-workers', 'cloudflare-pages', 'vercel', 'netlify', 'custom', 'github-pages'];
-const CLI = 'npx --yes nakwol-connect@0.7.7';
+const CLI = 'npx --yes nakwol-connect@0.7.8';
 
 export function quoteArgument(value) {
   const text = String(value);
@@ -38,7 +38,7 @@ export function buildInstallationPlan(options = {}) {
   const steps = [];
   const add = (id, title, description, commands = [], manual = false) => steps.push({id, title, description, commands, manual});
   add('connect', connected ? '기존 앱 연결 유지' : '앱 연결 및 로그인', connected ? '저장된 앱 ID·자격·DATA 설정을 유지합니다. 사이트 주소가 바뀌었다면 콜백을 추가하세요.' : '브라우저에서 관리자로 로그인하고 앱을 연결합니다. 가입 자격 선택은 기존 init 흐름에서 진행합니다.', connected ? (existing.redirectUris?.includes(url) ? [] : [`${CLI} add-url ${q(url)}`]) : [`${CLI} init --url ${q(url)} --access-policy ${q(accessPolicy)} --auth ${q(authMode)} --auth-origin ${q(authOrigin)}`]);
-  if (installed && protection.updateChannel === 'managed') add('runtime', '관리형 게이트 버전 고정', '빌드 전에 로컬 개발 의존성을 정확한 버전으로 갱신합니다. 수동 서버 어댑터는 기존 dependency 위치를 확인하여 그 위치에서 버전을 갱신하세요.', ['npm install --save-dev --save-exact nakwol-connect@0.7.7'], true);
+  if (installed && protection.updateChannel === 'managed') add('runtime', '관리형 게이트 버전 고정', '빌드 전에 로컬 개발 의존성을 정확한 버전으로 갱신합니다. 수동 서버 어댑터는 기존 dependency 위치를 확인하여 그 위치에서 버전을 갱신하세요.', ['npm install --save-dev --save-exact nakwol-connect@0.7.8'], true);
   add('build', '사이트 빌드', '프로젝트의 빌드 명령으로 공개할 결과물을 전용 폴더에 만드세요. HTML 프로젝트는 해당 폴더에 index.html과 공개 자산을 준비하세요.', ['npm run build'], true);
   if (automatic) {
     add('gate', installed ? '서버 게이트 갱신' : '서버 게이트 설치', 'HTML·정적 파일을 서버에서 보호합니다. 빌드 결과가 있어야 적용할 수 있습니다.', [installed ? `${protection.updateChannel === 'managed' ? 'npx --no-install nakwol-connect' : CLI} protect update` : `${CLI} protect install --provider ${q(provider)} --assets ${q(assets)} --project-name ${q(projectName)} --url ${q(url)}`]);

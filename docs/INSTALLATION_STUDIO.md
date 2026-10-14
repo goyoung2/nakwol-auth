@@ -4,11 +4,11 @@ CLI와 웹은 같은 `buildInstallationPlan`을 사용합니다. 웹 경로는 `
 
 ## CLI
 
-프로젝트 루트에서 설치된 CLI의 `wizard` 명령을 실행합니다. 현재 개발 브랜치에서는 다음처럼 실행할 수 있습니다.
+프로젝트 루트에서 공식 CLI의 `wizard` 명령을 실행합니다.
 
 ```sh
-node packages/connect-cli/bin/nakwol-connect.mjs wizard
-node packages/connect-cli/bin/nakwol-connect.mjs wizard --plan --url https://example.com/ --provider cloudflare-pages --assets dist --project-name example
+npx --yes nakwol-connect@0.7.8 wizard
+npx --yes nakwol-connect@0.7.8 wizard --plan --url https://example.com/ --provider cloudflare-pages --assets dist --project-name example
 ```
 
 일반 터미널은 번호 선택과 단계별 안내를 보여줍니다. `--json`/`--plan`/`--offline`은 계획만 반환하며 외부 등록이나 로컬 설치를 수행하지 않습니다. `--apply`는 기존 공식 명령을 호출해 연결 또는 저장된 게이트 갱신을 수행합니다. 배포와 Secret 등록은 직접 실행하고 실제 검증 결과를 확인합니다.
@@ -25,4 +25,4 @@ node packages/connect-cli/bin/nakwol-connect.mjs wizard --plan --url https://exa
 
 Cloudflare Workers·Pages 정적 빌드 외의 서버는 공통 `createGate` 어댑터를 기존 서버에 연결합니다. GitHub Pages는 서버가 있는 호스팅으로 이전하도록 안내합니다. 기존 앱 ID·콜백·Secret을 보존합니다.
 
-이 기능은 현재 개발 브랜치의 로컬 구현입니다. npm의 기존 `0.7.7`에는 `wizard` 명령이 없으며, 새 패키지 게시와 AUTH 배포 후 사용할 수 있습니다.
+Connect 0.7.8부터 제공합니다. 웹 주소는 https://nakwol-auth.sepsd21.workers.dev/developer/install 입니다. 신규 기본 인증 서버는 Cloudflare이고 Vercel은 운영자 관리 백업입니다. Vercel 웹 스튜디오에서도 생성되는 신규 계획의 AUTH 주소는 Cloudflare로 고정됩니다. 기존 설치의 인증 주소는 CLI에서 보존하며 자동으로 바꾸지 않습니다. 자동 장애 전환이나 Cloudflare DB로부터 독립된 백업은 이번 릴리스에 포함되지 않습니다.
