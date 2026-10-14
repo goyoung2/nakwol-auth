@@ -17,6 +17,32 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     c.header('Cache-Control', 'no-store');
     await next();
   });
+  app.get('/admin/api/access/:clientId/issues', async (c) => {
+    const actor = await operator(c);
+    if (actor instanceof Response) return actor;
+    const clientId = c.req.param('clientId');
+    const after = c.req.query('after') || '';
+    if (after.length > 200) return c.json({ error: { message: '잘못된 조회 위치입니다.' } }, 400);
+    // Page distinct failed identities, independently of the recent-event feed.
+    const candidates = await c.env.DB.prepare(
+      `SELECT e.user_id, u.display_name, i.provider_user_id AS discord_user_id,
+        MAX(e.created_at) AS last_failed_at, COUNT(*) AS failure_count
+       FROM auth_events e JOIN users u ON u.id = e.user_id
+       LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'discord'
+       WHERE e.client_id = ? AND e.user_id > ?
+         AND e.event_type IN ('authorize.access_denied', 'discord.login.access_denied')
+       GROUP BY e.user_id ORDER BY e.user_id LIMIT 26`
+    ).bind(clientId, after).all<{ user_id: string; display_name: string; discord_user_id: string | null; last_failed_at: number; failure_count: number }>();
+    const page = candidates.results.slice(0, 25);
+    const issues = [];
+    for (const candidate of page) {
+      const diagnosis = await diagnoseApplicationAccess(c.env, candidate.user_id, clientId);
+      issues.push({ ...candidate, diagnosis });
+    }
+    return c.json({ ok: true, issues, has_more: candidates.results.length > 25,
+      next_cursor: page.at(-1)?.user_id ?? null });
+  });
+
   app.get('/admin/api/access/:clientId', async (c) => {
     const actor = await operator(c);
     if (actor instanceof Response) return actor;
@@ -52,11 +78,12 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     const clientId = c.req.param('clientId');
     const body: unknown = await c.req.json().catch(() => null);
     if (!body || typeof body !== 'object' || !('discord_user_id' in body) || typeof body.discord_user_id !== 'string'
-      || !/^\d{15,22}$/.test(body.discord_user_id) || !('reason' in body) || typeof body.reason !== 'string'
-      || !body.reason.trim() || body.reason.length > 500 || !('action' in body)
+      || !/^\d{15,22}$/.test(body.discord_user_id) || ('reason' in body && (typeof body.reason !== 'string' || body.reason.length > 500)) || !('action' in body)
       || (body.action !== 'grant' && body.action !== 'revoke' && body.action !== 'reauthenticate')) {
-      return c.json({ error: { message: 'Discord ID, 조치 종류, 사유(1~500자)가 필요합니다.' } }, 400);
+      return c.json({ error: { message: 'Discord ID와 조치 종류가 필요합니다. 메모는 선택이며 500자까지 입력할 수 있습니다.' } }, 400);
     }
+    const reason = 'reason' in body && typeof body.reason === 'string' && body.reason.trim()
+      ? body.reason.trim() : '운영자 직접 조치: ' + body.action;
     const application = await c.env.DB.prepare(`SELECT status FROM applications WHERE client_id = ?`).bind(clientId).first();
     if (!application) return c.json({ error: { message: '서비스를 찾을 수 없습니다.' } }, 404);
     const policy = await getApplicationAccessPolicy(c.env, clientId);
@@ -73,7 +100,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
       statements.push(
         c.env.DB.prepare(`INSERT INTO user_reauthentication(user_id, requested_at, requested_by, reason) VALUES (?, ?, ?, ?)
           ON CONFLICT(user_id) DO UPDATE SET requested_at=excluded.requested_at, requested_by=excluded.requested_by, reason=excluded.reason`)
-          .bind(target.user_id, now, actor, body.reason.trim()),
+          .bind(target.user_id, now, actor, reason),
         c.env.DB.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).bind(target.user_id),
         c.env.DB.prepare(`DELETE FROM auth_codes WHERE user_id = ?`).bind(target.user_id),
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, target.user_id),
@@ -82,7 +109,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
       statements.push(c.env.DB.prepare(`INSERT INTO application_access_grants(client_id, discord_user_id, status, reason, updated_by, updated_at)
         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, discord_user_id) DO UPDATE SET
         status=excluded.status, reason=excluded.reason, updated_by=excluded.updated_by, updated_at=excluded.updated_at`)
-        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', body.reason.trim(), actor, now));
+        .bind(clientId, body.discord_user_id, body.action === 'grant' ? 'active' : 'revoked', reason, actor, now));
       if (target && body.action === 'revoke') statements.push(
         c.env.DB.prepare(`UPDATE access_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`).bind(now, target.user_id, clientId),
         c.env.DB.prepare(`DELETE FROM auth_codes WHERE user_id = ? AND client_id = ?`).bind(target.user_id, clientId),
@@ -90,7 +117,7 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     statements.push(c.env.DB.prepare(`INSERT INTO auth_events(id, user_id, client_id, event_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(`evt_${randomToken(10)}`, target?.user_id ?? null, clientId, `admin.access.${body.action}`,
-        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: body.reason.trim() }), now));
+        JSON.stringify({ actor_user_id: actor, discord_user_id: body.discord_user_id, reason: reason }), now));
     await c.env.DB.batch(statements);
     return c.json({ ok: true, message: body.action === 'reauthenticate'
       ? '모든 서비스의 기존 AUTH 토큰을 회수했습니다. 다음 접속 시 Discord 재인증이 필요합니다.'

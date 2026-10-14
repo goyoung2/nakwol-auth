@@ -215,12 +215,15 @@ function selectApp(app) {
   renderGuide(app);
   renderDiagnostics(null);
   loadEvents().catch((error) => renderEventsError(error.message));
+  loadIssues();
   loadGateReports();
   $("#auth-diagnostic-reference").value="";
   loadAuthDiagnostics();
 }
 
 function startCreate() {
+  issuesGeneration++;
+  supportGeneration++;
   reportRequest++;
   diagnosticGeneration++;
   clear($("#auth-diagnostic-reports"));
@@ -343,12 +346,55 @@ async function runDiagnostics() {
 }
 
 const reasonLabels = {
+  MEMBERSHIP_REFRESH_REQUIRED: 'Discord 역할 재확인 필요', QUALIFICATION_MISSING: '서비스에서 요구하는 자격 부족',
+  QUALIFICATION_CONFIGURATION_INVALID: '서비스 자격 설정 오류',
   APP_DISABLED: '서비스 비활성화', USER_DISABLED: '사용자 비활성화',
   REAUTHENTICATION_REQUIRED: '관리자가 Discord 재인증을 요구함', MANUAL_GRANT: '관리자 수동 허가',
   SEASON_ROLE_NOT_CONFIGURED: '필수 시즌 역할 설정 없음', SEASON_ROLE_MISSING: '저장된 시즌3 역할 없음',
   MEMBERSHIP_INACTIVE: '저장된 맹원 자격 비활성', ADDITIONAL_ROLE_MISSING: '추가 필수 역할 부족',
   AUTH_OPERATOR_REQUIRED: 'AUTH 운영 권한 필요', LAB_PRIVILEGE_REQUIRED: '연구실 권한 필요', POLICY_ALLOWED: '역할 조건 충족',
 };
+let issuesGeneration = 0;
+let issuesCursor = null;
+async function loadIssues(append = false) {
+  if (!state.selected) return;
+  const appId = state.selected.client_id, generation = ++issuesGeneration;
+  const host = $('#support-issues'), more = $('#issues-more');
+  more.hidden = true;
+  if (!append) { issuesCursor = null; host.textContent = '접근 거부 사용자의 현재 권한을 확인하고 있습니다…'; }
+  try {
+    const data = await api('/admin/api/access/' + encodeURIComponent(appId) + '/issues' +
+      (append && issuesCursor ? '?after=' + encodeURIComponent(issuesCursor) : ''));
+    if (generation !== issuesGeneration || state.selected?.client_id !== appId) return;
+    if (!append) clear(host);
+    if (!data.issues.length && !append) host.append(el('p', 'muted', '기록된 접근 거부 사용자가 없습니다.'));
+    for (const issue of data.issues) {
+      const row = el('div', 'event-row'), d = issue.diagnosis;
+      row.append(el('b', '', issue.display_name + ' · ' + (d.allowed ? '현재 접근 가능' : '조치 필요')),
+        el('code', '', 'Discord ' + (issue.discord_user_id || '미확인')),
+        el('p', '', reasonLabels[d.reason] || d.reason),
+        el('p', 'muted', '마지막 거부: ' + formatTime(issue.last_failed_at) + ' · 기록 ' + issue.failure_count + '회'));
+      if (issue.discord_user_id) {
+        const inspect = el('button', 'ghost', '상세 진단'); inspect.type = 'button';
+        inspect.onclick = () => { supportId.value = issue.discord_user_id; loadEvents().catch(showSupportError); };
+        row.append(inspect);
+        if (!d.allowed && ['SEASON_ROLE_MISSING', 'ADDITIONAL_ROLE_MISSING', 'MEMBERSHIP_INACTIVE', 'MEMBERSHIP_REFRESH_REQUIRED', 'QUALIFICATION_MISSING'].includes(d.reason) && ['member','guest'].includes(d.policy)) {
+          const grant = el('button', 'primary', '이 서비스 접근 허가'); grant.type = 'button';
+          grant.onclick = async () => { grant.disabled = true; try { await actOnAccess('grant', issue.discord_user_id); } finally { grant.disabled = false; } };
+          row.append(grant);
+        }
+      }
+      host.append(row);
+    }
+    issuesCursor = data.next_cursor; more.hidden = !data.has_more;
+  } catch (error) {
+    if (generation !== issuesGeneration || state.selected?.client_id !== appId) return;
+    if (!append) clear(host);
+    host.append(el('p', 'error-text', '문제 사용자 조회 실패: ' + error.message));
+  }
+}
+$('#issues-refresh').onclick = () => loadIssues();
+$('#issues-more').onclick = () => loadIssues(true);
 let eventsCursor = null;
 let supportGeneration = 0;
 const supportId = $('#support-discord');
@@ -417,19 +463,21 @@ async function loadEvents(append = false) {
 }
 $('#support-search').onclick = () => loadEvents().catch(showSupportError);
 moreEvents.onclick = () => loadEvents(true).catch(showSupportError);
-async function actOnAccess(action) {
+async function actOnAccess(action, selectedDiscordId) {
   if (!state.selected) return;
-  const discordId = supportId.value.trim(), reason = $('#support-reason').value.trim();
-  if (!/^\d{15,22}$/.test(discordId) || !reason) { showSupportError(new Error('Discord ID와 조치 사유를 입력하세요.')); return; }
+  const clientId = state.selected.client_id;
+  const discordId = selectedDiscordId || supportId.value.trim(), reason = $('#support-reason').value.trim();
+  if (!/^\d{15,22}$/.test(discordId)) { showSupportError(new Error('Discord ID를 입력하세요.')); return; }
   const descriptions = {grant:'시즌3 및 추가 역할 조건을 대신하는 수동 허가', revoke:'수동 허가 회수', reauthenticate:'모든 서비스의 AUTH 로그인 무효화 및 Discord 재인증 요구'};
-  if (!confirm([state.selected.name + ' / Discord ' + discordId, descriptions[action], '사유: ' + reason].join(String.fromCharCode(10)))) return;
+  if (!confirm([state.selected.name + ' / Discord ' + discordId, descriptions[action], reason ? '메모: ' + reason : '운영자와 조치 시각은 자동 기록됩니다.'].join(String.fromCharCode(10)))) return;
   supportButtons.forEach(button => { button.disabled = true; });
   try {
-    const result = await api('/admin/api/access/' + encodeURIComponent(state.selected.client_id), {
+    const result = await api('/admin/api/access/' + encodeURIComponent(clientId), {
       method:'POST', body:JSON.stringify({discord_user_id:discordId, reason, action}),
     });
+    if (state.selected?.client_id !== clientId) return;
     supportStatus.className = 'muted'; supportStatus.textContent = result.message;
-    await loadEvents();
+    await Promise.all([loadEvents(), loadIssues()]);
   } catch (error) { showSupportError(error); }
   finally { supportButtons.forEach(button => { button.disabled = false; }); }
 }
