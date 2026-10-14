@@ -1,6 +1,6 @@
 # Slow authentication feedback and coordinated deadlines
 
-Status: implementation and local validation; production promotion is recorded separately.
+Status: deployed to Cloudflare and Vercel; npm Connect 0.7.7 published.
 
 ## Changes
 
@@ -23,3 +23,14 @@ Central callback changes apply to existing services without reinstalling. Update
 - Browser callback: loading → delay feedback after 3s → navigation after a 9s response. Error: progress stops and recovery controls remain usable. 390px viewport had no horizontal overflow.
 - Official gate browser harness: 9s bootstrap stays waiting with progress and delayed text, then displays login only after the anonymous result.
 - Fixtures use delayed responses; this does not measure an affected KT subscriber's connection or prove that all KT incidents are resolved.
+
+## Production evidence
+
+- Runtime source: `4c1ebcae0f1c0b4e60b9c9fb828d69a6985f8087`; implementation `2197992d2430500971677dd9f012531d09f6c241`; PRs 257–259. Workflow-only smoke correction: PR260.
+- CI38492821928: 296 unit/gate tests, 26 Vercel/bridge tests, typecheck and bundle checks passed.
+- Both live origins report AUTH0.2.6, serve SDK0.3.4, return401 for anonymous /me and400 for missing callback state. Waiting HTML is no-store with no session cookie.
+- Actual Chrome Discord approval completed via Cloudflare at2026-10-14 10:00KST and via Vercel at10:01KST; both returned a freshly verified member account.
+- Vercel deployment: https://nakwol-auth-vercel-8w5gzwvvk-sepsd21-3069s-projects.vercel.app .
+- npm publish38493285212 succeeded; registry latest0.7.7.
+- Initial CF smoke38493144660 had an outdated0.3.3 manifest assertion. Corrected smoke passed every endpoint and invariant on first attempt; this did not require a runtime rollback.
+- Rollback baseline: AUTH0.2.5 source1eae1b8301be91b0a79497747abdeaa0b5b6d36e, Connect0.7.6, SDK0.3.3. No DB migration or secret change.
