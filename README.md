@@ -15,8 +15,8 @@
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.3 |
-| Connect CLI·공통 게이트 | 0.7.5 |
+| AUTH | 0.2.4 |
+| Connect CLI·공통 게이트 | 0.7.6 |
 | Web SDK | 0.3.3 |
 | DATA | 0.9.0 |
 | DATA 스키마 | 4 |
@@ -43,11 +43,11 @@
 
 **Embed는 로그인 UI이며 HTML·파일 직접 접근을 차단하지 않습니다.** 보호 사이트는 공식 서버 게이트를 설치하고 사이트를 배포해야 합니다. 자동 설치는 Workers Static Assets / Pages 정적 빌드에 제공하며, 다른 서버는 공통 `createGate`를 연결합니다. GitHub Pages 자체에서는 서버 게이트를 실행할 수 없습니다.
 
-## 개발자별 가입 자격 관리 (개발 브랜치)
+## AUTH 0.2.4 / Connect 0.7.6: 개발자별 가입 자격 관리
 
 운영자는 `/admin/roles`에서 자격 이름·Discord 역할 ID를 등록하고 **개발자 선택 허용**을 켭니다. 승인된 외부 개발자는 `/developer/apps`에서 **본인 사이트**의 허용 자격과 ANY/ALL 조건을 바꿀 수 있습니다. 기존 사이트는 별도 저장 전까지 기존 조건을 유지합니다.
 
-CLI에는 설치 시 번호 선택, `init --qualifications ID --qualification-match any`, 설치 후 `qualifications list/status/set/reset`이 추가되었습니다. ID는 Discord 역할 ID가 아닌 AUTH 자격 ID입니다. [설치·관리·배포 순서](docs/MEMBERSHIP_QUALIFICATIONS.md)를 참고하세요. 이 기능은 CLI 새 버전 게시와 중앙 AUTH 배포 전에는 기존 운영판에서 사용할 수 없습니다.
+CLI에는 설치 시 번호 선택, `init --qualifications ID --qualification-match any`, 설치 후 `qualifications list/status/set/reset`이 추가되었습니다. ID는 Discord 역할 ID가 아닌 AUTH 자격 ID입니다. [설치·관리·배포 순서](docs/MEMBERSHIP_QUALIFICATIONS.md)를 참고하세요. 이 기능은 AUTH 0.2.4 및 Connect CLI 0.7.6부터 제공됩니다. 실제 배포·게시 버전은 위 확인 경로에서 확인하세요.
 
 ## 기본 정책: 낙월 맹원 전용
 

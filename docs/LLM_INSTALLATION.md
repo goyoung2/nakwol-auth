@@ -1,6 +1,6 @@
 # LLM으로 NAKWOL Connect 설치·업데이트하기
 
-게이트 설명 기준: Connect **0.7.5** 소스. 자격 선택 명령과 개발자 관리 화면은 후속 릴리스 기능이므로 사용 전에 게시·배포 여부를 확인하세요. 운영 버전은 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json)와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
+게이트 설명 기준: Connect **0.7.5** 소스. 자격 선택 명령은 CLI 0.7.6, 개발자 관리 화면은 AUTH 0.2.4부터 제공됩니다. 사용 전에 게시·배포 여부를 확인하세요. 운영 버전은 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json)와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
 
 ## 아래 지시문을 코딩 에이전트에게 복사하세요
 
