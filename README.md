@@ -1,5 +1,7 @@
 # NAKWOL Platform Core
 
+개발 브랜치의 새 CLI·웹 설치 마법사는 [설치 스튜디오 안내](docs/INSTALLATION_STUDIO.md)를 참고하세요. 운영 배포와 새 npm 게시 전에는 기존 게시 버전에 `wizard` 명령이 없습니다.
+
 낙월(落月) 서비스들이 **로그인과 공통 게임 데이터를 같은 방식으로 재사용**하도록 만든 중앙 플랫폼입니다.
 
 새 서비스에서 Discord OAuth를 직접 구현하지 않습니다. 공식 **NAKWOL Connect**를 붙이면 NAKWOL AUTH의 중앙 로그인/SSO와, 필요한 경우 NAKWOL DATA까지 연결됩니다.

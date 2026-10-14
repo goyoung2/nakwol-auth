@@ -1,5 +1,17 @@
 ### 서버 보호 설치와 검증 (Connect 0.7)
 
+### 단계별 설치 마법사
+
+웹 프로젝트 폴더에서 `npx --yes nakwol-connect wizard`를 실행하면 호스팅, 사이트 주소, 빌드 폴더, 프로젝트 이름, 접근 정책을 순서대로 선택합니다. 기존 연결이 있으면 저장된 값을 기본값으로 유지합니다. 계획에는 앱 연결, 빌드, 서버 게이트, 첫 설치 비밀키, 배포, 실제 검증 순서와 다시 실행할 명령이 표시됩니다.
+
+```bash
+npx --yes nakwol-connect wizard
+npx --yes nakwol-connect wizard --plan --url https://YOUR-SITE/ --provider cloudflare-pages --project-name my-site
+npx --yes nakwol-connect wizard --json --url https://YOUR-SITE/ --provider custom
+```
+
+`--plan`, `--offline` 또는 확인하지 않은 비대화 실행은 계획만 만듭니다. `--json`은 질문 없이 계획 JSON을 출력합니다. 적용은 대화 중 확인하거나 `--apply`를 명시한 경우에만 진행하며, `--plan`·`--offline`은 `--apply`와 함께 있어도 변경하지 않습니다. 새 프로젝트에는 기존 `init`으로 연결 코드를 설치하고, 기존 서버 게이트는 저장된 설정으로 갱신합니다. 빌드·비밀키 입력·배포는 직접 진행하며 실제 검증 전에는 완료로 표시하지 않습니다. Vercel·Netlify·custom은 서버 연결 안내와 custom 검증 명령을 제공합니다. GitHub Pages의 비공개 콘텐츠는 서버가 있는 호스팅으로 옮겨야 합니다.
+
 **member는 해당 사이트의 중앙 가입 자격 조건을 통과한 사용자입니다.**
 개발자 권한을 받은 앱 소유자는 운영자가 공개한 자격을 골라 본인 앱의 조건을 설정합니다. Discord 역할 ID는 운영자가 자격 등록 때만 입력합니다. CLI의 자격 ID는 `qualifications list`에 표시되는 AUTH 자격 ID입니다.
 
