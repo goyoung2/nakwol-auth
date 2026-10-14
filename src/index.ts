@@ -1,6 +1,6 @@
 import { loginWait } from './login-wait';
 import { measured, resolveDiagnostic } from './diagnostic-trace';
-import { diagnoseApplicationAccess, inspectApplicationAccess } from './policy';
+import { diagnoseApplicationAccess, inspectApplicationTokenAccess } from './policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { randomToken } from './crypto';
@@ -22,7 +22,7 @@ import {
   inspectAccessToken,
   cleanupExpiredAuthData,
   createAuthorizationCode,
-  createSession,
+  createLoginCredentials,
   deleteSession,
   exchangeAuthorizationCode,
   findSessionUser,
@@ -93,7 +93,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.6',
+  version: '0.2.7',
   now: new Date().toISOString(),
 }));
 
@@ -187,15 +187,17 @@ app.get('/auth/discord/callback', async (c) => {
   if (!requestId) return jsonError(c, 400, 'MISSING_STATE', 'Discord state가 없습니다.');
 
   const requestRow = await c.env.DB.prepare(
-    `SELECT id, client_id, redirect_uri, code_challenge, client_state, expires_at, created_at, diagnostic_ref
-       FROM oauth_requests WHERE id = ?`
-  ).bind(requestId).first<OAuthRequestRow>();
+    `SELECT r.id, r.client_id, r.redirect_uri, r.code_challenge, r.client_state, r.expires_at, r.created_at, r.diagnostic_ref,
+       a.name AS app_name, a.redirect_uris AS app_redirect_uris, a.status AS app_status
+       FROM oauth_requests r LEFT JOIN applications a ON a.client_id = r.client_id WHERE r.id = ?`
+  ).bind(requestId).first<OAuthRequestRow & { app_name: string; app_redirect_uris: string; app_status: string | null }>();
 
   if (!requestRow || requestRow.expires_at <= Date.now()) {
     return jsonError(c, 400, 'EXPIRED_LOGIN_REQUEST', '로그인 요청이 만료되었습니다. 다시 로그인해 주세요.');
   }
 
-  const application = await getApplication(c.env, requestRow.client_id);
+  const application = requestRow.app_status === null ? null : {client_id: requestRow.client_id,
+    name: requestRow.app_name, redirect_uris: requestRow.app_redirect_uris, status: requestRow.app_status};
   if (!application || !isAllowedRedirect(application, requestRow.redirect_uri)) {
     return jsonError(c, 400, 'INVALID_APPLICATION', '애플리케이션 설정을 확인할 수 없습니다.');
   }
@@ -215,9 +217,8 @@ app.get('/auth/discord/callback', async (c) => {
     const { userId, role } = await refreshDiscordMembership(c.env, discordAccessToken, trace);
     const access = await measured(trace, 'policy', () => diagnoseApplicationAccess(c.env, userId, requestRow.client_id));
 
-    await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
-
     if (!access.allowed) {
+      await c.env.DB.prepare(`DELETE FROM oauth_requests WHERE id = ?`).bind(requestId).run();
       await recordLoginEvent(c, 'discord.login.access_denied', userId, requestRow.client_id, { role, diagnosis: access });
       const response = c.redirect(redirectWithParams(requestRow.redirect_uri, {
         error: 'access_denied',
@@ -228,10 +229,9 @@ app.get('/auth/discord/callback', async (c) => {
       return response;
     }
 
-    const code = await measured(trace, 'code_creation', () => createAuthorizationCode(c.env, userId, requestRow.client_id, requestRow.redirect_uri, requestRow.code_challenge));
+    const { code, session } = await measured(trace, 'code_creation', () => measured(trace, 'session_creation', () => createLoginCredentials(c.env, userId, requestRow)));
     await recordLoginEvent(c, 'discord.login.success', userId, requestRow.client_id, { role });
 
-    const session = await measured(trace, 'session_creation', () => createSession(c.env, userId));
     const response = c.redirect(redirectWithParams(requestRow.redirect_uri, { code, state: requestRow.client_state }), 302);
     response.headers.set('Set-Cookie', sessionCookie(session.token, secureCookie(c.env), session.maxAgeSeconds));
     return response;
@@ -296,10 +296,9 @@ app.post('/token', async (c) => {
 async function currentUserResponse(c: Context<{ Bindings: Env }>): Promise<Response> {
   const clientId = c.req.query('client_id') ?? '';
   const token = bearerToken(c);
-  const [application, tokenInfo] = await Promise.all([
-    getApplication(c.env, clientId),
-    token && clientId ? inspectAccessToken(c.env, token, clientId) : Promise.resolve(null),
-  ]);
+  const snapshot = token && clientId ? await inspectApplicationTokenAccess(c.env, token, clientId,
+    c.req.header('X-Nakwol-Require-Member') === 'true') : null;
+  const application = snapshot ? snapshot.application : await getApplication(c.env, clientId);
   const requestedOrigin = c.req.header('Origin');
   const origin = requestedOrigin && application && isAllowedOrigin(application, requestedOrigin) ? requestedOrigin : null;
   if (c.req.header('Origin') && !origin) return jsonError(c, 403, 'CORS_DENIED', '허용되지 않은 Origin입니다.');
@@ -309,13 +308,12 @@ async function currentUserResponse(c: Context<{ Bindings: Env }>): Promise<Respo
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  if (!tokenInfo || application?.status !== 'active') {
+  if (!snapshot?.tokenExpiresAt || application?.status !== 'active') {
     const response = c.json({ ok: false, error: { code: 'INVALID_TOKEN', message: '유효하지 않거나 만료된 token입니다.' } }, 401);
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  const userId = tokenInfo.userId;
-  const { user, access } = await inspectApplicationAccess(c.env, userId, clientId, c.req.header('X-Nakwol-Require-Member') === 'true');
+  const { user, access } = snapshot;
   if (!access.allowed) {
     if (access.reason === 'MEMBERSHIP_REFRESH_REQUIRED' || access.reason === 'REAUTHENTICATION_REQUIRED') {
       const response = c.json({ ok: false, error: { code: access.reason, message: 'Discord 인증으로 역할을 다시 확인해 주세요.' } }, 401);
@@ -330,7 +328,7 @@ async function currentUserResponse(c: Context<{ Bindings: Env }>): Promise<Respo
     return origin ? withCorsHeaders(response, origin) : response;
   }
 
-  const response = c.json({ ok: true, data: user, expires_at: tokenInfo.expiresAt,
+  const response = c.json({ ok: true, data: user, expires_at: snapshot.tokenExpiresAt,
     application_access: { client_id: clientId, allowed: true, source: access.reason === 'MANUAL_GRANT' ? 'manual_grant' : 'policy' } });
   return origin ? withCorsHeaders(response, origin) : response;
 }

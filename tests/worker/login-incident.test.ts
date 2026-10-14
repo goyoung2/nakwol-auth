@@ -58,14 +58,14 @@ test('stale membership remains denied but can recover without a false role denia
     assert.equal(new URL(response.headers.get('Location') ?? '').hostname, 'discord.com');
   });
   await DB.prepare("UPDATE memberships SET checked_at=? WHERE user_id='user'").bind(Date.now()).run();
-  await t.test('fresh member /me uses at most three database round trips', async () => {
+  await t.test('fresh member /me uses one database round trip', async () => {
     queries.length = 0;
     const response = await me();
     assert.equal(response.status, 200);
     const payload: {data: {id: string}} = await response.json();
     assert.equal(payload.data.id, 'user');
-    assert.equal(queries.filter(q => q.includes('FROM applications')).length, 1);
-    assert.ok(queries.length <= 3, 'authorization must not fan out into independent remote reads');
+    assert.equal(queries.filter(q => q.includes('JOIN applications')).length, 1);
+    assert.equal(queries.length, 1, 'token, app and authorization must share one database snapshot');
   });
   await t.test('concurrent redemption issues exactly one token per authorization code', async () => {
     const code=await createAuthorizationCode(env,'user','site','https://site.test/',await sha256Base64Url('verifier'));

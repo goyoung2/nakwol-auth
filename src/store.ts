@@ -125,6 +125,22 @@ export async function createAuthorizationCode(env: Env, userId: string, clientId
   return code;
 }
 
+/** Persist successful callback credentials and consume its request in one transaction. */
+export async function createLoginCredentials(env: Env, userId: string, request: {
+  readonly id: string; readonly client_id: string; readonly redirect_uri: string; readonly code_challenge: string;
+}) {
+  const code = randomToken(32), token = randomToken(32), now = Date.now();
+  const [codeHash, sessionHash] = await Promise.all([sha256Base64Url(code), sha256Base64Url(token)]);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO auth_codes(code_hash,user_id,client_id,redirect_uri,code_challenge,expires_at,used_at,created_at)
+      VALUES (?,?,?,?,?,?,NULL,?)`).bind(codeHash,userId,request.client_id,request.redirect_uri,request.code_challenge,now + AUTH_CODE_TTL_MS,now),
+    env.DB.prepare(`INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_used_at) VALUES (?,?,?,?,?)`)
+      .bind(sessionHash,userId,sessionExpiry(now,now),now,now),
+    env.DB.prepare('DELETE FROM oauth_requests WHERE id = ?').bind(request.id),
+  ]);
+  return { code, session: { token, maxAgeSeconds: Math.floor(SESSION_ABSOLUTE_TTL_MS / 1000) } };
+}
+
 export async function exchangeAuthorizationCode(env: Env, args: { code: string; clientId: string; redirectUri: string; codeVerifier: string }): Promise<{ accessToken: string; expiresIn: number }> {
   const codeHash = await sha256Base64Url(args.code);
   const now = Date.now();
