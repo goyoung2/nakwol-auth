@@ -1,6 +1,25 @@
 # LLM으로 NAKWOL Connect 설치·업데이트하기
 
-게이트 설명 기준: Connect **0.7.5** 소스. 자격 선택 명령은 CLI 0.7.6, 개발자 관리 화면은 AUTH 0.2.4부터 제공됩니다. 사용 전에 게시·배포 여부를 확인하세요. 운영 버전은 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json)와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
+설치 안내 기준: Connect **0.7.7**, Web SDK **0.3.4**, AUTH **0.2.7**. 사용 전에 [CLI manifest](https://nakwol-auth.sepsd21.workers.dev/connect/cli/manifest.json), `/sdk/manifest.json`, `/api/health`와 npm 게시 상태를 확인하세요. 저장소 소스 버전만으로 운영 적용을 판단하지 않습니다.
+
+## 외부 개발자의 최초 설치 마법사
+
+Node.js 20 이상과 설치할 웹 프로젝트가 필요합니다. AUTH 운영자가 `/admin/developers`에서 개발자 계정을 허용해야 앱을 등록할 수 있습니다. Discord 서버의 관리자 권한과 Connect 개발자 권한은 별개입니다.
+
+설치 진입점은 프로젝트 루트의 `init`입니다. 별도의 `wizard` 명령은 없습니다. 명령을 생략해도 init이 실행되지만, 아래처럼 명시하는 편이 안전합니다.
+
+```sh
+npx --yes nakwol-connect@0.7.7 init --url https://YOUR-SITE/
+```
+
+1. CLI가 프로젝트를 감지하고 브라우저에 개발자 연결 승인 화면을 엽니다. 터미널에 표시한 승인 주소와 코드를 확인하고 본인 계정으로 승인합니다. 브라우저가 열리지 않으면 표시된 주소로 접속합니다. `--no-open`은 자동 열기만 끕니다.
+2. 앱이 등록되면 대화형 터미널에서 공개된 가입 자격을 번호로 선택합니다. 여러 번호는 쉼표로 구분하고 `any` 또는 `all`을 선택합니다. Enter는 기존 조건 유지이며 새 앱은 기본 member 조건입니다.
+3. CLI가 Embed와 `.nakwol-connect.json`을 만들고 진단합니다. required 사이트는 서버 보호를 배포하기 전 `ok:false`/exit 1일 수 있습니다. JSON/출력의 실패 항목을 확인하고 등록된 clientId를 보존한 채 다음 단계로 진행합니다.
+4. [호스팅별 서버 보호 설치](CONNECT_SERVER_PROTECTION.md)에 따라 빌드 → `protect install` → 재빌드 → 서버 Secret 등록 → 배포를 진행합니다. 실제 로그인과 보호 자산 표시까지 확인하면 설치가 완료됩니다.
+
+**LLM·CI 실행 주의:** TTY가 아니거나 `--json`이면 번호 선택이 생략됩니다. `--json`은 최초 인증의 승인 주소·코드 출력도 숨기므로, 개발자 인증이 없는 최초 init은 일반 출력으로 실행하세요. 비대화형 실행에서 자격을 지정하려면 일반 출력의 `qualifications list`로 목록을 확인한 뒤 `--qualifications 실제AUTH자격ID --qualification-match any`를 사용합니다. 사용자가 브라우저에서 직접 승인하며 토큰을 채팅에 복사하지 않습니다.
+
+**AUTH 주소를 통일하세요.** 기존 설치는 `.nakwol-connect.json`의 `authOrigin`을 보존하고 Embed의 스크립트 주소·`data-auth-origin`, 서버 게이트, SDK, 앱 등록과 CLI 인증에 같은 origin을 사용합니다. 서로 다른 AUTH 도메인은 중앙 SSO 쿠키를 공유하지 않습니다. CLI 우선순위는 `--auth-origin` → `NAKWOL_AUTH_ORIGIN` → 프로젝트 설정 → 기본 주소입니다. 환경변수로 다른 주소가 선택되지 않았는지 확인하세요. 주소 이전이 필요한 보호 사이트는 아래 지시문의 절차로 SDK와 게이트를 함께 변경합니다.
 
 ## 아래 지시문을 코딩 에이전트에게 복사하세요
 
@@ -47,12 +66,16 @@ https://github.com/goyoung2/nakwol-auth/blob/dev/packages/connect-cli/GATE_SPEC.
 - GitHub Pages에서는 서버 게이트를 실행할 수 없어. 보호 콘텐츠의 서버 호스팅 이전이
   필요하다고 설명하고, Embed만 붙여 보호 완료라고 하지 마.
 - authOrigin은 https://nakwol-auth.sepsd21.workers.dev 처럼 끝에 / 없이 지정해.
+  기존 프로젝트가 다른 AUTH origin을 사용하면 임의로 기본 주소로 바꾸지 마.
+  Embed·SDK·서버 게이트·CLI 설정을 동일한 AUTH origin으로 유지해.
+  이전을 요청받으면 protect install --auth-origin 새주소와 기존 provider/assets/url로
+  Embed와 게이트를 함께 갱신하고, 콜백·개발자 승인·빌드·배포·로그인을 확인해.
   사이트 callback은 실제 등록된 루트 URL을 사용해. 복수 배포 origin은 각각 등록하고
   해당 사이트용 게이트 설정을 사용해. 하나의 origin 바인딩을 임의로 넓히지 마.
 
 4. 업데이트와 성능
 - 현재 설치·npm 게시·운영 게이트 버전을 구분해. 0.6.x에서 0.7.x는 명시적으로 전환해.
-- 공식 0.7.5 게이트의 유효한 최대 1시간 authorization lease 동안은 로컬 암호 검증만 해.
+- 공식 0.7.7 게이트의 유효한 최대 1시간 authorization lease 동안은 로컬 암호 검증만 해.
   이미지마다 /me나 D1/KV/R2를 호출하는 자체 구현을 추가하지 마.
 - 중앙 권한 회수는 최대 1시간 추가 지연, Discord 역할 정보는 최대 24시간에
   lease가 추가될 수 있음을 보고해. AUTH 장애 시 만료된 승인을 연장하지 마.
@@ -99,18 +122,18 @@ DATA가 필요한 경우만 data describe --json으로 현재 API를 확인하�
 
 ## 공통 게이트 업데이트 예시
 
-이미 공식 설치 메타데이터가 있는 사이트에서 실행합니다. 자체 어댑터에 이 명령을 강제로 적용하지 않습니다.
+이미 공식 설치 메타데이터가 있는 일반 업데이트 모드에서 실행합니다. `protection.updateChannel=managed`인 사이트는 아래 관리형 절차로 의존성을 먼저 갱신하세요. 자체 어댑터에 이 명령을 강제로 적용하지 않습니다.
 
 ```sh
-npx --yes nakwol-connect@0.7.5 protect update
+npx --yes nakwol-connect@0.7.7 protect update
 npm run build
 # 기존 사이트의 승인된 배포 절차 실행
-npx --yes nakwol-connect@0.7.5 protect status --json
-npx --yes nakwol-connect@0.7.5 protect verify --expect-runtime installed --json
-npx --yes nakwol-connect@0.7.5 doctor --json
+npx --yes nakwol-connect@0.7.7 protect status --json
+npx --yes nakwol-connect@0.7.7 protect verify --expect-runtime installed --json
+npx --yes nakwol-connect@0.7.7 doctor --json
 ```
 
-관리형 모드는 [protect automate 설정](MANAGED_GATE_UPDATES.md)을 사용합니다. 생성된 PR 검사는 배포를 대신하지 않습니다. 관리자 보고와 자동 롤백도 각각 별도 연결이 필요합니다.
+관리형 모드는 [protect automate 설정](MANAGED_GATE_UPDATES.md)을 사용합니다. 이미 managed인 사이트는 먼저 exact dependency와 lockfile을 함께 업데이트합니다. npm의 루트 프로젝트에서는 `npm install --save-dev --save-exact nakwol-connect@0.7.7` 후 `npm run nakwol:gate`와 빌드를 실행합니다. `npx`로만 새 버전을 실행하면 package.json의 고정 버전과 불일치하여 갱신이 거절됩니다. CI는 `npm ci`로 재현하고 사이트 배포 후 위 검사를 실행합니다. 생성된 PR 검사는 배포를 대신하지 않습니다. 관리자 보고와 자동 롤백도 각각 별도 연결이 필요합니다.
 
 ## 접속이 막힐 때
 
