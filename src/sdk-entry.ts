@@ -13,6 +13,7 @@ import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
 import { registerDeveloperQualificationRoutes } from './developer-qualifications';
 import { registerDeveloperAppRoutes } from './developer-apps';
+import { registerInstallationWizardRoutes } from './install-wizard';
 
 registerDiagnosticRoutes(app);
 registerGateReportRoutes(app);
@@ -28,5 +29,6 @@ registerLabRoutes(app);
 registerRoleAdminRoutes(app);
 registerDeveloperQualificationRoutes(app);
 registerDeveloperAppRoutes(app);
+registerInstallationWizardRoutes(app);
 
 export default Object.assign(app, { scheduled(_controller: ScheduledController, env: import('./types').Env, ctx: ExecutionContext) { ctx.waitUntil(cleanupDiagnostics(env)); } });
