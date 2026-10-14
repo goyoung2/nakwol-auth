@@ -1,6 +1,6 @@
 # AUTH 0.2.7: fewer database round trips and operator recovery
 
-Status: validated locally; production rollout pending.
+Status: deployed to Cloudflare and Vercel as AUTH0.2.7.
 
 ## Evidence and bottleneck
 
@@ -34,3 +34,14 @@ Production baseline from the Cloudflare test site's diagnostic login: authorize3
 New real-D1 tests cover expired/revoked/cross-app tokens, wrong origin, disabled identity/app, reauthentication, and transactional rollback. Existing /me database budget strengthened from at most3 to exactly1. Existing auth/gate tests preserve no-cookie/wrong-cookie/member, replay, role and generated protection contracts. Runtime version test updated to0.2.7.
 
 Rollback: deploy previous stable source5bdf799ecb07bef418ce3cd7a0d1cebb873ba709 (AUTH0.2.6) to both hosts. No migration, secret, or SDK changes.
+
+## Production verification
+
+- Source bda5667420e73ee05c0ef5631a68b8c023cd1b10; implementation902eb89, operatorUIcd92db5; PR264–266.
+- CI38496550244:299 auth/gate tests,26 Vercel tests,22 release tests passed; typecheck/bundles/managed smoke passed.
+- Cloudflare deployment38496943758 succeeded. Vercel production eat956oo9 deployed, public alias returns0.2.7. Anonymous me and issues API401 on both.
+- Browser diagnostic SSO sequence, actual server stage ms (two me calls per sequence): CF me102/88 →46/68, token223→222, authorize313→445; Vercel me63/54→25/23, token132→133, authorize225→213. Samples are observations, not percentile estimates; unmodified stages vary and CF authorize did not improve.
+- Both test sites: authenticated300/300 images and JSON, centralme0. CF after image total644.9ms and medianTTFB59ms; VC after650.6ms and57ms. Browser cache/connection state differs; do not attribute image-time variation to this central change.
+- protect verify custom:12/12 checks per host (root and2 observed image URLs, GET/HEAD/Range/invalid-cookie), all passed. Initial default invocation lacked a consumer manifest; custom invocation avoids confusing the AUTH checkout with an installed consumer.
+- CF real operator UI loaded25 denied identities for the affected encyclopedia with18 eligible direct-grant buttons and no query error. No real user grant was changed.
+- Vercel baseline first ping had2039ms TLS setup and2822ms total; later ping382ms. This illustrates a separate transport contribution, not an ISP attribution or a measured effect of the DB optimization.
