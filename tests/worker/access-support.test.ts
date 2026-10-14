@@ -115,6 +115,39 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.ok(data.events.some((e: { event_type: string }) => e.event_type === 'admin.access.reauthenticate'));
     assert.equal((await app.request(url, { headers: { Authorization: 'Bearer ordinary' } }, env)).status, 403);
   });
+  await t.test('failed users survive recent success noise; optional-reason grant resolves diagnosis and preserves audit', async () => {
+    await upsertMembership(env, 'target', false, 'user', []);
+    await DB.prepare(`INSERT INTO auth_events VALUES ('failure-old','target','site','discord.login.access_denied','{}',1)`).run();
+    for (let i = 0; i < 55; i++) await DB.prepare(`INSERT INTO auth_events VALUES (?, 'ordinary', 'site', 'authorize.sso', '{}', ?)`).bind('success-' + i, 100 + i).run();
+    const issues = () => app.request('https://auth.test/admin/api/access/site/issues', { headers: { Authorization: 'Bearer operator' } }, env);
+    let response = await issues();
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    let data = await response.json();
+    assert.equal(data.issues.length, 1);
+    assert.equal(data.issues[0].discord_user_id, discordId);
+    assert.equal(data.issues[0].diagnosis.allowed, false);
+    assert.equal((await app.request('https://auth.test/admin/api/access/site/issues', { headers: { Authorization: 'Bearer ordinary' } }, env)).status, 403);
+    const grant = await app.request('https://auth.test/admin/api/access/site', { method: 'POST', headers: { Authorization: 'Bearer operator', 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'grant', discord_user_id: discordId }) }, env);
+    assert.equal(grant.status, 200);
+    data = await (await issues()).json();
+    assert.equal(data.issues[0].diagnosis.allowed, true);
+    assert.equal(data.issues[0].failure_count, 1);
+    assert.equal((await diagnoseApplicationAccess(env, 'target', 'other')).allowed, false);
+    const audit = await DB.prepare(`SELECT detail FROM auth_events WHERE event_type='admin.access.grant' ORDER BY created_at DESC LIMIT 1`).first<{detail:string}>();
+    assert.equal(JSON.parse(audit?.detail || '{}').actor_user_id, 'operator');
+    assert.ok(JSON.parse(audit?.detail || '{}').reason);
+    assert.equal((await request('revoke')).status, 200);
+    for (let i = 0; i < 26; i++) {
+      const id = 'page-' + String(i).padStart(2, '0');
+      await DB.prepare(`INSERT INTO users VALUES (?, ?, NULL, 'active', 0, 0)`).bind(id,id).run();
+      await DB.prepare(`INSERT INTO auth_events VALUES (?, ?, 'site', 'authorize.access_denied', '{}', 1)`).bind(id,id).run();
+    }
+    data = await (await issues()).json();
+    assert.equal(data.issues.length, 25); assert.equal(data.has_more, true);
+    const next = await (await app.request('https://auth.test/admin/api/access/site/issues?after=' + data.next_cursor, { headers: { Authorization: 'Bearer operator' } }, env)).json();
+    assert.equal(next.issues.length, 2); assert.equal(next.has_more, false);
+    assert.ok(!next.issues.some((row: {user_id:string}) => data.issues.some((first: {user_id:string}) => first.user_id === row.user_id)));
+  });
   await t.test('denied OAuth creates no session or token; retry with new role succeeds', async (t) => {
     let roles: string[] = [];
     t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
