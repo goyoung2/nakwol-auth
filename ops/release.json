@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.5",
-  "target_sha": "1eae1b8301be91b0a79497747abdeaa0b5b6d36e",
-  "notes_file": "docs/releases/2026-10-14-auth-v0.2.5.md"
+  "version": "0.2.6",
+  "target_sha": "4c1ebcae0f1c0b4e60b9c9fb828d69a6985f8087",
+  "notes_file": "docs/releases/2026-10-14-login-wait-feedback.md"
 }
