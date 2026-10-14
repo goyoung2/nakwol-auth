@@ -1,6 +1,6 @@
 import { loginPage, diagnosticsPage } from './login.mjs';
 
-export const RUNTIME_VERSION = '0.7.6';
+export const RUNTIME_VERSION = '0.7.7';
 export const COOKIE = '__Host-nakwol_connect';
 export const AUTHORIZATION_LEASE_MS = 60 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -56,7 +56,7 @@ async function verify(token, settings, diagnostic) {
     url.searchParams.set('client_id', settings.clientId);
     const result = await fetch(url, {
       headers: { ...(diagnostic || {}), Authorization: `Bearer ${token}`, ...(settings.accessPolicy === 'member' ? { 'X-Nakwol-Require-Member': 'true' } : {}) },
-      cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(7000),
+      cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(30000),
     });
     if (result.status !== 200) return { status: [401, 403].includes(result.status) ? result.status : 503 };
     const body = await result.json();
@@ -154,7 +154,7 @@ export async function serveProtected(request, env, settings) {
         remember(revokedSessions, id, session.expires);
         completedChecks.delete(id);
         try {
-          const result = await fetch(new URL('/logout', settings.authOrigin), { method: 'POST', headers: { Authorization: `Bearer ${session.token}` }, redirect: 'manual', signal: AbortSignal.timeout(7000) });
+          const result = await fetch(new URL('/logout', settings.authOrigin), { method: 'POST', headers: { Authorization: `Bearer ${session.token}` }, redirect: 'manual', signal: AbortSignal.timeout(30000) });
           revoked = result.ok;
         } catch { revoked = false; }
       }

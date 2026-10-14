@@ -70,7 +70,7 @@ test('/me has a whole-response deadline and never exposes a user on a stalled re
   t.mock.timers.enable({apis:['setTimeout']});
   const response=auth.request('https://auth.test/me?client_id=site',{headers:{Authorization:'Bearer fixture'}},env);
   await new Promise<void>(resolve=>setImmediate(resolve));
-  t.mock.timers.tick(5500);
+  t.mock.timers.tick(25000);
   const result=await response;
   assert.equal(result.status,503);
   assert.equal(result.headers.get('Cache-Control'),'no-store');

@@ -1,3 +1,4 @@
+import { loginWait } from './login-wait';
 import { measured, resolveDiagnostic } from './diagnostic-trace';
 import { diagnoseApplicationAccess, inspectApplicationAccess } from './policy';
 import { Hono } from 'hono';
@@ -92,7 +93,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.5',
+  version: '0.2.6',
   now: new Date().toISOString(),
 }));
 
@@ -176,6 +177,8 @@ app.get('/authorize', async (c) => {
   return c.redirect(buildDiscordAuthorizeUrl(c.env, requestId), 302);
   } finally { if (trace) { trace.add('authorize',traceStart,c.res.status >= 400 ? 'denied' : 'ok'); await trace.finish(); } }
 });
+
+app.use('/auth/discord/callback', loginWait);
 
 app.get('/auth/discord/callback', async (c) => {
   const requestId = c.req.query('state') ?? '';
@@ -338,7 +341,7 @@ app.get('/me', async (c) => {
     return await Promise.race([
       currentUserResponse(c),
       new Promise<Response>(resolve => {
-        timer = setTimeout(() => resolve(jsonError(c, 503, 'AUTH_CHECK_TIMEOUT', '인증 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.')), 5500);
+        timer = setTimeout(() => resolve(jsonError(c, 503, 'AUTH_CHECK_TIMEOUT', '인증 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.')), 25000);
       }),
     ]);
   } finally { if (timer !== undefined) clearTimeout(timer); }

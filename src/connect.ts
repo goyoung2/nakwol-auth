@@ -217,7 +217,7 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
     name: 'nakwol-connect',
     stable: '1.0.0',
     embed: '/connect/v1.js',
-    sdk: '/sdk/v0.3.3/nakwol-auth-web.js',
+    sdk: '/sdk/v0.3.4/nakwol-auth-web.js',
     default_auth: 'required',
     default_access_policy: 'member',
   }));

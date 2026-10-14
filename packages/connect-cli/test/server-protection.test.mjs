@@ -177,11 +177,11 @@ test('login bridge module parses and provides explicit denial and cookie failure
 test('login page driver restores deep links and explains role denial without reload loops',async()=>{
   const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
   const settings={clientId:'site',authOrigin:'https://auth.test',siteUrl:'https://site.test/'};
-  const source=loginPage(settings,401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.3/nakwol-auth-web.js')",'sdk');
+  const source=loginPage(settings,401).split('<script type="module">')[1].split('</script>')[0].replace("import(settings.authOrigin+'/sdk/v0.3.4/nakwol-auth-web.js')",'sdk');
   const execute=new AsyncFunction('sdk','location','document','sessionStorage','fetch',"const navigator={userAgent:'fixture'}; const window={fetch,navigator};\n"+source);
   const storage=new Map();
   const sessionStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
-  const elements={status:{},login:{},retry:{hidden:true},recovery:{hidden:true},'diagnostics-login':{}};
+  const elements={'login-progress':{},status:{},login:{},retry:{hidden:true},recovery:{hidden:true},'diagnostics-login':{}};
   const document={getElementById:id=>elements[id]};
   let target=null,denied=false;
   const location={origin:'https://site.test',pathname:'/private/deck',search:'',hash:'',replace:p=>{target=p;},reload(){}};
