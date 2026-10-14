@@ -51,3 +51,12 @@
 - Native labelled select, radio/checkbox controls and fieldsets remain keyboard accessible. Loading, empty, non-member, unavailable-selection, error and saved states are explicit; status is a polite live region. No motion is required.
 - Developer forms operate on owned apps only, offer ANY/ALL and legacy restore, and preserve the selected client ID across authentication. Missing published IDs appear as unavailable and cannot be silently dropped on save. Switching apps or refreshing invalidates stale responses.
 - QA uses the real developer page as the primitive/state harness. Browser verification covers narrow mobile width and the app-selection/save flow; no additional framework or global redesign is introduced.
+
+## Discord callback waiting
+
+- Reuse the account palette, 720px shell, 16px cards and 44px links. No external assets on the callback page.
+- An indeterminate progress bar and elapsed seconds describe waiting, never invented completion percentages. After 3 seconds show a delay explanation; after 15 seconds explain that verification is still running. Reduced motion uses a static track.
+- Success navigates to the registered service. Failure stops the indicator and exposes a service return link when available, plus account recovery. Never automatically replay a one-use Discord code.
+- Render the public waiting page before database or Discord work. Keep callback parameters only in page memory and remove them from browser history. Responses are no-store and no-referrer with nonce CSP.
+
+- Official gate and Embed also use native indeterminate progress while authentication is pending, a polite delay explanation after 3s, and stop/hide progress on success, anonymous result or error. They retain their existing page palettes.
