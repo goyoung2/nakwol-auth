@@ -1,7 +1,24 @@
 ### 서버 보호 설치와 검증 (Connect 0.7)
 
-**member는 중앙의 시즌3 역할 보유자를 뜻합니다. 개발자는 역할 ID를 입력하지 않습니다.**
-개발자 권한을 받은 앱 소유자는 member/guest를 선택할 수 있으며 admin 정책과 추가 역할은 AUTH 운영자가 설정합니다.
+**member는 해당 사이트의 중앙 가입 자격 조건을 통과한 사용자입니다.**
+개발자 권한을 받은 앱 소유자는 운영자가 공개한 자격을 골라 본인 앱의 조건을 설정합니다. Discord 역할 ID는 운영자가 자격 등록 때만 입력합니다. CLI의 자격 ID는 `qualifications list`에 표시되는 AUTH 자격 ID입니다.
+
+### 설치할 때 가입 자격 선택
+
+터미널에서 `init`을 실행하면 선택 가능한 자격 이름과 번호가 표시됩니다. 번호를 쉼표로 고르고 `any`(하나 이상) 또는 `all`(모두)을 선택합니다. Enter는 현재 조건을 유지합니다. 새 앱의 기본 조건은 기존 시즌3 및 운영자 추가 조건입니다. `--json` 또는 입력/출력이 터미널이 아닌 실행에서는 질문하지 않습니다.
+
+```bash
+npx --yes nakwol-connect qualifications list
+npx --yes nakwol-connect init --access-policy member --qualifications QUALIFICATION_ID_1,QUALIFICATION_ID_2 --qualification-match any
+npx --yes nakwol-connect qualifications status
+npx --yes nakwol-connect qualifications set --qualifications QUALIFICATION_ID_1 --qualification-match all
+# 저장된 기존 기본 조건으로 명시적으로 복원
+npx --yes nakwol-connect qualifications reset
+```
+
+선택 자격은 기존 시즌3 필수 조건을 대체합니다. `init`·`sync`의 `--qualifications` 없는 실행은 저장된 조건을 유지합니다. `sync --qualification-legacy`도 기존 조건 복원에 사용할 수 있습니다. 자격 저장에 실패하면 설치 성공으로 표시하지 않으며, 생성된 앱 ID는 로컬에 보존하여 같은 명령으로 재시도할 수 있습니다.
+
+설치 후 출력되는 `/developer/apps?client_id=...` 관리 링크에서도 본인 앱을 선택해 자격과 ANY/ALL을 변경하거나 기본 조건으로 복원할 수 있습니다. 운영자 전용·비활성 자격이 포함되어도 본인 앱에서 이를 제거하고 허용된 자격으로 교체하거나 기본 조건으로 복원할 수 있습니다. 비공개·비활성 자격은 다시 선택할 수 없습니다. 개발자 선택 허용을 끄는 것은 새 선택만 제한하고 기존 조건은 유지합니다. 자격 사용 중지는 기존 선택도 설정 오류로 차단합니다. 자격 없는 member 조건은 저장할 수 없고 guest/admin에는 자격 선택을 적용하지 않습니다. admin 정책과 자격 목록·역할 매핑은 AUTH 운영자가 관리합니다.
 
 **Embed만으로 HTML·파일이 비공개가 되지는 않습니다.** 직접 주소 접근 차단은 서버 게이트 설치와 배포가 필요합니다.
 자동 지원은 Cloudflare Workers Static Assets 및 Cloudflare Pages의 정적 빌드입니다. SSR/API/기존 사용자 Worker는 자동 연결하지 않습니다.
@@ -34,7 +51,7 @@ nakwol-connect doctor --json
 dist/_worker.js와 dist/_routes.json을 반드시 함께 배포합니다. 모든 경로에 인증을 적용하며 라우팅 제외 경로는 없습니다. 재빌드 시 생성된 두 파일을 보존하세요. Pages Functions의 요청 한도 초과 동작도 **fail closed**로 설정해야 합니다. 과거 공개 배포 URL은 새 배포로 사라지지 않으므로 별도 비공개화/삭제가 필요합니다.
 configured는 설치만 완료, anonymous-blocking-verified는 검사한 주소·경로의 비로그인 차단 검증 통과입니다.
 GET·HEAD·Range·잘못된 쿠키를 검사하며 200·302·404·503은 성공으로 인정하지 않습니다.
-이전 배포 주소는 --alternate-origins로 추가하세요. 실제 시즌3/비멤버 로그인과 로그아웃은 브라우저로 별도 확인합니다.
+이전 배포 주소는 --alternate-origins로 추가하세요. 실제 선택 자격 충족/미충족 계정 로그인과 로그아웃은 브라우저로 별도 확인합니다.
 운영 로그인에는 봇이 필요 없으며, OAuth 때 저장한 역할을 쓰므로 Discord 역할 제거가 즉시 반영되지는 않습니다.
 
 상세 절차: [온라인 설치 안내](https://nakwol-auth.sepsd21.workers.dev/connect#server-protection)

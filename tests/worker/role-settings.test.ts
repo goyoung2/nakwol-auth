@@ -26,6 +26,7 @@ async function fixture() {
     INSERT INTO auth_operators VALUES ('operator','operator');
     INSERT INTO users VALUES ('operator','active');`);
   db.exec(readFileSync(new URL('../../migrations/0011_season_roles.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../../migrations/0016_membership_qualifications.sql', import.meta.url), 'utf8'));
   for (const [token, user, client] of [['admin-token','operator','nakwol-connect-admin'], ['wrong-client','operator','site'], ['member-token','member','nakwol-connect-admin']]) {
     db.prepare('INSERT INTO access_tokens VALUES(?,?,?,?,NULL,0)').run(await sha256Base64Url(token), user, client, Date.now()+60000);
   }
@@ -145,9 +146,8 @@ test('botless role administration preserves existing requirements and permits ex
     assert.equal(typeof event?.detail,'string');
     assert.ok(String(event?.detail).includes('manual_role_ids'));
     const html=await (await app.request('/admin/roles',{},env)).text();
-    assert.ok(html.includes('역할 ID 직접 입력'));
-    assert.ok(html.includes('manual_role_ids:confirm.checked'));
-    assert.ok(!html.includes('checked.delete(id);}const save'));
+    assert.ok(html.includes('/admin/api/qualifications'));
+    assert.ok(html.includes('name="role_id"'));
   } finally { db.close(); }
 });
 

@@ -1,3 +1,4 @@
+import { migrationStatements } from './migration-statements';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -15,7 +16,7 @@ test('real D1 diagnostic capability, bounded ingestion, origin, operator, OAuth 
   const directory=new URL('../../migrations/',import.meta.url);
   for(const file of (await readdir(directory)).filter(f=>f.endsWith('.sql')).sort()) {
     const sql=await readFile(new URL(file,directory),'utf8');
-    for(const statement of sql.replace(/^--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean)) await DB.prepare(statement).run();
+    for(const statement of migrationStatements(sql)) await DB.prepare(statement).run();
   }
   const env={DB,NAKWOL_GUILD_ID:'1493410906456064112',NAKWOL_MEMBER_ROLE_ID:'1553600098661957643',AUTH_ORIGIN:'https://auth.test',DISCORD_CLIENT_ID:'fixture',DISCORD_CLIENT_SECRET:'fixture'};
   const app=new Hono();registerDiagnosticRoutes(app);registerDiagnosticRoutes(auth);
