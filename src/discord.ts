@@ -28,7 +28,7 @@ async function requestDiscordJson(operation: DiscordOperation, url: string, init
   });
   try {
     return await Promise.race([deadline, (async () => {
-      const response = await fetch(url, { ...init, signal: controller.signal, redirect: 'error' });
+      const response = await fetch(url, { ...init, signal: controller.signal, redirect: 'manual' });
       if (operation === 'member' && response.status === 404) {
         if (response.body) void response.body.cancel().catch(() => undefined);
         return null;
