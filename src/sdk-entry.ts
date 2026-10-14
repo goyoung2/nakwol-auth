@@ -11,6 +11,8 @@ import { registerConnectCliDistributionRoutes } from './connect-cli-distribution
 import { registerAccountRoutes } from './account';
 import { registerLabRoutes } from './lab';
 import { registerRoleAdminRoutes } from './role-admin';
+import { registerDeveloperQualificationRoutes } from './developer-qualifications';
+import { registerDeveloperAppRoutes } from './developer-apps';
 
 registerDiagnosticRoutes(app);
 registerGateReportRoutes(app);
@@ -24,5 +26,7 @@ registerConnectCliDistributionRoutes(app);
 registerAccountRoutes(app);
 registerLabRoutes(app);
 registerRoleAdminRoutes(app);
+registerDeveloperQualificationRoutes(app);
+registerDeveloperAppRoutes(app);
 
 export default Object.assign(app, { scheduled(_controller: ScheduledController, env: import('./types').Env, ctx: ExecutionContext) { ctx.waitUntil(cleanupDiagnostics(env)); } });

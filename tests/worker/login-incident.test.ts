@@ -1,3 +1,4 @@
+import { migrationStatements } from './migration-statements';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -15,7 +16,7 @@ test('stale membership remains denied but can recover without a false role denia
   const migrations = new URL('../../migrations/', import.meta.url);
   for (const file of (await readdir(migrations)).filter(f => f.endsWith('.sql')).sort()) {
     const sql = await readFile(new URL(file, migrations), 'utf8');
-    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
+    for (const statement of migrationStatements(sql)) await DB.prepare(statement).run();
   }
   const queries: string[] = [];
   const trackedDB = new Proxy(DB, { get(target, key, receiver) {

@@ -1,3 +1,4 @@
+import { migrationStatements } from './migration-statements';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -113,9 +114,9 @@ test('account recheck clears only browser SSO and the next authorize reaches Dis
   const mf = new miniflare.Miniflare('convertV4MiniflareOptions' in miniflare ? miniflare.convertV4MiniflareOptions(options) : options);
   t.after(() => mf.dispose());
   const DB = await mf.getD1Database('DB');
-  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql']) {
+  for (const file of ['0001_initial.sql', '0003_nakwol_connect.sql', '0011_season_roles.sql', '0012_membership_role_ids.sql', '0013_access_support.sql', '0016_membership_qualifications.sql']) {
     const sql = await root('migrations/' + file);
-    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await DB.prepare(statement).run();
+    for (const statement of migrationStatements(sql)) await DB.prepare(statement).run();
   }
   const env = { DB, NAKWOL_GUILD_ID: 'guild', NAKWOL_MEMBER_ROLE_ID: 'season3', DISCORD_CLIENT_ID: 'fixture', DISCORD_CLIENT_SECRET: 'fixture', AUTH_ORIGIN: 'https://auth.test' };
   await DB.prepare("INSERT INTO users VALUES ('user', '계정 검증', NULL, 'active', 0, 0)").run();

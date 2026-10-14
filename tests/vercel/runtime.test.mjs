@@ -1,3 +1,4 @@
+import { migrationStatements } from '../worker/migration-statements.ts';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -27,7 +28,7 @@ before(async () => {
   const native = await mf.getD1Database('DB');
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) {
     const sql = await readFile('migrations/' + name, 'utf8');
-    const statements = sql.replace(/--[^\n]*/g, '').split(';').map(s => s.trim()).filter(Boolean);
+    const statements = migrationStatements(sql);
     for (const statement of statements) await native.prepare(statement).run();
   }
   const bootstrap = (await readFile('deploy/vercel-auth-test/bootstrap.sql.template', 'utf8')).replaceAll('__AUTH_ORIGIN__', origin);

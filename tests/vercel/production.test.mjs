@@ -1,3 +1,4 @@
+import { migrationStatements } from '../worker/migration-statements.ts';
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
@@ -18,7 +19,7 @@ const request=(path,options={},values=env)=>handleRequest(new Request(origin+pat
 before(async()=>{
  const built=await build({entryPoints:['adapters/vercel/d1-http.ts'],bundle:true,platform:'node',format:'esm',write:false});({HttpD1Database:Database}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64')));
  mf=new Miniflare({modules:true,scriptPath:'deploy/vercel-auth-production/bridge-worker.mjs',compatibilityDate:'2026-07-01',d1Databases:{DB:'production-local-only'},bindings:{D1_BRIDGE_SECRET:secret,NAKWOL_D1_BRIDGE_MODE:'production',NAKWOL_D1_BRIDGE_DATABASE_ID:databaseId},port:0});url=await mf.ready;native=await mf.getD1Database('DB');
- for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile('migrations/'+name,'utf8');for(const line of sql.replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean))await native.prepare(line).run();}
+ for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile('migrations/'+name,'utf8');for(const line of migrationStatements(sql))await native.prepare(line).run();}
  transport=(_url,init)=>fetch(new URL('/rpc',url),init);db=new Database(endpoint,secret,transport,databaseId);
  const now=Date.now();
  for(const [id,discord,roles]of [['existing-member','123456789012345678',[env.NAKWOL_MEMBER_ROLE_ID]],['existing-outsider','223456789012345678',[]]]){
