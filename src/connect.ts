@@ -4,6 +4,7 @@ import connectAdminSource from './assets/nakwol-connect-admin.js.txt';
 import { authenticateAccessToken, getUserWithMembership, logAuthEvent } from './store';
 import type { Env } from './types';
 import { getApplicationQualificationRequirement } from './qualifications';
+import { parseUsagePeriod, readAppUsage } from './app-usage';
 
 const ADMIN_CLIENT_ID = 'nakwol-connect-admin';
 const FRAMEWORKS = new Set(['html', 'vite', 'react', 'vue', 'cra', 'sveltekit', 'next_app', 'next_pages', 'other', 'internal']);
@@ -62,6 +63,10 @@ function adminPage(): string {
     .content{display:flex;flex-direction:column;gap:16px}.content-card{padding:20px}.content-card h2,.content-card h3{margin-top:0}.content-card h3{font-size:15px;margin-bottom:14px}.detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.detail-head h2{margin:0;font-size:21px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:#cbd5e1;font-weight:700}.field input,.field textarea,.field select{width:100%;border:1px solid #334155;background:#0b1220;color:#f8fafc;border-radius:10px;padding:10px 11px;outline:none}.field textarea{min-height:88px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus{border-color:#6366f1}.field small{color:var(--muted);font-size:11px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
     .guide-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.guide-step{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:6px}.guide-step span{font-size:12px;color:var(--muted);line-height:1.45}.code-wrap{position:relative;margin:10px 0}.code{margin:0;background:#050912;border:1px solid #202c3f;border-radius:11px;padding:14px 70px 14px 14px;color:#c7d2fe;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.code-wrap .copy{position:absolute;top:8px;right:8px}.muted{color:var(--muted);font-size:13px}.diag-row{display:grid;grid-template-columns:22px 145px 1fr;gap:7px;align-items:center;border-bottom:1px solid #1f2937;padding:9px 0}.diag-ok{color:var(--ok);font-weight:900}.diag-bad{color:var(--bad);font-weight:900}.diag-detail{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.event-row{padding:9px 0;border-bottom:1px solid #1f2937}.event-top{display:flex;justify-content:space-between;gap:10px}.event-top time{font-size:11px;color:var(--muted)}.event-row code{display:block;color:#94a3b8;font-size:11px;margin-top:4px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.error-text{color:var(--bad)}#toast{position:fixed;right:20px;bottom:20px;background:#172033;border:1px solid #334155;border-radius:12px;padding:12px 15px;box-shadow:0 15px 50px rgba(0,0,0,.35);z-index:30}#toast[data-bad="true"]{border-color:#7f1d1d;color:#fecaca}
     @media(max-width:900px){header{padding:0 14px}.workspace{grid-template-columns:1fr}.sidebar{min-height:auto}.app-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid,.guide-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.auth-copy{display:none}}@media(max-width:560px){main{padding:12px}.app-list{grid-template-columns:1fr}.brand small{display:none}.diag-row{grid-template-columns:22px 1fr}.diag-detail{grid-column:2}}
+    .usage-periods{display:flex;gap:6px}.usage-periods button[aria-pressed="true"]{background:#6366f1;border-color:#6366f1;color:white}.usage-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.usage-tile{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px}.usage-tile span{display:block;font-size:12px;color:var(--muted)}.usage-tile b{display:block;font-size:26px;margin-top:4px;font-variant-numeric:tabular-nums}.usage-tile small{color:var(--muted);font-size:12px}
+    .usage-chart{display:flex;align-items:flex-end;gap:2px;height:120px;padding:8px 0;border-bottom:1px solid var(--line)}.usage-bar{flex:1;min-width:2px;background:var(--accent);border-radius:3px 3px 0 0;opacity:.85}.usage-bar:hover{opacity:1}.usage-bar.idle{background:#273349;min-height:2px}.usage-axis{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin:6px 0 16px}
+    .usage-table-wrap{overflow-x:auto}.usage-table{width:100%;border-collapse:collapse;font-size:13px}.usage-table th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}.usage-table th button{background:none;border:0;color:inherit;font-weight:inherit;padding:0}.usage-table th button[aria-sort]{color:#e5e7eb}.usage-table td{padding:8px 6px;border-bottom:1px solid #1f2937;white-space:nowrap}.usage-table td.num,.usage-table th.num{text-align:right;font-variant-numeric:tabular-nums}.usage-user{display:flex;align-items:center;gap:8px}.usage-user img,.usage-user .usage-avatar{width:24px;height:24px;border-radius:50%;background:#273349;flex:none}
+    @media(max-width:560px){.usage-tiles{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -95,6 +100,7 @@ function adminPage(): string {
           <div class="actions"><button id="reset-app" class="ghost" type="button">되돌리기</button><button id="save-app" class="primary" type="submit">저장</button></div>
         </form>
       </section>
+      <section class="content-card" aria-labelledby="usage-title"><div class="section-head"><h3 id="usage-title">이용 통계</h3><div class="usage-periods" role="group" aria-label="조회 기간"><button class="ghost" type="button" data-usage-days="7" aria-pressed="false">7일</button><button class="ghost" type="button" data-usage-days="30" aria-pressed="true">30일</button><button class="ghost" type="button" data-usage-days="90" aria-pressed="false">90일</button></div></div><p class="muted">로그인·자동 로그인(SSO) 기록을 집계합니다. 페이지 조회 수가 아니라 이용 세션 수이며, 계속 이용하면 대략 1시간마다 1회 늘어납니다. 날짜는 한국 시간 기준입니다.</p><div id="usage-area" role="status" aria-live="polite"></div></section>
       <section class="content-card"><h3>허용할 멤버 자격</h3><p class="muted">앱 기본 설정과 별도로 저장합니다. <a href="/admin/roles">멤버 자격 등록·관리</a></p><div id="qualification-policy" role="status"></div></section>
       <section class="content-card"><h3>접근 문제 해결 · 수동 권한</h3><h4>접근 거부 사용자</h4><p class="muted">최근 접속 순위와 별도로, 기록된 접근 거부 사용자의 현재 권한을 확인합니다. 해결된 계정도 표시하며 기록을 삭제하지 않습니다. 본인 확인 전 네트워크 실패는 사용자 접속 진단에서 확인하세요.</p><button id="issues-refresh" class="ghost" type="button">문제 사용자 새로고침</button><div id="support-issues" role="status" aria-live="polite"></div><button id="issues-more" class="ghost" type="button" hidden>다음 사용자 보기</button>
         <p class="muted">이 서비스에만 수동 접근을 허가합니다. Discord 역할과 AUTH 운영 권한은 변경하지 않습니다. 재인증 요구는 해당 사용자의 모든 서비스 AUTH 로그인을 무효화합니다.</p>
@@ -372,5 +378,16 @@ export function registerConnectRoutes(app: Hono<{ Bindings: Env }>): void {
       `SELECT event_type, user_id, created_at, detail FROM auth_events WHERE client_id = ? ORDER BY created_at DESC LIMIT 50`
     ).bind(clientId).all();
     return c.json({ ok: true, data: result.results || [] });
+  });
+
+  app.get('/admin/api/apps/:clientId/usage', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    const identity = await requireManager(c);
+    if (identity instanceof Response) return identity;
+    const clientId = c.req.param('clientId');
+    const days = parseUsagePeriod(c.req.query('days'));
+    if (!days) return c.json({ ok: false, error: { code: 'INVALID_PERIOD', message: '조회 기간은 7, 30, 90일 중에서 선택하세요.' } }, 400);
+    if (!await readApp(c.env, clientId)) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: '앱을 찾을 수 없습니다.' } }, 404);
+    return c.json({ ok: true, data: await readAppUsage(c.env, clientId, days) });
   });
 }
