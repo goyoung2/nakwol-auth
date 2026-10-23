@@ -43,7 +43,12 @@ async function fixture() {
       async run() { return db.prepare(sql).run(...args); },
     };
   }
-  const env = { DB: { prepare, async batch(statements: ReturnType<typeof prepare>[]) { return Promise.all(statements.map((statement) => statement.run())); } },
+  const env = { DB: { prepare, async batch(statements: ReturnType<typeof prepare>[]) {
+    // Like D1, run the whole batch inside one transaction and return row results.
+    db.exec('BEGIN');
+    try { const results = []; for (const statement of statements) results.push(await statement.all()); db.exec('COMMIT'); return results; }
+    catch (error) { db.exec('ROLLBACK'); throw error; }
+  } },
     NAKWOL_GUILD_ID: 'guild', AUTH_ORIGIN: 'https://auth.test' } as Env;
   const app = new Hono<{ Bindings: Env }>();
   registerConnectRoutes(app);
