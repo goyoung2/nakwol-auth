@@ -573,6 +573,7 @@ let usageDays = 30;
 let usageData = null;
 let usageSort = 'sessions';
 const usageNumber = new Intl.NumberFormat('ko-KR');
+const usageTime = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 function usageTile(label, value, note) {
   const tile = el('div', 'usage-tile');
   tile.append(el('span', '', label), el('b', '', usageNumber.format(value)));
@@ -635,7 +636,7 @@ function usageTable(data) {
     who.append(name);
     const nameCell = el('td'); nameCell.append(who);
     row.append(el('td', 'num', String(user.rank)), nameCell, el('td', 'num', usageNumber.format(user.sessions)),
-      el('td', 'num', user.active_days + '일'), el('td', '', formatTime(user.last_used_at)), el('td', '', formatTime(user.first_used_at)));
+      el('td', 'num', user.active_days + '일'), el('td', '', usageTime.format(user.last_used_at)), el('td', '', usageTime.format(user.first_used_at)));
     tbody.append(row);
   }
   table.append(thead, tbody);
