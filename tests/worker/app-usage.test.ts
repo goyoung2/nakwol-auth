@@ -67,7 +67,7 @@ test('usage API is limited to Connect managers and validates period and app', as
   assert.equal(body.data.daily.length, 30);
 });
 
-test('usage counts sessions per user, active days in KST, and excludes other apps, old and non-login events', async () => {
+test('usage counts sessions per user, active days in KST, and excludes other apps, old, future and non-login events', async () => {
   const f = await fixture();
   const todayKstMidnight = Date.UTC(2026, 9, 23, 15);
   // alice: 3 sessions over 2 KST days (23:30 KST yesterday and two today).
@@ -82,6 +82,8 @@ test('usage counts sessions per user, active days in KST, and excludes other app
   f.event('carol', 'site', 'discord.login.success', NOW - 8 * DAY);
   f.event('admin', 'site', 'connect.app.updated', NOW - 60000);
   f.event(null, 'site', 'discord.login.error', NOW - 60000);
+  // Written after the reported cutoff: must not leak into any query.
+  f.user('dave'); f.event('dave', 'site', 'authorize.sso', NOW + 1000);
   // Denied attempts are summarized separately.
   f.event('carol', 'site', 'authorize.access_denied', NOW - 60000);
   f.event('carol', 'site', 'discord.login.access_denied', NOW - 2 * 60000);

@@ -29,24 +29,25 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
   const today = Math.floor((now + KST_OFFSET_MS) / DAY_MS);
   const firstDay = today - days + 1;
   const since = firstDay * DAY_MS - KST_OFFSET_MS;
+  // Every query shares the same [since, now] window so summary, chart and ranking agree under live traffic.
   const [summary, denied, daily, users] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) AS sessions, COUNT(DISTINCT e.user_id) AS users FROM auth_events e
-      WHERE e.client_id = ? AND e.created_at >= ? AND e.event_type IN (${SESSION_IN})`)
-      .bind(clientId, since, ...USAGE_SESSION_EVENTS).first<{ sessions: number; users: number }>(),
+      WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN})`)
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS).first<{ sessions: number; users: number }>(),
     env.DB.prepare(`SELECT COUNT(*) AS denied, COUNT(DISTINCT e.user_id) AS denied_users FROM auth_events e
-      WHERE e.client_id = ? AND e.created_at >= ? AND e.event_type IN (${DENIED_IN})`)
-      .bind(clientId, since, ...USAGE_DENIED_EVENTS).first<{ denied: number; denied_users: number }>(),
+      WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${DENIED_IN})`)
+      .bind(clientId, since, now, ...USAGE_DENIED_EVENTS).first<{ denied: number; denied_users: number }>(),
     env.DB.prepare(`SELECT ${DAY_EXPR} AS day, COUNT(*) AS sessions, COUNT(DISTINCT e.user_id) AS users FROM auth_events e
-      WHERE e.client_id = ? AND e.created_at >= ? AND e.event_type IN (${SESSION_IN}) GROUP BY day`)
-      .bind(clientId, since, ...USAGE_SESSION_EVENTS).all<{ day: number; sessions: number; users: number }>(),
+      WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN}) GROUP BY day`)
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS).all<{ day: number; sessions: number; users: number }>(),
     env.DB.prepare(`SELECT e.user_id, u.display_name, u.avatar_url, i.provider_user_id AS discord_user_id,
         COUNT(*) AS sessions, COUNT(DISTINCT ${DAY_EXPR}) AS active_days, MIN(e.created_at) AS first_used_at, MAX(e.created_at) AS last_used_at
       FROM auth_events e
       LEFT JOIN users u ON u.id = e.user_id
       LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'discord'
-      WHERE e.client_id = ? AND e.created_at >= ? AND e.event_type IN (${SESSION_IN}) AND e.user_id IS NOT NULL
+      WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN}) AND e.user_id IS NOT NULL
       GROUP BY e.user_id ORDER BY sessions DESC, last_used_at DESC, e.user_id LIMIT ?`)
-      .bind(clientId, since, ...USAGE_SESSION_EVENTS, USAGE_TOP_USERS)
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS, USAGE_TOP_USERS)
       .all<{ user_id: string; display_name: string | null; avatar_url: string | null; discord_user_id: string | null;
         sessions: number; active_days: number; first_used_at: number; last_used_at: number }>(),
   ]);
