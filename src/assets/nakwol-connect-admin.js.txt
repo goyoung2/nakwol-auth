@@ -217,6 +217,8 @@ function selectApp(app) {
   loadEvents().catch((error) => renderEventsError(error.message));
   loadIssues();
   loadGateReports();
+  usageSort = 'sessions';
+  loadUsage();
   $("#auth-diagnostic-reference").value="";
   loadAuthDiagnostics();
 }
@@ -225,6 +227,9 @@ function startCreate() {
   issuesGeneration++;
   supportGeneration++;
   reportRequest++;
+  usageRequest++;
+  clear($("#usage-area"));
+  $("#usage-area").append(el('p', 'muted', '앱을 저장하면 이용 통계가 표시됩니다.'));
   diagnosticGeneration++;
   clear($("#auth-diagnostic-reports"));
   clear($("#gate-reports"));
@@ -563,6 +568,113 @@ async function loadGateReports() {
   }
 }
 $('#refresh-gate-reports').addEventListener('click',loadGateReports);
+let usageRequest = 0;
+let usageDays = 30;
+let usageData = null;
+let usageSort = 'sessions';
+const usageNumber = new Intl.NumberFormat('ko-KR');
+const usageTime = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Seoul' });
+function usageTile(label, value, note) {
+  const tile = el('div', 'usage-tile');
+  tile.append(el('span', '', label), el('b', '', usageNumber.format(value)));
+  if (note) tile.append(el('small', '', note));
+  return tile;
+}
+function usageChart(daily) {
+  const peak = Math.max(0, ...daily.map(day => day.users));
+  const scale = Math.max(1, peak);
+  const chart = el('div', 'usage-chart');
+  chart.setAttribute('role', 'img');
+  chart.setAttribute('aria-label', '일별 이용자 수. 최고 ' + peak + '명');
+  for (const day of daily) {
+    const bar = el('div', day.users ? 'usage-bar' : 'usage-bar idle');
+    bar.style.height = day.users ? Math.max(4, Math.round(day.users / scale * 100)) + '%' : '2px';
+    bar.title = day.date + ' · 이용자 ' + day.users + '명 · 세션 ' + day.sessions + '회';
+    chart.append(bar);
+  }
+  const axis = el('div', 'usage-axis');
+  axis.append(el('span', '', daily[0]?.date || ''), el('span', '', '일별 이용자 수 (최고 ' + peak + '명)'), el('span', '', daily.at(-1)?.date || ''));
+  return [chart, axis];
+}
+const usageColumns = [
+  ['rank', '#', true],
+  ['name', '사용자', false],
+  ['sessions', '이용 세션', true],
+  ['active_days', '이용한 날', true],
+  ['last_used_at', '마지막 이용', false],
+  ['first_used_at', '기간 내 첫 이용', false],
+];
+function usageSorted(users) {
+  const ranked = users.map((user, index) => ({ ...user, rank: index + 1 }));
+  if (usageSort === 'sessions') return ranked;
+  return ranked.sort((a, b) => (b[usageSort] - a[usageSort]) || (a.rank - b.rank));
+}
+function usageTable(data) {
+  const wrap = el('div', 'usage-table-wrap');
+  const table = el('table', 'usage-table');
+  const head = el('tr');
+  for (const [key, label, numeric] of usageColumns) {
+    const th = el('th', numeric ? 'num' : '');
+    th.scope = 'col';
+    if (['sessions', 'active_days', 'last_used_at'].includes(key)) {
+      const button = el('button', '', label);
+      button.type = 'button';
+      if (usageSort === key) button.setAttribute('aria-sort', 'descending');
+      button.onclick = () => { usageSort = key; renderUsage(data); };
+      th.append(button);
+    } else th.textContent = label;
+    head.append(th);
+  }
+  const thead = el('thead'); thead.append(head);
+  const tbody = el('tbody');
+  for (const user of usageSorted(data.users)) {
+    const row = el('tr');
+    const who = el('div', 'usage-user');
+    if (user.avatar_url) { const img = el('img'); img.src = user.avatar_url; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; who.append(img); }
+    else who.append(el('span', 'usage-avatar'));
+    const name = el('div');
+    name.append(el('div', '', user.display_name || '이름 미확인'), el('code', 'muted', user.discord_user_id ? 'Discord ' + user.discord_user_id : user.user_id));
+    who.append(name);
+    const nameCell = el('td'); nameCell.append(who);
+    row.append(el('td', 'num', String(user.rank)), nameCell, el('td', 'num', usageNumber.format(user.sessions)),
+      el('td', 'num', user.active_days + '일'), el('td', '', usageTime.format(user.last_used_at)), el('td', '', usageTime.format(user.first_used_at)));
+    tbody.append(row);
+  }
+  table.append(thead, tbody);
+  wrap.append(table);
+  return wrap;
+}
+function renderUsage(data) {
+  const target = $('#usage-area');
+  clear(target);
+  const s = data.summary;
+  const tiles = el('div', 'usage-tiles');
+  tiles.append(usageTile('이용자', s.users, '최근 ' + data.days + '일'), usageTile('이용 세션', s.sessions, s.users ? '1인 평균 ' + (s.sessions / s.users).toFixed(1) + '회' : ''),
+    usageTile('접근 거부', s.denied, s.denied_users ? s.denied_users + '명 · 아래 접근 문제 해결 참고' : ''));
+  target.append(tiles, ...usageChart(data.daily));
+  if (!data.users.length) { target.append(el('p', 'muted', '이 기간에 기록된 이용이 없습니다.')); return; }
+  target.append(el('h4', '', '자주 이용한 사용자'), usageTable(data));
+  if (data.users_truncated) target.append(el('p', 'muted', '이용 세션 수 상위 ' + data.users.length + '명만 표시합니다.'));
+}
+async function loadUsage() {
+  const target = $('#usage-area');
+  const clientId = state.selected?.client_id;
+  const request = ++usageRequest;
+  for (const button of document.querySelectorAll('[data-usage-days]')) button.setAttribute('aria-pressed', String(Number(button.dataset.usageDays) === usageDays));
+  clear(target);
+  if (!clientId) { target.append(el('p', 'muted', '앱을 먼저 저장하세요.')); return; }
+  target.append(el('p', 'muted', '이용 기록을 집계하는 중…'));
+  try {
+    const payload = await api('/admin/api/apps/' + encodeURIComponent(clientId) + '/usage?days=' + usageDays);
+    if (request !== usageRequest || state.selected?.client_id !== clientId) return;
+    usageData = payload.data;
+    renderUsage(usageData);
+  } catch (error) {
+    if (request !== usageRequest) return;
+    clear(target); target.append(el('p', 'error-text', '이용 통계 조회 실패: ' + error.message));
+  }
+}
+for (const button of document.querySelectorAll('[data-usage-days]')) button.onclick = () => { usageDays = Number(button.dataset.usageDays); loadUsage(); };
 
 let diagnosticGeneration=0;
 const stageLabels={authorize:'AUTH 로그인 요청',discord_code_exchange:'Discord 코드 교환',discord_identity:'Discord 계정 확인',discord_member:'Discord 역할 조회',membership_db:'맹원 기록 저장',policy:'접근 정책 확인',code_creation:'인증 코드 발급',session_creation:'SSO 세션 생성',token:'토큰 교환',me:'접근 권한 응답'};
