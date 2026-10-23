@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.8",
-  "target_sha": "333d4c5c687407a76870e9ada6d22092caf834fb",
-  "notes_file": "docs/releases/2026-10-14-installation-studio.md"
+  "version": "0.2.9",
+  "target_sha": "edbd9c50cca33dfb2575a6358a1d8bbb2124f557",
+  "notes_file": "docs/releases/2026-10-24-auth-v0.2.9-usage-stats.md"
 }
