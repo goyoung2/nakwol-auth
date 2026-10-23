@@ -29,17 +29,18 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
   const today = Math.floor((now + KST_OFFSET_MS) / DAY_MS);
   const firstDay = today - days + 1;
   const since = firstDay * DAY_MS - KST_OFFSET_MS;
-  // Every query shares the same [since, now] window so summary, chart and ranking agree under live traffic.
-  const [summary, denied, daily, users] = await Promise.all([
+  // One D1 batch runs as a single transaction, so every aggregate reads the same snapshot;
+  // the shared [since, now] window keeps later writes out of all of them.
+  const [summaryResult, deniedResult, daily, users] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(`SELECT COUNT(*) AS sessions, COUNT(DISTINCT e.user_id) AS users FROM auth_events e
       WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN})`)
-      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS).first<{ sessions: number; users: number }>(),
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS),
     env.DB.prepare(`SELECT COUNT(*) AS denied, COUNT(DISTINCT e.user_id) AS denied_users FROM auth_events e
       WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${DENIED_IN})`)
-      .bind(clientId, since, now, ...USAGE_DENIED_EVENTS).first<{ denied: number; denied_users: number }>(),
+      .bind(clientId, since, now, ...USAGE_DENIED_EVENTS),
     env.DB.prepare(`SELECT ${DAY_EXPR} AS day, COUNT(*) AS sessions, COUNT(DISTINCT e.user_id) AS users FROM auth_events e
       WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN}) GROUP BY day`)
-      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS).all<{ day: number; sessions: number; users: number }>(),
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS),
     env.DB.prepare(`SELECT e.user_id, u.display_name, u.avatar_url, i.provider_user_id AS discord_user_id,
         COUNT(*) AS sessions, COUNT(DISTINCT ${DAY_EXPR}) AS active_days, MIN(e.created_at) AS first_used_at, MAX(e.created_at) AS last_used_at
       FROM auth_events e
@@ -47,12 +48,12 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
       LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'discord'
       WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.event_type IN (${SESSION_IN}) AND e.user_id IS NOT NULL
       GROUP BY e.user_id ORDER BY sessions DESC, last_used_at DESC, e.user_id LIMIT ?`)
-      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS, USAGE_TOP_USERS)
-      .all<{ user_id: string; display_name: string | null; avatar_url: string | null; discord_user_id: string | null;
-        sessions: number; active_days: number; first_used_at: number; last_used_at: number }>(),
+      .bind(clientId, since, now, ...USAGE_SESSION_EVENTS, USAGE_TOP_USERS),
   ]);
+  const summary = summaryResult.results?.[0] as { sessions: number; users: number } | undefined;
+  const denied = deniedResult.results?.[0] as { denied: number; denied_users: number } | undefined;
   // Return every day in the window, including idle days, so charts keep a true time axis.
-  const byDay = new Map((daily.results ?? []).map((row) => [Number(row.day), row]));
+  const byDay = new Map(((daily.results ?? []) as { day: number; sessions: number; users: number }[]).map((row) => [Number(row.day), row]));
   return {
     days,
     since,
@@ -68,7 +69,8 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
       const day = firstDay + index, row = byDay.get(day);
       return { date: dayLabel(day), sessions: Number(row?.sessions ?? 0), users: Number(row?.users ?? 0) };
     }),
-    users: (users.results ?? []).map((row) => ({
+    users: ((users.results ?? []) as { user_id: string; display_name: string | null; avatar_url: string | null; discord_user_id: string | null;
+      sessions: number; active_days: number; first_used_at: number; last_used_at: number }[]).map((row) => ({
       user_id: row.user_id,
       display_name: row.display_name,
       avatar_url: row.avatar_url,
