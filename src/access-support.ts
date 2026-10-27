@@ -3,6 +3,7 @@ import type { Env } from './types';
 import { authenticateAccessToken } from './store';
 import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin } from './policy';
 import { randomToken } from './crypto';
+import { parseHistoryQuery, readAuthEventHistory } from './auth-event-history';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -41,6 +42,18 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     }
     return c.json({ ok: true, issues, has_more: candidates.results.length > 25,
       next_cursor: page.at(-1)?.user_id ?? null });
+  });
+
+  app.get('/admin/api/access/:clientId/history', async (c) => {
+    const actor = await operator(c);
+    if (actor instanceof Response) return actor;
+    const query = parseHistoryQuery(new URL(c.req.url).searchParams);
+    if (!query) return c.json({ error: { message: '조회 종류·기간·Discord ID·페이지 위치를 확인하세요.' } }, 400);
+    const clientId = c.req.param('clientId');
+    if (!await c.env.DB.prepare('SELECT client_id FROM applications WHERE client_id = ?').bind(clientId).first()) {
+      return c.json({ error: { message: '서비스를 찾을 수 없습니다.' } }, 404);
+    }
+    return c.json(await readAuthEventHistory(c.env, clientId, query));
   });
 
   app.get('/admin/api/access/:clientId', async (c) => {

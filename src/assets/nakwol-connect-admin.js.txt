@@ -202,6 +202,7 @@ function fillForm(app) {
 }
 
 function selectApp(app) {
+  resetHistory();
   supportId.value = "";
   supportStatus.textContent = "";
   $("#support-reason").value = "";
@@ -219,11 +220,13 @@ function selectApp(app) {
   loadGateReports();
   usageSort = 'sessions';
   loadUsage();
+  loadHistory();
   $("#auth-diagnostic-reference").value="";
   loadAuthDiagnostics();
 }
 
 function startCreate() {
+  resetHistory();
   issuesGeneration++;
   supportGeneration++;
   reportRequest++;
@@ -568,6 +571,96 @@ async function loadGateReports() {
   }
 }
 $('#refresh-gate-reports').addEventListener('click',loadGateReports);
+let historyGeneration = 0, historyController = null, historyFilter = null, historyCursor = null;
+let historySummary = [], historyShown = 0, historyExporting = false;
+const historyStatus = $('#history-status'), historyMore = $('#history-more');
+function historyButtons(disabled) {
+  $('#history-json').disabled = $('#history-csv').disabled = disabled;
+}
+function resetHistory() {
+  historyGeneration++;
+  historyController?.abort(); historyController = new AbortController();
+  historyFilter = historyCursor = null; historySummary = []; historyShown = 0; historyExporting = false;
+  historyMore.hidden = true; $('#history-cancel').hidden = true; historyButtons(true);
+  clear($('#history-events')); clear($('#history-summary')); historyStatus.textContent = '';
+}
+function historyUrl(clientId, params) { return '/admin/api/access/' + encodeURIComponent(clientId) + '/history?' + params; }
+function renderHistoryRows(events) {
+  for (const event of events) {
+    const row = el('details', 'event-row'), title = el('summary');
+    title.textContent = formatTime(event.created_at) + ' · ' + event.event_type + ' · ' + (event.display_name || '사용자 미확인');
+    const detail = readDetail(event.detail);
+    row.append(title, el('p', '', 'Discord ' + (event.discord_user_id || detail.discord_user_id || '미확인')));
+    const reason = detail.diagnosis?.reason || detail.message;
+    if (reason) row.append(el('p', '', reasonLabels[reason] || reason));
+    const raw = el('pre', '', JSON.stringify(event, null, 2)); raw.style.whiteSpace = 'pre-wrap'; raw.style.overflowWrap = 'anywhere';
+    row.append(raw); $('#history-events').append(row);
+  }
+}
+async function loadHistory(append = false) {
+  if (!state.selected || historyExporting) return;
+  if (!append) resetHistory();
+  const generation = historyGeneration, clientId = state.selected.client_id, signal = historyController.signal;
+  const params = append && historyFilter ? new URLSearchParams(historyFilter) : new URLSearchParams({
+    kind: $('#history-kind').value, discord_id: $('#history-discord').value.trim(),
+    since: $('#history-period').value === 'all' ? '0' : String(Date.now() - Number($('#history-period').value) * 86400000),
+  });
+  if (append && historyCursor) { params.set('before', historyCursor.created_at); params.set('cursor_id', historyCursor.id); params.set('summary', '0'); }
+  historyMore.disabled = true; historyStatus.textContent = '저장된 인증 기록을 조회하는 중…';
+  try {
+    const data = await api(historyUrl(clientId, params), {signal});
+    if (generation !== historyGeneration || state.selected?.client_id !== clientId) return;
+    if (!append) {
+      historyFilter = new URLSearchParams(data.filter); historySummary = data.summary;
+      const target = $('#history-summary');
+      for (const group of historySummary) target.append(el('p', 'muted', group.event_type + ' · ' + (reasonLabels[group.reason] || group.reason || '사유 미기록') + ' · ' + group.count + '건 · 확인된 사용자 ' + group.identified_users + '명 · 사용자 미확인 ' + group.unidentified_events + '건'));
+    }
+    renderHistoryRows(data.events); historyShown += data.events.length;
+    historyCursor = data.next_cursor; historyMore.hidden = !data.has_more;
+    const total = historySummary.reduce((sum, row) => sum + Number(row.count), 0);
+    historyStatus.textContent = '총 ' + total.toLocaleString('ko-KR') + '건 중 ' + historyShown.toLocaleString('ko-KR') + '건 표시 · 조회 기준 ' + formatTime(data.filter.until);
+    historyButtons(false);
+  } catch(error) { if (generation === historyGeneration && !signal.aborted) { historyStatus.textContent = '조회 실패: ' + error.message; } }
+  finally { if (generation === historyGeneration) historyMore.disabled = false; }
+}
+async function exportHistory(format) {
+  if (!historyFilter || historyExporting || !state.selected) return;
+  historyExporting = true; historyButtons(true); historyMore.disabled = true; $('#history-cancel').hidden = false;
+  const generation = historyGeneration, clientId = state.selected.client_id, signal = historyController.signal;
+  const params = new URLSearchParams(historyFilter); params.set('limit','200'); params.set('summary','0');
+  const events = [], ids = new Set();
+  try {
+    for (;;) {
+      const data = await api(historyUrl(clientId, params), {signal});
+      if (generation !== historyGeneration || state.selected?.client_id !== clientId || signal.aborted) return;
+      for (const event of data.events) {
+        if (ids.has(event.id)) throw new Error('중복 페이지가 반환되었습니다. 다시 조회하세요.');
+        ids.add(event.id); events.push(event);
+      }
+      historyStatus.textContent = '전체 기록 수집 중 · ' + events.length.toLocaleString('ko-KR') + '건';
+      if (!data.has_more) break;
+      if (!data.events.length || !data.next_cursor) throw new Error('다음 페이지를 확인할 수 없습니다.');
+      params.set('before',data.next_cursor.created_at); params.set('cursor_id',data.next_cursor.id);
+    }
+    const total = historySummary.reduce((sum, row) => sum + Number(row.count), 0);
+    if (events.length !== total) throw new Error('조회 중 기록이 변경되었습니다. 조건으로 조회를 누른 뒤 다시 내려받으세요.');
+    const columns = ['id','client_id','event_type','user_id','display_name','discord_user_id','created_at','created_at_kst','detail'];
+    const cell = value => '"' + String(value ?? '').replace(/^(\s*[=+@-]|[\t\r\n])/, "'$1").replaceAll('"','""') + '"';
+    const content = format === 'json' ? JSON.stringify({filter:Object.fromEntries(historyFilter),summary:historySummary,events},null,2)
+      : '\ufeff' + [columns.join(','),...events.map(event => columns.map(key => cell(key === 'created_at_kst' ? new Date(event.created_at + 32400000).toISOString().replace('Z','+09:00') : event[key])).join(','))].join('\r\n');
+    const url = URL.createObjectURL(new Blob([content], {type:format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8'}));
+    const link = el('a'); link.href = url; link.download = clientId + '-auth-history-' + historyFilter.get('until') + '.' + format;
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    historyStatus.textContent = '전체 ' + events.length.toLocaleString('ko-KR') + '건 내려받기 완료 · 식별자 원본 분석에는 JSON을 사용하세요.';
+  } catch(error) { if (generation === historyGeneration) historyStatus.textContent = signal.aborted ? '내려받기를 취소했습니다. 일부 기록을 전체 파일로 저장하지 않았습니다.' : '내려받기 실패: ' + error.message; }
+  finally { if (generation === historyGeneration) { historyExporting = false; historyController = new AbortController(); historyButtons(false); historyMore.disabled = false; $('#history-cancel').hidden = true; } }
+}
+$('#history-form').onsubmit = event => { event.preventDefault(); historyExporting = false; loadHistory(); };
+$('#history-more').onclick = () => loadHistory(true);
+$('#history-json').onclick = () => exportHistory('json');
+$('#history-csv').onclick = () => exportHistory('csv');
+$('#history-cancel').onclick = () => historyController?.abort();
+historyButtons(true);
 let usageRequest = 0;
 let usageDays = 30;
 let usageData = null;

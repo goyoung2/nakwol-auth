@@ -115,6 +115,18 @@ function adminPage(): string {
       <section class="content-card"><div class="section-head"><h3>연동 진단</h3><button id="run-diagnostics" class="ghost" type="button">연동 상태 확인</button></div><div id="diagnostics-area"></div></section>
       <section class="content-card"><div class="section-head"><h3>사용자 접속 진단</h3><button id="refresh-auth-diagnostics" class="ghost" type="button">최근 진단</button></div><label for="auth-diagnostic-reference">진단 번호</label><input id="auth-diagnostic-reference" maxlength="27" placeholder="dg_…"><button id="find-auth-diagnostic" class="ghost" type="button">조회</button><p class="muted">브라우저 보고는 사용자 관측이며 서버 단계는 AUTH 측정입니다. 네트워크 표본의 출처를 확인하세요. 최근 20건 · 7일 보관</p><div id="auth-diagnostic-reports" role="status" aria-live="polite"></div></section>
       <section class="content-card"><div class="section-head"><h3>서버 보호 배포 현황</h3><button id="refresh-gate-reports" class="ghost" type="button">새로고침</button></div><p class="muted">서비스 CI가 전송한 검사 결과입니다. 중앙 서버의 배포 증명이나 정상 사용자 로그인 검증을 대신하지 않습니다. 최근 100건을 표시합니다.</p><div id="gate-reports" role="status" aria-live="polite"></div></section>
+      <section class="content-card" aria-labelledby="history-title"><h3 id="history-title">인증 문제 전체 조회 · 내보내기</h3>
+        <p class="muted">50건은 화면의 페이지 크기입니다. 전체 내려받기는 저장된 모든 일치 기록을 수집합니다. 접근 거부 기록에는 역할 재확인 필요도 포함되며, 실제 로그인 실패와 구분해서 분석하세요. 서비스 자체 오류·AUTH에 도달하지 않은 요청은 포함되지 않습니다.</p>
+        <form id="history-form" class="form-grid">
+          <div class="field"><label for="history-kind">기록 종류</label><select id="history-kind"><option value="problems">접근 거부 + 인증 오류</option><option value="denied">접근 거부 기록</option><option value="errors">인증 오류</option><option value="all">전체 인증·관리 기록</option></select></div>
+          <div class="field"><label for="history-period">조회 기간</label><select id="history-period"><option value="all">전체 보관 기간</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option></select></div>
+          <div class="field"><label for="history-discord">Discord ID (선택)</label><input id="history-discord" inputmode="numeric" maxlength="22" pattern="[0-9]{15,22}"></div>
+          <div class="actions"><button class="primary" type="submit">조건으로 조회</button></div>
+        </form>
+        <p id="history-status" role="status" aria-live="polite"></p><div id="history-summary"></div>
+        <div class="actions"><button id="history-json" class="ghost" type="button">전체 JSON 내려받기</button><button id="history-csv" class="ghost" type="button">전체 CSV 내려받기</button><button id="history-cancel" class="ghost" type="button" hidden>내려받기 취소</button></div>
+        <div id="history-events"></div><button id="history-more" class="ghost" type="button" hidden>이전 50건 더 보기</button>
+      </section>
       <section class="content-card"><div class="section-head"><h3>인증·관리자 조치 기록</h3><button id="refresh-events" class="ghost" type="button">새로고침</button></div><p class="muted">Discord ID를 입력하고 계정 진단을 누르면 해당 계정으로 필터링합니다. 서비스 자체의 오류는 포함되지 않습니다.</p><div id="events-area"></div><button id="events-more" class="ghost" type="button" hidden>이전 기록 더 보기</button></section>
     </div>
   </section>

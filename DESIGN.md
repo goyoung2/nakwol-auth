@@ -29,6 +29,13 @@
 - Verified account diagnostics distinguish role refresh from administrator-only action. The recovery UI does not grant access or change service policies.
 - Central Embed updates apply on reload. Generated server login pages require Connect 0.6.1 protection regeneration and redeployment; custom consumer error pages must add the documented link themselves.
 
+## Administrator authentication history
+
+- Reuse admin content-card, form-grid/field, actions, event-row, muted/error-text and native details. App-specific history filters by recorded category, rolling period/all retained time and optional Discord ID. History and support-action forms remain separate.
+- Display aggregate reasons before newest-first 50-row pages. Membership refresh is labelled separately from a missing role. Counts are recorded events, not final failures or distinct people across reason groups. Unidentified errors stay visible.
+- JSON/CSV downloads collect all matching pages at a fixed upper timestamp with real progress, cancellation, errors and no partial-success file. App changes cancel requests and reject stale responses. Native controls have labels and polite status; record details render as text. JSON preserves identifier types; CSV uses quoted/formula-neutralized cells and UTF-8 BOM.
+- Keep existing audit history and access policy intact. Stored AUTH events cannot represent every site error or request that never reached AUTH.
+
 ## Administrator deployment reports
 
 - Reuse `/admin/apps`' existing `content-card`, `section-head`, `event-row`, `muted`, `error-text`, `ghost` and `el()` primitives. No new palette or layout system.
