@@ -18,12 +18,12 @@ test('AUTH UX v1 preserves OAuth, PKCE, state and CORS security guards', async (
   assert.match(sdk, /'S256'/);
 });
 
-test('AUTH runtime contract is version 0.2.10 across package, health and landing routes', async () => {
+test('AUTH runtime contract is version 0.2.11 across package, health and landing routes', async () => {
   const pkg = JSON.parse(await root('package.json')) as { version: string };
   const index = await root('src/index.ts');
 
-  assert.equal(pkg.version, '0.2.10');
-  assert.ok(index.includes("version: '0.2.10'"));
+  assert.equal(pkg.version, '0.2.11');
+  assert.ok(index.includes("version: '0.2.11'"));
   assert.match(index, /낙월 통합 인증 서비스 v0\.2/);
   assert.match(index, /href="\/account"/);
   assert.match(index, /href="\/lab"/);
