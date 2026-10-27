@@ -119,3 +119,22 @@ test('usage ranking is bounded and reports truncation', async () => {
   assert.equal(usage.users.length, USAGE_TOP_USERS);
   assert.equal(usage.users_truncated, true);
 });
+
+test('failure statistics separate refresh, denial, errors and subsequent same-app recovery without editing events', async () => {
+  const f = await fixture();
+  const refresh = NOW - 60000;
+  // event() stores null details by default; set a historical refresh reason through the same SQLite adapter.
+  f.event('alice','site','authorize.access_denied',refresh);
+  await f.env.DB.prepare(`UPDATE auth_events SET detail=? WHERE user_id='alice'`).bind(JSON.stringify({diagnosis:{reason:'MEMBERSHIP_REFRESH_REQUIRED'}})).run();
+  f.event('alice','site','discord.login.success',NOW-30000);
+  f.event('bob','site','discord.login.access_denied',refresh);
+  f.event('bob','other','discord.login.success',NOW-30000);
+  f.event(null,'site','discord.login.error',refresh);
+  f.event('carol','site','authorize.access_denied',refresh);
+  await f.env.DB.prepare(`UPDATE auth_events SET detail=? WHERE user_id='carol'`).bind(JSON.stringify({diagnosis:{reason:'REAUTHENTICATION_REQUIRED'}})).run();
+  f.event('carol','site','discord.login.success',NOW+1000);
+  const usage = await readAppUsage(f.env,'site',7,NOW);
+  assert.deepEqual(usage.failure_summary,{refresh_required:2,access_denied:1,authentication_errors:1,recovered_users:1,unresolved_users:2});
+  assert.equal(usage.summary.denied,3);
+  assert.equal((await f.env.DB.prepare('SELECT COUNT(*) AS n FROM auth_events').first<{n:number}>())?.n,7);
+});
