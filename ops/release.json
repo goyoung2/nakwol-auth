@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.9",
-  "target_sha": "edbd9c50cca33dfb2575a6358a1d8bbb2124f557",
-  "notes_file": "docs/releases/2026-10-24-auth-v0.2.9-usage-stats.md"
+  "version": "0.2.10",
+  "target_sha": "408ccd65dc8c6ddc96d36b65fb86b2f06944d7a9",
+  "notes_file": "docs/releases/2026-10-27-auth-v0.2.10-history.md"
 }
