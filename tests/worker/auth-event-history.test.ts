@@ -109,6 +109,12 @@ test('operator history retrieves all 1400+ problems without success noise or tim
     assert.equal(unresolved.issues.find((r:{user_id:string})=>r.user_id==='case-b').last_success_at,null);
     const recovered=await issues('recovered');
     assert.deepEqual(recovered.issues.map((r:{user_id:string})=>r.user_id),['case-a','case-d']);
+    // An old success excludes a user from never-succeeded even when a later denial is unresolved.
+    await DB.prepare(`INSERT INTO auth_events VALUES('old-success','case-e','site','discord.login.success','{}',200)`).run();
+    const never=await issues('never_succeeded');
+    assert.deepEqual(never.issues.map((r:{user_id:string})=>r.user_id),['case-b','case-c']);
+    assert.ok((await issues('unresolved')).issues.some((r:{user_id:string})=>r.user_id==='case-e'));
+    assert.ok(never.issues.every((r:{last_success_at:number|null})=>r.last_success_at===null));
     // Filtering a current state must not stop the candidate scan when a first page has no matches.
     for(let i=0;i<26;i++) {
       const id='a-no-block-'+String(i).padStart(2,'0');

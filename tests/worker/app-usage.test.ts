@@ -134,7 +134,18 @@ test('failure statistics separate refresh, denial, errors and subsequent same-ap
   await f.env.DB.prepare(`UPDATE auth_events SET detail=? WHERE user_id='carol'`).bind(JSON.stringify({diagnosis:{reason:'REAUTHENTICATION_REQUIRED'}})).run();
   f.event('carol','site','discord.login.success',NOW+1000);
   const usage = await readAppUsage(f.env,'site',7,NOW);
-  assert.deepEqual(usage.failure_summary,{refresh_required:2,access_denied:1,authentication_errors:1,recovered_users:1,unresolved_users:2});
+  assert.deepEqual(usage.failure_summary,{refresh_required:2,access_denied:1,authentication_errors:1,recovered_users:1,unresolved_users:2,never_succeeded_users:2});
   assert.equal(usage.summary.denied,3);
   assert.equal((await f.env.DB.prepare('SELECT COUNT(*) AS n FROM auth_events').first<{n:number}>())?.n,7);
+});
+
+test('never-succeeded counts search success history before the selected period and exclude other apps', async () => {
+  const f=await fixture();
+  f.event('alice','site','discord.login.success',NOW-40*DAY);
+  f.event('alice','site','authorize.access_denied',NOW-1000);
+  f.event('bob','other','discord.login.success',NOW-40*DAY);
+  f.event('bob','site','authorize.access_denied',NOW-1000);
+  const usage=await readAppUsage(f.env,'site',7,NOW);
+  assert.equal(usage.failure_summary.unresolved_users,2);
+  assert.equal(usage.failure_summary.never_succeeded_users,1);
 });

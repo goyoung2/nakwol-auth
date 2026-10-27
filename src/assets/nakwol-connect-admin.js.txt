@@ -759,7 +759,7 @@ function renderUsage(data) {
     usageTile('역할·재인증 확인 필요', f.refresh_required, '최종 로그인 실패 수가 아닙니다'),
     usageTile('권한 거부', f.access_denied, '역할 재확인 기록 제외'),
     usageTile('인증 오류', f.authentication_errors, 'Discord 인증 처리 오류'),
-    usageTile('거부 후 성공 미확인', f.unresolved_users, '명 · 아래 사용자 목록에서 확인'));
+    usageTile('성공 이력 없음', f.never_succeeded_users, '명 · 거부 이력은 있으나 이 서비스 성공 기록 없음'));
   target.append(tiles, ...usageChart(data.daily));
   target.append(el('p', 'muted', '기간 내 거부 기록 사용자 ' + s.denied_users + '명 중 마지막 거부 후 인증 성공 ' + f.recovered_users + '명. 현재 권한 차단 여부는 아래 상태 필터로 확인하세요. 기존 거부 원본 ' + s.denied + '건은 보존됩니다.'));
   if (!data.users.length) { target.append(el('p', 'muted', '이 기간에 기록된 이용이 없습니다.')); return; }
