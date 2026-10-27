@@ -58,9 +58,12 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
       GROUP BY e.user_id ORDER BY sessions DESC, last_used_at DESC, e.user_id LIMIT ?`)
       .bind(clientId, since, now, ...USAGE_SESSION_EVENTS, USAGE_TOP_USERS),
     env.DB.prepare(`SELECT COUNT(*) AS affected_users,
-      SUM(CASE WHEN EXISTS (SELECT 1 FROM auth_events s WHERE s.client_id = ? AND s.user_id = d.user_id
-        AND s.created_at > d.last_denied AND s.created_at <= ? AND s.event_type IN (${SESSION_IN})) THEN 1 ELSE 0 END) AS recovered_users
-      FROM (SELECT e.user_id, MAX(e.created_at) AS last_denied FROM auth_events e
+      SUM(CASE WHEN last_success_at > last_denied THEN 1 ELSE 0 END) AS recovered_users,
+      SUM(CASE WHEN last_success_at IS NULL THEN 1 ELSE 0 END) AS never_succeeded_users
+      FROM (SELECT e.user_id, MAX(e.created_at) AS last_denied,
+        (SELECT MAX(s.created_at) FROM auth_events s WHERE s.client_id = ? AND s.user_id = e.user_id
+          AND s.created_at <= ? AND s.event_type IN (${SESSION_IN})) AS last_success_at
+        FROM auth_events e
         WHERE e.client_id = ? AND e.created_at >= ? AND e.created_at <= ? AND e.user_id IS NOT NULL
         AND e.event_type IN (${DENIED_IN}) GROUP BY e.user_id) d`)
       .bind(clientId, now, ...USAGE_SESSION_EVENTS, clientId, since, now, ...USAGE_DENIED_EVENTS),
@@ -88,6 +91,7 @@ export async function readAppUsage(env: Env, clientId: string, days: UsagePeriod
       authentication_errors: Number(failures?.authentication_errors ?? 0),
       recovered_users: Number(recovery?.recovered_users ?? 0),
       unresolved_users: Number(recovery?.affected_users ?? 0) - Number(recovery?.recovered_users ?? 0),
+      never_succeeded_users: Number(recovery?.never_succeeded_users ?? 0),
     },
     daily: Array.from({ length: days }, (_, index) => {
       const day = firstDay + index, row = byDay.get(day);

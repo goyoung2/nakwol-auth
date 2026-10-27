@@ -25,9 +25,10 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     const clientId = c.req.param('clientId');
     const after = c.req.query('after') || '';
     const status = c.req.query('status') || 'all';
-    if (after.length > 200 || !['all','unresolved','recovered','blocked','refresh'].includes(status)) return c.json({ error: { message: '잘못된 조회 위치 또는 상태입니다.' } }, 400);
+    if (after.length > 200 || !['all','never_succeeded','unresolved','recovered','blocked','refresh'].includes(status)) return c.json({ error: { message: '잘못된 조회 위치 또는 상태입니다.' } }, 400);
     const now = Date.now();
-    const recoveryFilter = status === 'unresolved' ? 'HAVING last_success_at IS NULL OR last_success_at <= MAX(e.created_at)'
+    const recoveryFilter = status === 'never_succeeded' ? 'HAVING last_success_at IS NULL'
+      : status === 'unresolved' ? 'HAVING last_success_at IS NULL OR last_success_at <= MAX(e.created_at)'
       : status === 'recovered' ? 'HAVING last_success_at > MAX(e.created_at)' : '';
     // Page distinct failed identities, independently of the recent-event feed.
     const candidates = await c.env.DB.prepare(
