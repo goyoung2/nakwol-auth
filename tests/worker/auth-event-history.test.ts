@@ -7,6 +7,7 @@ import { migrationStatements } from './migration-statements';
 import { registerAccessSupportRoutes } from '../../src/access-support';
 import { parseHistoryQuery } from '../../src/auth-event-history';
 import { sha256Base64Url } from '../../src/crypto';
+import { upsertMembership } from '../../src/store';
 import type { Env } from '../../src/types';
 
 test('history rejects malformed filters and incomplete pagination cursors', () => {
@@ -77,5 +78,46 @@ test('operator history retrieves all 1400+ problems without success noise or tim
     assert.equal((await (await request('kind=errors&discord_id=111111111111111111')).json()).events.length,0);
     const range = await (await request('since=101&until=101&kind=all')).json();
     assert.equal(range.events.length,3);
+    const refresh = await (await request('kind=refresh&until=101')).json();
+    assert.equal(refresh.summary[0].count,1403);
+    assert.equal(refresh.events[0].category,'refresh');
+    assert.equal((await (await request('kind=denied&until=101')).json()).events.length,0);
+    const failures = await (await request('kind=failures&until=101')).json();
+    assert.equal(failures.events.length,2);
+    assert.ok(failures.events.every((e:{category:string})=>e.category==='error'));
+  });
+  await t.test('current blocked, refresh and recovered views remain distinct and service scoped',async()=>{
+    for(const id of ['case-a','case-b','case-c','case-d','case-e']) {
+      await DB.prepare(`INSERT INTO users VALUES(?,?,NULL,'active',0,0)`).bind(id,id).run();
+      await upsertMembership(env,id,true,'member',id==='case-b'?[]:['season3']);
+      await DB.prepare(`INSERT INTO auth_events VALUES(?,?,'site','authorize.access_denied','{}',300)`).bind('denial-'+id,id).run();
+    }
+    for(const id of ['case-a','case-d']) await DB.prepare(`INSERT INTO auth_events VALUES(?,?,'site','discord.login.success','{}',400)`).bind('success-'+id,id).run();
+    await DB.prepare(`INSERT INTO auth_events VALUES('other-success','case-b','other','discord.login.success','{}',400)`).run();
+    await DB.prepare(`UPDATE users SET status='disabled' WHERE id='case-d'`).run();
+    await DB.prepare(`UPDATE memberships SET checked_at=1 WHERE user_id='case-c'`).run();
+    const issues=async(status:string,after='')=>(await app.request('https://auth.test/admin/api/access/site/issues?'+new URLSearchParams({status,after}),{headers:{Authorization:'Bearer admin'}},env)).json();
+    const blocked=await issues('blocked');
+    assert.deepEqual(blocked.issues.map((r:{user_id:string})=>r.user_id),['case-b','case-d']);
+    assert.equal(blocked.issues[1].recovered_after_denial,true);
+    const refresh=await issues('refresh');
+    assert.ok(refresh.issues.some((r:{user_id:string})=>r.user_id==='case-c'));
+    assert.ok(!refresh.issues.some((r:{user_id:string})=>r.user_id==='case-b'));
+    const unresolved=await issues('unresolved');
+    assert.ok(unresolved.issues.some((r:{user_id:string,current_state:string})=>r.user_id==='case-e'&&r.current_state==='allowed'));
+    assert.ok(!unresolved.issues.some((r:{user_id:string})=>r.user_id==='case-a'));
+    assert.equal(unresolved.issues.find((r:{user_id:string})=>r.user_id==='case-b').last_success_at,null);
+    const recovered=await issues('recovered');
+    assert.deepEqual(recovered.issues.map((r:{user_id:string})=>r.user_id),['case-a','case-d']);
+    // Filtering a current state must not stop the candidate scan when a first page has no matches.
+    for(let i=0;i<26;i++) {
+      const id='a-no-block-'+String(i).padStart(2,'0');
+      await DB.prepare(`INSERT INTO users VALUES(?,?,NULL,'active',0,0)`).bind(id,id).run();
+      await upsertMembership(env,id,true,'member',['season3']);
+      await DB.prepare(`INSERT INTO auth_events VALUES(?,?,'site','authorize.access_denied','{}',300)`).bind(id,id).run();
+    }
+    const first=await issues('blocked');assert.equal(first.issues.length,0);assert.equal(first.has_more,true);assert.ok(first.next_cursor);
+    const second=await issues('blocked',first.next_cursor);assert.equal(second.issues.length,2);
+    assert.equal((await app.request('https://auth.test/admin/api/access/site/issues?status=unknown',{headers:{Authorization:'Bearer admin'}},env)).status,400);
   });
 });

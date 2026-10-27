@@ -4,6 +4,7 @@ import { authenticateAccessToken } from './store';
 import { diagnoseApplicationAccess, getApplicationAccessPolicy, isPlatformAdmin } from './policy';
 import { randomToken } from './crypto';
 import { parseHistoryQuery, readAuthEventHistory } from './auth-event-history';
+import { currentAccessState } from './auth-event-classification';
 
 async function operator(c: Context<{ Bindings: Env }>) {
   const token = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -23,25 +24,35 @@ export function registerAccessSupportRoutes(app: Hono<{ Bindings: Env }>): void 
     if (actor instanceof Response) return actor;
     const clientId = c.req.param('clientId');
     const after = c.req.query('after') || '';
-    if (after.length > 200) return c.json({ error: { message: '잘못된 조회 위치입니다.' } }, 400);
+    const status = c.req.query('status') || 'all';
+    if (after.length > 200 || !['all','unresolved','recovered','blocked','refresh'].includes(status)) return c.json({ error: { message: '잘못된 조회 위치 또는 상태입니다.' } }, 400);
+    const now = Date.now();
+    const recoveryFilter = status === 'unresolved' ? 'HAVING last_success_at IS NULL OR last_success_at <= MAX(e.created_at)'
+      : status === 'recovered' ? 'HAVING last_success_at > MAX(e.created_at)' : '';
     // Page distinct failed identities, independently of the recent-event feed.
     const candidates = await c.env.DB.prepare(
       `SELECT e.user_id, u.display_name, i.provider_user_id AS discord_user_id,
-        MAX(e.created_at) AS last_failed_at, COUNT(*) AS failure_count
+        MAX(e.created_at) AS last_failed_at, COUNT(*) AS failure_count,
+        (SELECT MAX(s.created_at) FROM auth_events s WHERE s.client_id = ? AND s.user_id = e.user_id
+          AND s.created_at <= ? AND s.event_type IN ('discord.login.success','authorize.sso','authorize.sso_auto')) AS last_success_at
        FROM auth_events e JOIN users u ON u.id = e.user_id
-       LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'discord'
-       WHERE e.client_id = ? AND e.user_id > ?
+       LEFT JOIN auth_identities i ON i.id = (SELECT identity.id FROM auth_identities identity WHERE identity.user_id = e.user_id
+         AND identity.provider = 'discord' ORDER BY identity.created_at DESC, identity.id DESC LIMIT 1)
+       WHERE e.client_id = ? AND e.user_id > ? AND e.created_at <= ?
          AND e.event_type IN ('authorize.access_denied', 'discord.login.access_denied')
-       GROUP BY e.user_id ORDER BY e.user_id LIMIT 26`
-    ).bind(clientId, after).all<{ user_id: string; display_name: string; discord_user_id: string | null; last_failed_at: number; failure_count: number }>();
+       GROUP BY e.user_id ${recoveryFilter} ORDER BY e.user_id LIMIT 26`
+    ).bind(clientId, now, clientId, after, now).all<{ user_id: string; display_name: string; discord_user_id: string | null; last_failed_at: number; failure_count: number; last_success_at: number | null }>();
     const page = candidates.results.slice(0, 25);
     const issues = [];
     for (const candidate of page) {
       const diagnosis = await diagnoseApplicationAccess(c.env, candidate.user_id, clientId);
-      issues.push({ ...candidate, diagnosis });
+      const currentState = currentAccessState(diagnosis);
+      if ((status === 'blocked' && currentState !== 'blocked') || (status === 'refresh' && currentState !== 'refresh')) continue;
+      issues.push({ ...candidate, diagnosis, current_state: currentState,
+        recovered_after_denial: candidate.last_success_at !== null && candidate.last_success_at > candidate.last_failed_at });
     }
     return c.json({ ok: true, issues, has_more: candidates.results.length > 25,
-      next_cursor: page.at(-1)?.user_id ?? null });
+      next_cursor: page.at(-1)?.user_id ?? null, scanned_users: page.length, status, diagnosed_at: now });
   });
 
   app.get('/admin/api/access/:clientId/history', async (c) => {

@@ -35,6 +35,7 @@
 - Display aggregate reasons before newest-first 50-row pages. Membership refresh is labelled separately from a missing role. Counts are recorded events, not final failures or distinct people across reason groups. Unidentified errors stay visible.
 - JSON/CSV downloads collect all matching pages at a fixed upper timestamp with real progress, cancellation, errors and no partial-success file. App changes cancel requests and reject stale responses. Native controls have labels and polite status; record details render as text. JSON preserves identifier types; CSV uses quoted/formula-neutralized cells and UTF-8 BOM.
 - Keep existing audit history and access policy intact. Stored AUTH events cannot represent every site error or request that never reached AUTH.
+- Usage tiles separate refresh, permission denial and authentication errors. User lists distinguish no later success, historical recovery, current AUTH blocking and current refresh required. Default to no later success; every row shows both last denial and last success plus the current diagnosis. Matching current-state filters scan subsequent candidate pages with progress and app-switch invalidation. Never label a historical success as a current service-page health check.
 
 ## Administrator deployment reports
 
