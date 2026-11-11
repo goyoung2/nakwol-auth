@@ -47,7 +47,7 @@ test('audit persistence failure cannot break successful login or its failure red
   roles=[];
   const denied=await callback();
   assert.equal(new URL(denied.headers.get('Location')||'').searchParams.get('error'),'access_denied');
-  assert.match(denied.headers.get('Set-Cookie')||'',/Max-Age=0/);
+  assert.equal(denied.headers.get('Set-Cookie'), null);
   fail=true;
   const errored=await callback();
   assert.equal(new URL(errored.headers.get('Location')||'').searchParams.get('error'),'nakwol_auth_failed');

@@ -93,7 +93,7 @@ small{color:#9ca3af}code{background:#111827;padding:2px 6px;border-radius:6px}a{
 app.get('/api/health', (c) => c.json({
   ok: true,
   service: 'nakwol-auth',
-  version: '0.2.11',
+  version: '0.2.12',
   now: new Date().toISOString(),
 }));
 
@@ -152,10 +152,8 @@ app.get('/authorize', async (c) => {
       if (access.reason === 'MEMBERSHIP_REFRESH_REQUIRED' || access.reason === 'REAUTHENTICATION_REQUIRED') {
         return c.redirect(redirectWithParams(redirectUri, { error: 'login_required', state: clientState }), 302);
       }
-      await deleteSession(c.env, sid);
-      const response = c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
-      return response;
+      // Service authorization failure must not sign the user out of other apps.
+      return c.redirect(redirectWithParams(redirectUri, { error: 'access_denied', state: clientState }), 302);
     }
     // 저장된 역할은 마지막 Discord 로그인 시점 값이다. 역할을 새로 받은 사용자가
     // 세션 때문에 계속 거절되지 않도록, 직접 로그인할 때는 Discord에서 역할을 다시 읽는다.
@@ -224,8 +222,7 @@ app.get('/auth/discord/callback', async (c) => {
         error: 'access_denied',
         state: requestRow.client_state,
       }), 302);
-      await deleteSession(c.env, parseCookies(c.req.header('Cookie')).nakwol_sid);
-      response.headers.set('Set-Cookie', clearSessionCookie(secureCookie(c.env)));
+      // Do not issue credentials for this app or discard an existing central login.
       return response;
     }
 
