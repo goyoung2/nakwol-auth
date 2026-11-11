@@ -83,11 +83,11 @@ test('stale membership remains denied but can recover without a false role denia
   });
   await DB.prepare("INSERT OR REPLACE INTO auth_sessions VALUES(?,'user',?,?,?)").bind(await sha256Base64Url('session'), now + 600000, now, now).run();
   await DB.prepare("UPDATE memberships SET role_ids='[]',role='user',status='inactive' WHERE user_id='user'").run();
-  await t.test('fresh missing role remains actual denial and invalidates silent SSO', async () => {
+  await t.test('fresh missing role remains denied without deleting central login', async () => {
     assert.equal((await me()).status, 403);
     const response = await authorize(true);
     assert.equal(new URL(response.headers.get('Location') ?? '').searchParams.get('error'), 'access_denied');
-    assert.match(response.headers.get('Set-Cookie') ?? '', /Max-Age=0/);
-    assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM auth_sessions').first<{n: number}>())?.n, 0);
+    assert.equal(response.headers.get('Set-Cookie'), null);
+    assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM auth_sessions').first<{n: number}>())?.n, 1);
   });
 });
