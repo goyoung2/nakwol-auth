@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "component": "auth",
-  "version": "0.2.11",
-  "target_sha": "4c9ec507c1554cce179f626109f01e9213bad542",
-  "notes_file": "docs/releases/2026-10-27-auth-v0.2.11-never-succeeded.md"
+  "version": "0.2.12",
+  "target_sha": "2725e09c99e7b856e5125a0e1e35f98ed2917800",
+  "notes_file": "docs/releases/2026-11-11-auth-v0.2.12-session-continuity.md"
 }
