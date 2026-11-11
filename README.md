@@ -17,7 +17,7 @@ CLI·웹 설치 마법사는 [설치 스튜디오 안내](docs/INSTALLATION_STUD
 <!-- component-versions:start -->
 | 구성 요소 | 이 브랜치의 소스 버전 |
 |---|---:|
-| AUTH | 0.2.11 |
+| AUTH | 0.2.12 |
 | Connect CLI·공통 게이트 | 0.7.8 |
 | Web SDK | 0.3.4 |
 | DATA | 0.9.0 |
@@ -143,7 +143,7 @@ Web SDK stable은 **0.3.4**이며 Universal Embed는 같은 브라우저의 중�
 
 중앙 Embed 변경은 중앙 스크립트를 사용하는 사이트에 반영되지만, 서버 게이트는 **패키지 업데이트 → 사이트 빌드 → 배포**가 필요합니다. AUTH 배포만으로 소비자 서버 코드는 교체되지 않습니다.
 
-0.7.8 공통 게이트는 유효한 최대 1시간 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. lease는 앱 토큰·사이트 세션 만료를 넘지 않습니다. 중앙 권한 회수에는 최대 1시간의 추가 지연이 있으며, Discord 역할 정보의 최대 24시간 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
+0.7.8 공통 게이트는 유효한 최대 1시간 authorization lease 동안 자산마다 중앙 AUTH를 호출하지 않고 암호화 쿠키를 로컬 검증합니다. lease는 앱 토큰·사이트 세션 만료를 넘지 않습니다. 중앙 권한 회수에는 최대 1시간의 추가 지연이 있으며, Discord 역할 정보의 최대 7일 지연과 별개입니다. lease 만료 후 AUTH 장애는 차단합니다.
 
 관리형 업데이트는 exact dependency와 lockfile, 패치 업데이트 PR 및 배포 후 검사 흐름을 제공합니다. 자동 병합·배포·롤백을 기본으로 켜지 않습니다. [설정과 한계](docs/MANAGED_GATE_UPDATES.md)를 확인하세요.
 

@@ -5,7 +5,8 @@ import { getAuthLabPrivilege } from './platform-access';
 import { parseRequiredRoleIds, RoleSettingsError } from './role-settings';
 import { evaluateQualificationSnapshot } from './qualifications';
 
-export const MEMBERSHIP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Seven-day Discord reauthentication window; app/token checks still enforce local revocation.
+export const MEMBERSHIP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const NAKWOL_CONNECT_POLICY_VERSION = '0.2.0';
 export type ApplicationAccessPolicy = 'guest' | 'member' | 'admin' | 'lab';

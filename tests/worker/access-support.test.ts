@@ -96,7 +96,7 @@ test('operator support actions use real D1 and preserve service and identity bou
     assert.equal((await status()).reason, 'SEASON_ROLE_MISSING');
     assert.equal(await inspectAccessToken(env, 'fresh', 'site'), null);
   });
-  await t.test('role-based access expires after 24 hours and recovers after Discord refresh', async () => {
+  await t.test('role-based access expires after seven days and recovers after Discord refresh', async () => {
     await DB.prepare(`DELETE FROM user_reauthentication WHERE user_id='target'`).run();
     await upsertMembership(env, 'target', true, 'member', [env.NAKWOL_MEMBER_ROLE_ID]);
     assert.equal((await status()).allowed, true);
@@ -164,14 +164,14 @@ test('operator support actions use real D1 and preserve service and identity bou
     const oldSession = await createSession(env, 'target');
     const denied = await callback('deny-request', 'nakwol_sid=' + oldSession.token);
     assert.equal(new URL(denied.headers.get('Location') || '').searchParams.get('error'), 'access_denied');
-    assert.match(denied.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal(await findSessionUser(env, oldSession.token), null);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 0);
+    assert.equal(denied.headers.get('Set-Cookie'), null);
+    assert.equal(await findSessionUser(env, oldSession.token), 'target');
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
     assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_codes WHERE user_id='target'`).first())?.n, 0);
     roles = [env.NAKWOL_MEMBER_ROLE_ID];
     const accepted = await callback('retry-request');
     assert.ok(new URL(accepted.headers.get('Location') || '').searchParams.get('code'));
     assert.doesNotMatch(accepted.headers.get('Set-Cookie') || '', /Max-Age=0/);
-    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 1);
+    assert.equal((await DB.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='target'`).first())?.n, 2);
   });
 });
